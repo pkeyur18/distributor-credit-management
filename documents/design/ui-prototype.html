@@ -136,7 +136,7 @@
   .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
   .pill-slab { background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
   .pill-active { background: var(--success-soft); color: var(--success); }
-  .pill-inactive { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+  .pill-inactive { background: var(--danger-soft); color: var(--danger); }
   .pill-locked { background: var(--danger-soft); color: var(--danger); }
 
   .search-box { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border);
@@ -184,6 +184,7 @@
   .node.root { border-color: var(--accent); }
   .node.clickable { cursor: pointer; }
   .node.clickable:hover { border-color: var(--accent); }
+  .node .pill { margin-top: 6px; }
   .node.inactive { background: var(--bg); }
   .node.inactive .node-name, .node.inactive .node-id,
   .node.inactive .node-bv-label, .node.inactive .node-bv-value { color: var(--text-muted); }
@@ -939,8 +940,9 @@ function renderStructure() {
   }).join('');
 
   const children = getChildren(focusId);
-  const rootRow = `<div class="root-row"><div class="node root">
+  const rootRow = `<div class="root-row"><div class="node root ${focus.isActive?'':'inactive'}">
       <div class="node-name">${focus.name}</div><div class="node-id">${focus.id}</div>
+      ${focus.isActive?'':'<span class="pill pill-inactive">Inactive</span>'}
       <div class="node-bv-label">Business Volume</div><div class="node-bv-value">${fmt(focus.bv)}</div>
       <div class="node-foot"><span></span><a class="node-view-link" onclick="openMemberDetail(${focus.id})">View member →</a></div>
     </div></div>`;
@@ -960,7 +962,8 @@ function renderStructure() {
   const childrenRow = `<svg class="connectors" width="${w}" height="50" viewBox="0 0 ${w} 50">${paths}</svg>
     <div class="children-row">${children.map(c => `
       <div class="node clickable ${c.isActive?'':'inactive'}" onclick="handleNodeClick(${c.id})">
-        <div class="node-name">${c.name}</div><div class="node-id">${c.id}${c.isActive?'':' · inactive'}</div>
+        <div class="node-name">${c.name}</div><div class="node-id">${c.id}</div>
+        ${c.isActive?'':'<span class="pill pill-inactive">Inactive</span>'}
         <div class="node-bv-label">Business Volume</div><div class="node-bv-value">${fmt(c.bv)}</div>
         <div class="node-foot">
           <span class="node-legs">${getChildren(c.id).length ? getChildren(c.id).length + ' legs' : ''}</span>
