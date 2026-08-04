@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Business Volume &amp; Beneficiary Management — Prototype</title>
+<style>
+  :root {
+    --accent: #4f46e5; --accent-soft: #eef2ff; --accent-2: #4338ca;
+    --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+    --text: #0f172a; --text-muted: #64748b;
+    --success: #059669; --success-soft: #ecfdf5;
+    --warning: #d97706; --warning-soft: #fffbeb;
+    --danger: #dc2626; --danger-soft: #fef2f2;
+    --radius-sm: 6px; --radius-lg: 8px;
+    --seq-1: #e0e7ff; --seq-2: #c7d2fe; --seq-3: #a5b4fc; --seq-4: #818cf8; --seq-5: #6366f1; --seq-6: #4f46e5; --seq-7: #4338ca; --seq-8: #3730a3;
+  }
+  :root[data-theme="dark"] {
+    --accent: #6366f1; --accent-soft: #1e1b4b; --accent-2: #818cf8;
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #f1f5f9; --text-muted: #94a3b8;
+    --success: #10b981; --success-soft: #052e21;
+    --warning: #f59e0b; --warning-soft: #3a2a09;
+    --danger: #ef4444; --danger-soft: #3f1414;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; font-size: 14px; }
+  button, input, select { font-family: inherit; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+  /* ---------- Login ---------- */
+  #login-screen {
+    position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .login-card { width: 320px; text-align: center; }
+  .login-mark { width: 40px; height: 40px; border-radius: 10px; background: var(--accent); margin: 0 auto 18px auto; }
+  .login-card h1 { font-size: 17px; margin: 0 0 2px 0; letter-spacing: -0.01em; }
+  .login-card .sub { font-size: 12.5px; color: var(--text-muted); margin: 0 0 28px 0; }
+  .pin-dots { display: flex; gap: 12px; justify-content: center; margin-bottom: 28px; }
+  .pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--surface); transition: background .1s, border-color .1s; }
+  .pin-dot.filled { background: var(--accent); border-color: var(--accent); }
+  .pin-dot.err { background: var(--danger); border-color: var(--danger); }
+  .keypad { display: grid; grid-template-columns: repeat(3, 56px); gap: 10px; justify-content: center; margin-bottom: 18px; }
+  .keypad button { height: 56px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 18px; font-weight: 500; cursor: pointer; }
+  .keypad button:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .keypad button.ghost { border: none; background: transparent; color: var(--text-muted); font-size: 13px; }
+  .keypad button.ghost:hover { background: transparent; color: var(--text); }
+  #login-error { font-size: 12.5px; color: var(--danger); min-height: 16px; margin-bottom: 10px; }
+  .login-note { font-size: 11.5px; color: var(--text-muted); margin-top: 20px; line-height: 1.5; }
+  .mode-link { font-size: 12.5px; color: var(--accent); background: none; border: none; cursor: pointer; font-weight: 500; text-decoration: underline; padding: 0; }
+  .pw-mode { display: none; }
+  .pw-mode.active { display: block; }
+  .pin-mode.hidden { display: none; }
+  .recovery-mode { display: none; text-align: left; }
+  .recovery-mode.active { display: block; }
+  .pw-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: 14px; margin-bottom: 12px; }
+  .btn-full { width: 100%; }
+  .seg-toggle { display: flex; gap: 6px; margin-bottom: 16px; }
+  .seg-toggle button { flex: 1; padding: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); border-radius: var(--radius-sm); cursor: pointer; font-size: 12.5px; font-weight: 600; }
+  .seg-toggle button.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .recovery-step-title { font-size: 14.5px; font-weight: 600; margin: 0 0 4px 0; text-align: center; }
+  .recovery-step-sub { font-size: 12px; color: var(--text-muted); margin: 0 0 18px 0; text-align: center; line-height: 1.5; }
+  .recovery-error { font-size: 12px; color: var(--danger); min-height: 16px; margin: -8px 0 10px 0; }
+  .recovery-done-icon { width: 40px; height: 40px; border-radius: 50%; background: var(--success-soft); color: var(--success); display: flex; align-items: center; justify-content: center; margin: 0 auto 14px auto; }
+  .recovery-done-icon svg { width: 20px; height: 20px; }
+
+  /* ---------- Shell ---------- */
+  #app-shell { display: none; }
+  #app-shell.active { display: flex; min-height: 100vh; }
+  .sidebar { width: 208px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; padding: 20px 12px; gap: 20px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+  .brand-mark { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); flex-shrink: 0; }
+  .brand-name { font-weight: 600; font-size: 13.5px; }
+  nav { display: flex; flex-direction: column; gap: 2px; }
+  nav a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-sm);
+    color: var(--text-muted); text-decoration: none; font-size: 13px; font-weight: 500; cursor: pointer; }
+  nav a svg { width: 16px; height: 16px; flex-shrink: 0; }
+  nav a.active { background: var(--accent-soft); color: var(--accent); }
+  nav a:not(.active):hover { background: var(--bg); color: var(--text); }
+  .nav-group-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); font-weight: 700; padding: 10px 10px 2px 10px; }
+  .sidebar-foot { margin-top: auto; padding: 8px; font-size: 11.5px; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; }
+  .theme-toggle { border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; font-size: 11.5px; }
+
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .alert-banner { background: var(--warning-soft); border-bottom: 1px solid var(--border); color: var(--warning);
+    font-size: 12.5px; font-weight: 500; padding: 8px 24px; display: flex; align-items: center; gap: 8px; }
+  .alert-banner strong { color: var(--text); font-weight: 600; }
+  .alert-banner .spacer { flex: 1; }
+  .alert-banner button { background: var(--warning); color: white; border: none; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: var(--radius-sm); cursor: pointer; }
+  .alert-banner.hidden { display: none; }
+
+  .view { display: none; padding: 24px 32px 56px 32px; max-width: 1080px; }
+  .view.active { display: block; }
+  .crumb { font-size: 12.5px; color: var(--text-muted); margin-bottom: 8px; }
+  .crumb a { color: var(--text-muted); text-decoration: none; cursor: pointer; }
+  .crumb a:hover { color: var(--accent); }
+  .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+  h1 { font-size: 19px; margin: 0; letter-spacing: -0.01em; }
+  .sub { font-size: 13px; color: var(--text-muted); margin: 4px 0 0 0; }
+
+  .btn { font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-danger-ghost { color: var(--danger); border-color: var(--border); background: var(--surface); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  /* ---------- Shared components ---------- */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; }
+  .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .stat-value { font-size: 24px; font-weight: 600; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .stat-value.accent { color: var(--accent); }
+  .stat-note { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 16px; }
+  .panel-head { padding: 13px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .panel-head h2 { font-size: 13.5px; font-weight: 600; margin: 0; }
+  .panel-head p { font-size: 12px; color: var(--text-muted); margin: 2px 0 0 0; }
+  .panel-head a.link { font-size: 12.5px; color: var(--accent); text-decoration: none; font-weight: 500; cursor: pointer; }
+  .panel-body { padding: 16px; }
+  .table-scroll { overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; font-weight: 600; padding: 8px 16px; white-space: nowrap; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td { padding: 9px 16px; border-top: 1px solid var(--border); font-size: 13.5px; }
+  tbody tr.clickable { cursor: pointer; }
+  tbody tr.clickable:hover td { background: var(--bg); }
+  .name-cell { font-weight: 500; }
+  .id-cell { color: var(--text-muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+
+  .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .pill-slab { background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
+  .pill-active { background: var(--success-soft); color: var(--success); }
+  .pill-inactive { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+  .pill-locked { background: var(--danger-soft); color: var(--danger); }
+
+  .search-box { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 11px 14px; }
+  .search-box svg { width: 17px; height: 17px; color: var(--text-muted); flex-shrink: 0; }
+  .search-box input { border: none; outline: none; background: transparent; color: var(--text); font-size: 14px; width: 100%; font-family: inherit; }
+  .search-box input::placeholder { color: var(--text-muted); }
+
+  .field-group { margin-bottom: 14px; }
+  .field-label { font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block; }
+  .field-input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: 13.5px; }
+  .field-input:disabled { opacity: .6; cursor: not-allowed; }
+  .field-hint { font-size: 11.5px; color: var(--text-muted); margin-top: 4px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .checkbox-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--text); }
+  .checkbox-row input { margin-top: 2px; }
+  .req { color: var(--danger); margin-left: 2px; }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: none; align-items: center; justify-content: center; z-index: 90; padding: 24px; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius-lg); border: 1px solid var(--border); width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px -12px rgba(0,0,0,.25); }
+  .modal-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .modal-head h2 { font-size: 15px; margin: 0; }
+  .modal-close { border: none; background: none; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1; }
+  .modal-body { padding: 20px; }
+  .modal-foot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+  .modal-error { font-size: 12.5px; color: var(--danger); background: var(--danger-soft); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 14px; display: none; }
+  .modal-error.active { display: block; }
+
+  /* ---------- Structure ---------- */
+  .breadcrumb-trail { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); margin-bottom: 24px; flex-wrap: wrap; }
+  .breadcrumb-trail a { color: var(--accent); text-decoration: none; cursor: pointer; font-weight: 500; }
+  .breadcrumb-trail .sep { color: var(--border); }
+  .chart-scroll { overflow-x: auto; padding-bottom: 8px; }
+  .chart-frame { min-width: 760px; }
+  .legend { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--text-muted); margin-bottom: 22px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .swatch.root { background: var(--accent); }
+  .swatch.child { background: var(--surface); border: 1.5px solid var(--border); }
+  .tree-inner { width: fit-content; margin: 0 auto; }
+  .root-row { display: flex; justify-content: center; margin-bottom: 6px; }
+  .node { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 12px 14px; width: 158px; text-align: left; }
+  .node.root { border-color: var(--accent); }
+  .node.clickable { cursor: pointer; }
+  .node.clickable:hover { border-color: var(--accent); }
+  .node.inactive { background: var(--bg); }
+  .node.inactive .node-name, .node.inactive .node-id,
+  .node.inactive .node-bv-label, .node.inactive .node-bv-value { color: var(--text-muted); }
+  .node-name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .node-id { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .node-bv-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 8px; font-weight: 600; }
+  .node-bv-value { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .node.root .node-bv-value { color: var(--accent); }
+  .node-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+  .node-legs { font-size: 10.5px; color: var(--text-muted); }
+  .node-view-link { font-size: 10.5px; color: var(--accent); text-decoration: none; cursor: pointer; font-weight: 600; }
+  svg.connectors { display: block; height: 50px; }
+  svg.connectors path { fill: none; stroke: var(--border); stroke-width: 2; }
+  .children-row { display: flex; gap: 14px; flex-wrap: nowrap; }
+  .hint { font-size: 12px; color: var(--text-muted); margin-top: 24px; max-width: 640px; }
+
+  /* ---------- BV entry ---------- */
+  .center-stage { display: flex; justify-content: center; padding-top: 12px; }
+  .form-card { width: 100%; max-width: 440px; }
+  .selected-member { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; margin: 14px 0 18px 0; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12.5px; flex-shrink: 0; }
+  .selected-member .info { flex: 1; min-width: 0; }
+  .selected-member .name { font-weight: 600; font-size: 13.5px; }
+  .selected-member .meta { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; font-variant-numeric: tabular-nums; }
+  .selected-member .current { text-align: right; font-size: 11.5px; color: var(--text-muted); }
+  .selected-member .current b { display: block; color: var(--text); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .amount-input-wrap { background: var(--surface); border: 1.5px solid var(--accent); border-radius: var(--radius-lg); padding: 14px 16px; display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .amount-input-wrap input { border: none; outline: none; background: transparent; color: var(--text); font-size: 26px; font-weight: 600; width: 100%; font-family: inherit; font-variant-numeric: tabular-nums; }
+  .field-note { font-size: 12px; color: var(--text-muted); margin: 0 0 20px 0; }
+  .entry-row { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
+  .entry-row .amt { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .entry-row .date { color: var(--text-muted); }
+  .search-results { border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius-lg) var(--radius-lg); background: var(--surface); margin-top: -1px; overflow: hidden; }
+  .search-results .res-row { padding: 9px 14px; font-size: 13px; cursor: pointer; display: flex; justify-content: space-between; }
+  .search-results .res-row:hover { background: var(--bg); }
+  .search-results .res-row .id-cell { font-size: 11.5px; }
+
+  /* ---------- Wizard (close) ---------- */
+  .wizard-steps { display: flex; gap: 6px; margin-bottom: 22px; }
+  .wizard-steps .step { flex: 1; height: 4px; border-radius: 2px; background: var(--border); }
+  .wizard-steps .step.done, .wizard-steps .step.current { background: var(--accent); }
+  .wizard-card { max-width: 520px; }
+  .wizard-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+  .wizard-icon svg { width: 22px; height: 22px; }
+  .wizard-card h2 { font-size: 17px; margin: 0 0 6px 0; }
+  .wizard-card p.desc { font-size: 13px; color: var(--text-muted); margin: 0 0 20px 0; line-height: 1.55; }
+  .backup-status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); font-size: 13px; margin-bottom: 18px; }
+  .backup-status.ok { border-color: var(--success); background: var(--success-soft); color: var(--success); }
+  .spin { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .wizard-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
+
+  /* ---------- Charts ---------- */
+  .chart-box { padding: 4px 4px 0 4px; }
+  .bar-chart-row { display: flex; align-items: flex-end; gap: 14px; height: 140px; padding: 0 4px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 6px; }
+  .bar-col .bar { width: 100%; border-radius: 3px 3px 0 0; }
+  .bar-col .bar-val { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+  .bar-col .bar-label { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+  .line-chart-caption { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+
+  /* ---------- Toast ---------- */
+  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--text); color: var(--bg); font-size: 13px; font-weight: 500;
+    padding: 10px 16px; border-radius: var(--radius-sm); box-shadow: 0 10px 24px -8px rgba(0,0,0,.35); opacity: 0; transform: translateY(8px);
+    transition: opacity .2s, transform .2s; pointer-events: none; z-index: 200; }
+  #toast.show { opacity: 1; transform: translateY(0); }
+
+  .two-col { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; align-items: start; }
+  dl.fieldlist { margin: 0; }
+  .field-line { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .field-line:last-child { border-bottom: none; }
+  .field-line dt { color: var(--text-muted); }
+  .field-line dd { margin: 0; font-weight: 500; text-align: right; }
+  .checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+  .checklist label { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
+  .checklist input:disabled + span { color: var(--text-muted); }
+  .settings-slab-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); }
+  .settings-slab-row:first-of-type { border-top: none; }
+  .settings-block { margin-bottom: 22px; }
+  .settings-block h3 { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted); margin: 0 0 10px 0; }
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-mark"></div>
+    <h1>Admin sign in</h1>
+    <p class="sub">Enter your PIN to continue</p>
+
+    <div id="pin-mode" class="pin-mode">
+      <div class="pin-dots" id="pin-dots"></div>
+      <div id="login-error"></div>
+      <div class="keypad" id="keypad"></div>
+      <button class="mode-link" onclick="setLoginMode('password')">Use a password instead</button>
+      <div style="height:6px"></div>
+      <button class="mode-link" onclick="setLoginMode('recovery')">Forgot PIN or password?</button>
+    </div>
+
+    <div id="pw-mode" class="pw-mode">
+      <input class="pw-input" type="password" id="pw-input" placeholder="Complex password" />
+      <button class="btn btn-primary btn-full" onclick="unlock()">Unlock</button>
+      <div style="height:14px"></div>
+      <button class="mode-link" onclick="setLoginMode('pin')">Use PIN instead</button>
+      <div style="height:6px"></div>
+      <button class="mode-link" onclick="setLoginMode('recovery')">Forgot PIN or password?</button>
+    </div>
+
+    <div id="recovery-mode" class="recovery-mode"><div id="recovery-content"></div></div>
+
+    <p class="login-note" id="login-disclosure">Prototype shortcut: any 6 digits or any password unlocks. The
+      real build hashes with Argon2id, enforces failed-attempt lockout, and supports a PIN and password set
+      at once (Rule 29).</p>
+  </div>
+</div>
+
+<!-- ================= SHELL ================= -->
+<div id="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark"></div><div class="brand-name">Admin</div></div>
+    <nav id="main-nav">
+      <a data-view="home" onclick="showView('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Home</a>
+      <a data-view="structure" onclick="showView('structure')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="6" r="3"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>Structure</a>
+      <a data-view="bv" onclick="showView('bv')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Volume entry</a>
+      <div class="nav-group-label">Period</div>
+      <a data-view="close" onclick="showView('close')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Monthly close</a>
+      <a data-view="snapshot" onclick="showView('snapshot')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v5l3 3"/><circle cx="12" cy="12" r="9"/></svg>Past snapshot</a>
+      <a data-view="reports" onclick="showView('reports')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M8 15v-4m4 4V9m4 10v-7"/></svg>Reports</a>
+      <div class="nav-group-label">Admin</div>
+      <a data-view="settings" onclick="showView('settings')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.9 2.9l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.9-2.9l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.9-2.9l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.9 2.9l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>Settings</a>
+      <a data-view="audit" onclick="showView('audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2h6l1 4H8l1-4zM5 6h14l1 15H4L5 6z"/></svg>Audit log</a>
+    </nav>
+    <div class="sidebar-foot">
+      <span id="theme-label">Light</span>
+      <button class="theme-toggle" onclick="toggleTheme()">Toggle dark</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="alert-banner" id="alert-banner"></div>
+
+    <!-- ===== HOME ===== -->
+    <section class="view" data-view="home" id="view-home">
+      <div class="page-head">
+        <div><h1>Home</h1><p class="sub">Find a member, or pick up where you left off.</p></div>
+        <button class="btn btn-primary" onclick="openMemberModal(null)">+ Add member</button>
+      </div>
+      <div class="search-box" style="margin-bottom:20px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="home-search" placeholder="Search by name or 6-digit member number" oninput="renderHomeResults()" />
+      </div>
+      <div class="stats" id="home-stats"></div>
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-head"><h2 id="home-results-title">All members</h2></div>
+          <div class="table-scroll"><table>
+            <thead><tr><th>Name</th><th>Member #</th><th class="num">Total Business Volume</th><th>Slab</th><th>Status</th></tr></thead>
+            <tbody id="home-results"></tbody>
+          </table></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Members by slab</h2><p>Ordered progression 0%–14%</p></div>
+          <div class="panel-body chart-box"><div id="slab-chart"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== MEMBER DETAIL ===== -->
+    <section class="view" data-view="member" id="view-member">
+      <div class="crumb" id="member-crumb"></div>
+      <div id="member-detail-content"></div>
+    </section>
+
+    <!-- ===== STRUCTURE ===== -->
+    <section class="view" data-view="structure" id="view-structure">
+      <div class="page-head">
+        <div><h1>Structure</h1><p class="sub">Direct legs only, one depth at a time. Select a member to open their own view.</p></div>
+      </div>
+      <div class="breadcrumb-trail" id="structure-breadcrumb"></div>
+      <div class="chart-scroll"><div class="chart-frame">
+        <div class="legend">
+          <div class="legend-item"><span class="swatch root"></span>Selected member</div>
+          <div class="legend-item"><span class="swatch child"></span>Direct leg</div>
+        </div>
+        <div id="structure-tree"></div>
+        <p class="hint">Each node shows name, member number and that member's own Business Volume only —
+          never Total Business Volume — so this view alone can't explain why anyone sits on the slab they
+          do (FR-2). Nodes with a leg count are one click from their own one-level view underneath.</p>
+      </div></div>
+    </section>
+
+    <!-- ===== BV ENTRY ===== -->
+    <section class="view" data-view="bv" id="view-bv">
+      <div class="center-stage"><div class="form-card">
+        <h1>Record Business Volume</h1>
+        <p class="sub">Find the member, enter one figure, save.</p>
+        <div style="margin-top:14px;">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input type="text" id="bv-search" placeholder="Search by name or member number" oninput="renderBvSearch()" onfocus="renderBvSearch()" />
+          </div>
+          <div class="search-results" id="bv-search-results" style="display:none;"></div>
+        </div>
+        <div class="selected-member" id="bv-selected"></div>
+        <label class="field-label" for="bv-amount">Business Volume</label>
+        <div class="amount-input-wrap"><input id="bv-amount" type="text" inputmode="decimal" placeholder="0.00" /></div>
+        <p class="field-note" id="bv-note">Recorded today · up to two decimal places · no currency field</p>
+        <button class="btn btn-primary btn-full" onclick="saveBvEntry()" id="bv-save-btn" disabled>Save entry</button>
+        <div class="period-note" style="margin-top:26px;">
+          <h3 style="font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);margin:0 0 8px 0;font-weight:600;" id="bv-entries-title">This period's entries</h3>
+          <div id="bv-entries-list"></div>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- ===== MONTHLY CLOSE ===== -->
+    <section class="view" data-view="close" id="view-close">
+      <div class="page-head"><div><h1>Monthly close</h1><p class="sub">Backup-gated. Nothing is cleared until a backup is confirmed (Rule 18).</p></div></div>
+      <div class="wizard-card" id="close-wizard"></div>
+    </section>
+
+    <!-- ===== PAST SNAPSHOT ===== -->
+    <section class="view" data-view="snapshot" id="view-snapshot">
+      <div class="page-head">
+        <div><h1>Past snapshot</h1><p class="sub">Read-only. Frozen at the moment each month was closed — never recomputed afterward.</p></div>
+        <select class="field-input" style="width:200px;" id="snapshot-picker" onchange="renderSnapshot()"></select>
+      </div>
+      <div class="panel" style="background:var(--warning-soft); border-color:var(--border);">
+        <div class="panel-body" style="font-size:12.5px; color:var(--warning); font-weight:500;">
+          Prototype preview only. The confirmed build reaches history through spreadsheet extracts, not an
+          on-screen view (RQ-14) — shown here because it's useful to look at while designing.
+        </div>
+      </div>
+      <div id="snapshot-content"></div>
+    </section>
+
+    <!-- ===== REPORTS ===== -->
+    <section class="view" data-view="reports" id="view-reports">
+      <div class="page-head"><div><h1>Reports</h1><p class="sub">Three exports, all spreadsheet format.</p></div></div>
+      <div id="reports-content"></div>
+    </section>
+
+    <!-- ===== SETTINGS ===== -->
+    <section class="view" data-view="settings" id="view-settings">
+      <div class="page-head"><div><h1>Settings</h1><p class="sub">Every scheme parameter, adjustable without a developer.</p></div>
+        <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
+      </div>
+      <div id="settings-content"></div>
+    </section>
+
+    <!-- ===== AUDIT LOG ===== -->
+    <section class="view" data-view="audit" id="view-audit">
+      <div class="page-head"><div><h1>Audit log</h1><p class="sub">Every recorded change: date, member, before, after, cause.</p></div></div>
+      <div class="search-box" style="margin-bottom:16px; max-width:360px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="audit-filter" placeholder="Filter by member name" oninput="renderAudit()" />
+      </div>
+      <div class="panel"><div class="table-scroll"><table>
+        <thead><tr><th>Date &amp; time</th><th>Member</th><th>Field</th><th>Before</th><th>After</th><th>Cause</th></tr></thead>
+        <tbody id="audit-body"></tbody>
+      </table></div></div>
+    </section>
+  </div>
+</div>
+
+<!-- ================= MEMBER MODAL ================= -->
+<div class="modal-overlay" id="member-modal-overlay">
+  <div class="modal">
+    <div class="modal-head"><h2 id="mm-title">Add member</h2><button class="modal-close" onclick="closeMemberModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="modal-error" id="mm-error"></div>
+      <div class="field-group"><span class="field-label">Name<span class="req">*</span></span><input class="field-input" id="mm-name" placeholder="Full name" /></div>
+      <div class="field-row">
+        <div class="field-group"><span class="field-label">Phone number<span class="req">*</span></span><input class="field-input" id="mm-phone" placeholder="+91 " /></div>
+        <div class="field-group"><span class="field-label">Email (optional)</span><input class="field-input" id="mm-email" placeholder="name@example.com" /></div>
+      </div>
+      <div class="field-group"><span class="field-label">Address<span class="req">*</span></span><input class="field-input" id="mm-address" placeholder="Street, city" /></div>
+      <div class="field-group">
+        <span class="field-label">Introducer — member number<span class="req" id="mm-introducer-req">*</span></span>
+        <input class="field-input" id="mm-introducer" placeholder="6-digit member number" />
+        <p class="field-hint">Must resolve to an existing, active member (Rule 30).</p>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="mm-consent" />
+        <span>The member has consented to their name, contact number and address being recorded in this system.</span>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeMemberModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMember()">Save member</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =========================================================================
+   DATA MODEL — mock only. All member figures are hand-derived so that
+   Rules 3/6/7/8/9/10/11/12 are genuinely satisfied, not just displayed.
+   slab is never stored — it is looked up from tbv against SETTINGS.slabRows,
+   the same way the real calculation engine would (architecture.md §9).
+   ========================================================================= */
+let SETTINGS = {
+  slabRows: [ // 0% below the lowest row is implicit, never stored (Rule 3)
+    { threshold: 100, pct: 2 }, { threshold: 400, pct: 4 }, { threshold: 1200, pct: 6 },
+    { threshold: 3000, pct: 8 }, { threshold: 5000, pct: 10 }, { threshold: 7000, pct: 12 },
+    { threshold: 10000, pct: 14 },
+  ],
+  royaltyMinChildren: 3,
+  royaltyRate: 1,
+  hierarchyDepth: 6,
+  levelWidths: { l2: 9, l3: 6, l4: 3 },
+  yearlyCycleStart: 'Jan', yearlyCycleEnd: 'Dec',
+  lowContributionThreshold: 100,
+  referenceUnitValue: 500,
+  defaultExportColumns: ['name', 'id', 'phone', 'bv'],
+};
+
+let MEMBERS = [
+  { id: 112990, name: 'Vikram Shah', phone: '+91 98230 11009', email: null, address: '2 Marine Drive, Mumbai 400002', introducerId: null, level: 1, isActive: true, joiningDate: '2022-01-04', consentDate: '2022-01-04', bv: 500, tbv: 47250 },
+  { id: 100341, name: 'Meena Iyer', phone: '+91 98220 33112', email: 'meena.iyer@example.com', address: '14 MG Road, Bengaluru 560001', introducerId: 112990, level: 2, isActive: true, joiningDate: '2022-03-11', consentDate: '2022-03-11', bv: 300, tbv: 300 },
+  { id: 104928, name: 'Rahul Verma', phone: '+91 98110 22456', email: null, address: '9 Civil Lines, Nagpur 440001', introducerId: 112990, level: 2, isActive: true, joiningDate: '2022-04-02', consentDate: '2022-04-02', bv: 1200, tbv: 2350 },
+  { id: 109215, name: 'Kavita Nair', phone: '+91 94470 55223', email: 'kavita.nair@example.com', address: '77 MG Road, Kochi 682016', introducerId: 112990, level: 2, isActive: true, joiningDate: '2022-05-19', consentDate: '2022-05-19', bv: 200, tbv: 2900 },
+  { id: 117063, name: 'Suresh Pillai', phone: '+91 98450 66112', email: null, address: '21 Anna Salai, Chennai 600002', introducerId: 112990, level: 2, isActive: false, joiningDate: '2022-06-08', consentDate: '2022-06-08', bv: 5000, tbv: 38000 },
+  { id: 121450, name: 'Anjali Desai', phone: '+91 98790 44221', email: null, address: '3 Ashram Road, Ahmedabad 380009', introducerId: 112990, level: 2, isActive: true, joiningDate: '2022-07-22', consentDate: '2022-07-22', bv: 50, tbv: 50 },
+  { id: 126837, name: 'Rohit Bhatt', phone: '+91 98280 77341', email: 'rohit.bhatt@example.com', address: '56 Residency Road, Indore 452001', introducerId: 112990, level: 2, isActive: true, joiningDate: '2022-08-14', consentDate: '2022-08-14', bv: 900, tbv: 1300 },
+  { id: 108234, name: 'Ramesh Kumar', phone: '+91 98200 44112', email: null, address: '44 Lake Garden Road, Pune 411004', introducerId: 112990, level: 2, isActive: true, joiningDate: '2024-02-12', consentDate: '2024-02-12', bv: 500, tbv: 1850 },
+
+  { id: 130102, name: 'Deepak Rao', phone: '+91 90040 11223', email: null, address: '18 Jubilee Hills, Hyderabad 500033', introducerId: 109215, level: 3, isActive: true, joiningDate: '2023-01-09', consentDate: '2023-01-09', bv: 200, tbv: 800 },
+  { id: 130255, name: 'Sneha Kulkarni', phone: '+91 90040 22334', email: 'sneha.k@example.com', address: '5 FC Road, Pune 411005', introducerId: 109215, level: 3, isActive: true, joiningDate: '2023-01-25', consentDate: '2023-01-25', bv: 1300, tbv: 1300 },
+  { id: 130398, name: 'Manoj Pandey', phone: '+91 90040 33445', email: null, address: '61 Hazratganj, Lucknow 226001', introducerId: 109215, level: 3, isActive: true, joiningDate: '2023-02-14', consentDate: '2023-02-14', bv: 600, tbv: 600 },
+  { id: 135577, name: 'Om Prakash', phone: '+91 90050 55667', email: null, address: '30 Model Town, Delhi 110009', introducerId: 104928, level: 3, isActive: true, joiningDate: '2023-03-03', consentDate: '2023-03-03', bv: 900, tbv: 1150 },
+  { id: 114502, name: 'Arjun Mehta', phone: '+91 98670 12211', email: null, address: '8 Koregaon Park, Pune 411001', introducerId: 108234, level: 3, isActive: true, joiningDate: '2024-03-01', consentDate: '2024-03-01', bv: 300, tbv: 300 },
+  { id: 119087, name: 'Priya Singh', phone: '+91 98670 33445', email: 'priya.singh@example.com', address: '19 Boring Road, Patna 800001', introducerId: 108234, level: 3, isActive: true, joiningDate: '2026-03-02', consentDate: '2026-03-02', bv: 50, tbv: 50 },
+  { id: 122341, name: 'Sunil Rao', phone: '+91 98670 55667', email: null, address: '27 Banjara Hills, Hyderabad 500034', introducerId: 108234, level: 3, isActive: true, joiningDate: '2024-04-19', consentDate: '2024-04-19', bv: 1000, tbv: 1000 },
+  { id: 150011, name: 'Ananya Rao', phone: '+91 90090 11001', email: null, address: '4 Alipore, Kolkata 700027', introducerId: 117063, level: 3, isActive: true, joiningDate: '2023-06-01', consentDate: '2023-06-01', bv: 10000, tbv: 10000 },
+  { id: 150022, name: 'Karan Mehta', phone: '+91 90090 22002', email: 'karan.mehta@example.com', address: '11 Malabar Hill, Mumbai 400006', introducerId: 117063, level: 3, isActive: true, joiningDate: '2023-06-15', consentDate: '2023-06-15', bv: 12000, tbv: 12000 },
+  { id: 150033, name: 'Isha Kapoor', phone: '+91 90090 33003', email: null, address: '2 Sector 17, Chandigarh 160017', introducerId: 117063, level: 3, isActive: true, joiningDate: '2023-07-04', consentDate: '2023-07-04', bv: 11000, tbv: 11000 },
+  { id: 103117, name: 'Sunita Joshi', phone: '+91 98290 99881', email: null, address: '33 Rajpath, Bhopal 462001', introducerId: 126837, level: 3, isActive: false, joiningDate: '2022-09-10', consentDate: '2022-09-10', bv: 400, tbv: 400 },
+
+  { id: 140011, name: 'Farhan Ali', phone: '+91 90100 11441', email: null, address: '15 Park Circus, Kolkata 700017', introducerId: 130102, level: 4, isActive: true, joiningDate: '2024-01-11', consentDate: '2024-01-11', bv: 150, tbv: 150 },
+  { id: 140022, name: 'Geeta Menon', phone: '+91 90100 22552', email: 'geeta.menon@example.com', address: '8 Panampilly Nagar, Kochi 682036', introducerId: 130102, level: 4, isActive: true, joiningDate: '2024-01-28', consentDate: '2024-01-28', bv: 450, tbv: 450 },
+  { id: 145900, name: 'Zoya Khan', phone: '+91 90200 44663', email: null, address: '22 Aliganj, Lucknow 226024', introducerId: 135577, level: 4, isActive: true, joiningDate: '2024-05-05', consentDate: '2024-05-05', bv: 250, tbv: 250 },
+];
+
+const CURRENT_PERIOD = '2026-08';
+let PERIODS = [
+  { month: '2026-07', status: 'ended_locked' },
+];
+let SNAPSHOTS = { // closed periods only — Rule 38, written at close, never recomputed
+  '2026-06': [
+    { id: 108234, name: 'Ramesh Kumar', bv: 480, tbv: 1720, slab: 6, rewards: 31.20, status: 'Active' },
+    { id: 117063, name: 'Suresh Pillai', bv: 4800, tbv: 36200, slab: 14, rewards: 310.00, status: 'Active' },
+    { id: 109215, name: 'Kavita Nair', bv: 180, tbv: 2650, slab: 6, rewards: 24.60, status: 'Active' },
+    { id: 104928, name: 'Rahul Verma', bv: 1100, tbv: 2200, slab: 6, rewards: 19.80, status: 'Active' },
+    { id: 112990, name: 'Vikram Shah', bv: 460, tbv: 44870, slab: 14, rewards: 682.00, status: 'Active' },
+  ],
+  '2026-05': [
+    { id: 108234, name: 'Ramesh Kumar', bv: 420, tbv: 1540, slab: 6, rewards: 27.40, status: 'Active' },
+    { id: 117063, name: 'Suresh Pillai', bv: 4500, tbv: 33900, slab: 14, rewards: 289.00, status: 'Active' },
+    { id: 109215, name: 'Kavita Nair', bv: 150, tbv: 2380, slab: 6, rewards: 21.10, status: 'Active' },
+    { id: 104928, name: 'Rahul Verma', bv: 950, tbv: 1980, slab: 6, rewards: 16.90, status: 'Active' },
+    { id: 112990, name: 'Vikram Shah', bv: 400, tbv: 41560, slab: 14, rewards: 611.00, status: 'Active' },
+  ],
+};
+
+let CURRENT_ENTRIES = [ // this period's Business Volume entries — Rule 16, multiple per member (BA-10)
+  { memberId: 114502, amount: 200, date: '2026-08-01' },
+  { memberId: 114502, amount: 50, date: '2026-08-03' },
+  { memberId: 119087, amount: 50, date: '2026-08-02' },
+];
+
+let AUDIT_LOG = [
+  { at: '2026-08-04 09:12', member: 'Arjun Mehta', field: 'Business Volume', before: '—', after: '200.00', cause: 'Entry' },
+  { at: '2026-08-03 16:40', member: 'Arjun Mehta', field: 'Business Volume', before: '—', after: '50.00', cause: 'Entry' },
+  { at: '2026-08-02 11:05', member: 'Priya Singh', field: 'Business Volume', before: '—', after: '50.00', cause: 'Entry' },
+  { at: '2026-07-30 14:22', member: 'Sunita Joshi', field: 'Active status', before: 'Active', after: 'Inactive', cause: 'Deactivated' },
+  { at: '2026-07-18 10:03', member: 'Kavita Nair', field: 'Phone number', before: '+91 94470 55000', after: '+91 94470 55223', cause: 'Edit' },
+  { at: '2026-06-30 18:47', member: '—', field: 'Royalty rate', before: '1%', after: '1%', cause: 'Settings change (no-op, reviewed)' },
+  { at: '2026-05-05 12:15', member: 'Ramesh Kumar', field: 'Business Volume — May', before: '400.00', after: '420.00', cause: 'Closed-month correction' },
+];
+
+/* ---------- pure calc helpers ---------- */
+function lookupSlab(tbv) {
+  let pct = 0;
+  for (const row of SETTINGS.slabRows) if (tbv >= row.threshold) pct = row.pct;
+  return pct;
+}
+function topSlabPct() { return Math.max(...SETTINGS.slabRows.map(r => r.pct)); }
+function getChildren(id) { return MEMBERS.filter(m => m.introducerId === id); }
+function getMember(id) { return MEMBERS.find(m => m.id === id); }
+function fmt(n) { return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+function computeRewards(id) {
+  const m = getMember(id);
+  const ownSlab = lookupSlab(m.tbv);
+  const children = getChildren(id).map(c => ({ ...c, slab: lookupSlab(c.tbv) }));
+  const rows = children.map(c => {
+    const diffPct = ownSlab - c.slab;
+    return { ...c, diffPct, amount: (diffPct / 100) * c.tbv };
+  });
+  const differential = rows.reduce((s, r) => s + r.amount, 0);
+  const qualifying = children.filter(c => c.slab === topSlabPct());
+  const royalty = qualifying.length >= SETTINGS.royaltyMinChildren
+    ? qualifying.reduce((s, c) => s + (SETTINGS.royaltyRate / 100) * c.tbv, 0) : 0;
+  return { ownSlab, rows, differential, royalty, rewards: differential + royalty, qualifying };
+}
+
+/* ---------- toast ---------- */
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* ---------- theme ---------- */
+function toggleTheme() {
+  const root = document.documentElement;
+  const isDark = root.getAttribute('data-theme') === 'dark';
+  root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.querySelector('.theme-toggle').textContent = isDark ? 'Toggle dark' : 'Toggle light';
+  document.getElementById('theme-label').textContent = isDark ? 'Light' : 'Dark';
+}
+
+/* ---------- login ---------- */
+let pinBuffer = '';
+function buildKeypad() {
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','back'];
+  const el = document.getElementById('keypad');
+  el.innerHTML = keys.map(k => {
+    if (k === '') return '<span></span>';
+    if (k === 'back') return '<button class="ghost" onclick="pinBackspace()">⌦</button>';
+    return `<button onclick="pinPress('${k}')">${k}</button>`;
+  }).join('');
+}
+function renderPinDots() {
+  const el = document.getElementById('pin-dots');
+  el.innerHTML = '';
+  for (let i = 0; i < 6; i++) {
+    const d = document.createElement('div');
+    d.className = 'pin-dot' + (i < pinBuffer.length ? ' filled' : '');
+    el.appendChild(d);
+  }
+}
+function pinPress(d) {
+  if (pinBuffer.length >= 6) return;
+  pinBuffer += d;
+  renderPinDots();
+  document.getElementById('login-error').textContent = '';
+  if (pinBuffer.length === 6) setTimeout(unlock, 200);
+}
+function pinBackspace() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
+function setLoginMode(mode) {
+  document.getElementById('pin-mode').classList.toggle('hidden', mode !== 'pin');
+  document.getElementById('pw-mode').classList.toggle('active', mode === 'password');
+  document.getElementById('recovery-mode').classList.toggle('active', mode === 'recovery');
+  document.getElementById('login-disclosure').style.display = mode === 'recovery' ? 'none' : 'block';
+  if (mode === 'recovery') { recoveryStep = 0; renderRecoveryStep(); }
+}
+function unlock() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-shell').classList.add('active');
+  showView('home');
+}
+
+/* ---------- recovery-code reset (Fix 5) ---------- */
+let recoveryStep = 0; // 0 enter code, 1 set new credential, 2 done
+let recoveryCredType = 'pin';
+function renderRecoveryStep() {
+  const el = document.getElementById('recovery-content');
+  if (recoveryStep === 0) {
+    el.innerHTML = `
+      <p class="recovery-step-title">Reset with a recovery code</p>
+      <p class="recovery-step-sub">Enter one of the one-time codes you were given when this system was
+        first set up (ADR-008). Each code works once.</p>
+      <input class="pw-input" id="recovery-code" placeholder="XXXX-XXXX-XXXX" style="text-align:center;letter-spacing:.05em;" />
+      <div class="recovery-error" id="recovery-error"></div>
+      <button class="btn btn-primary btn-full" onclick="recoveryVerifyCode()">Verify code</button>
+      <div style="height:14px"></div>
+      <button class="mode-link" onclick="setLoginMode('pin')">Back to sign in</button>`;
+  } else if (recoveryStep === 1) {
+    el.innerHTML = `
+      <p class="recovery-step-title">Set a new credential</p>
+      <p class="recovery-step-sub">Code accepted. Choose what you'll sign in with from now on.</p>
+      <div class="seg-toggle">
+        <button id="seg-pin" class="${recoveryCredType==='pin'?'active':''}" onclick="recoverySelectType('pin')">PIN</button>
+        <button id="seg-pw" class="${recoveryCredType==='password'?'active':''}" onclick="recoverySelectType('password')">Password</button>
+      </div>
+      <div id="recovery-pin-fields" style="${recoveryCredType==='pin'?'':'display:none;'}">
+        <input class="pw-input" type="text" inputmode="numeric" maxlength="6" id="recovery-new-pin" placeholder="New 6-digit PIN" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6); updateRecoverySaveState();" />
+        <input class="pw-input" type="text" inputmode="numeric" maxlength="6" id="recovery-confirm-pin" placeholder="Confirm new PIN" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6); updateRecoverySaveState();" />
+      </div>
+      <div id="recovery-pw-fields" style="${recoveryCredType==='password'?'':'display:none;'}">
+        <input class="pw-input" type="password" id="recovery-new-pw" placeholder="New password (min. 8 characters)" oninput="updateRecoverySaveState();" />
+        <input class="pw-input" type="password" id="recovery-confirm-pw" placeholder="Confirm new password" oninput="updateRecoverySaveState();" />
+      </div>
+      <div class="recovery-error" id="recovery-error2"></div>
+      <button class="btn btn-primary btn-full" id="recovery-save-btn" disabled onclick="recoverySaveCredential()">Save and continue</button>
+      <div style="height:14px"></div>
+      <button class="mode-link" onclick="recoveryStep=0;renderRecoveryStep();">Back</button>`;
+  } else if (recoveryStep === 2) {
+    el.innerHTML = `
+      <div class="recovery-done-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <p class="recovery-step-title">${recoveryCredType === 'pin' ? 'PIN' : 'Password'} updated</p>
+      <p class="recovery-step-sub">You can sign in with it now. That recovery code has been used and won't
+        work again — the others you were given are still valid if you need them later.</p>
+      <button class="btn btn-primary btn-full" onclick="setLoginMode('pin')">Continue to sign in</button>`;
+  }
+}
+function recoveryVerifyCode() {
+  const v = document.getElementById('recovery-code').value.trim();
+  const err = document.getElementById('recovery-error');
+  if (!v) { err.textContent = 'Enter the recovery code you were given at setup.'; return; }
+  err.textContent = '';
+  recoveryStep = 1;
+  renderRecoveryStep();
+}
+function recoverySelectType(type) {
+  recoveryCredType = type;
+  renderRecoveryStep();
+}
+function updateRecoverySaveState() {
+  const btn = document.getElementById('recovery-save-btn');
+  const err = document.getElementById('recovery-error2');
+  if (!btn) return;
+  let ok = false, msg = '';
+  if (recoveryCredType === 'pin') {
+    const a = document.getElementById('recovery-new-pin').value;
+    const b = document.getElementById('recovery-confirm-pin').value;
+    if (a.length === 6 && b.length === 6 && a !== b) msg = "PINs don't match.";
+    ok = a.length === 6 && b.length === 6 && a === b;
+  } else {
+    const a = document.getElementById('recovery-new-pw').value;
+    const b = document.getElementById('recovery-confirm-pw').value;
+    if (a && a.length < 8) msg = 'Password must be at least 8 characters.';
+    else if (a && b && a !== b) msg = "Passwords don't match.";
+    ok = a.length >= 8 && a === b;
+  }
+  err.textContent = msg;
+  btn.disabled = !ok;
+}
+function recoverySaveCredential() {
+  recoveryStep = 2;
+  renderRecoveryStep();
+}
+
+/* ---------- router ---------- */
+let currentMemberId = 112990;
+let viewStack = []; // one-slot-per-hop stack so Member Detail can return to exactly where it was opened from
+function showView(name) {
+  viewStack = []; // fresh nav via sidebar — any saved "back to structure" position is now stale
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === name));
+  document.querySelectorAll('#main-nav a').forEach(a => a.classList.toggle('active', a.dataset.view === name));
+  if (name === 'home') renderHome();
+  if (name === 'structure') renderStructure();
+  if (name === 'bv') renderBv();
+  if (name === 'close') { closeStep = 0; renderClose(); }
+  if (name === 'snapshot') renderSnapshot(true);
+  if (name === 'reports') renderReports();
+  if (name === 'settings') renderSettings();
+  if (name === 'audit') renderAudit();
+}
+function openMemberDetail(id) {
+  const active = document.querySelector('.view.active');
+  if (active && active.dataset.view === 'structure') {
+    viewStack.push({ view: 'structure', path: structurePath.slice() });
+  }
+  currentMemberId = id;
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === 'member'));
+  document.querySelectorAll('#main-nav a').forEach(a => a.classList.remove('active'));
+  renderMemberDetail(id);
+}
+function goBack() {
+  const prev = viewStack.pop();
+  if (!prev) { showView('home'); return; }
+  if (prev.view === 'structure') {
+    // restore in place, without going through showView() (which clears viewStack for fresh nav)
+    structurePath = prev.path;
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === 'structure'));
+    document.querySelectorAll('#main-nav a').forEach(a => a.classList.toggle('active', a.dataset.view === 'structure'));
+    renderStructure();
+  }
+}
+
+/* ---------- alert banner ---------- */
+function renderBanner() {
+  const el = document.getElementById('alert-banner');
+  const outstanding = PERIODS.filter(p => p.status === 'ended_locked').sort((a, b) => a.month.localeCompare(b.month));
+  if (outstanding.length === 0) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  const monthName = monthLabel(outstanding[0].month);
+  el.innerHTML = `<strong>${monthName}</strong><span>is outstanding — recording is locked until it's backed up and closed.</span>
+    <span class="spacer"></span><button onclick="showView('close')">Close ${monthName}</button>`;
+}
+function monthLabel(ym) {
+  const [y, m] = ym.split('-');
+  const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return names[parseInt(m,10)-1] + ' ' + y;
+}
+
+/* ---------- HOME ---------- */
+function renderHome() {
+  renderBanner();
+  const active = MEMBERS.filter(m => m.isActive).length;
+  const topSlab = MEMBERS.filter(m => lookupSlab(m.tbv) === topSlabPct()).length;
+  document.getElementById('home-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Members</div><div class="stat-value">${MEMBERS.length}</div><div class="stat-note">${MEMBERS.length-active} inactive</div></div>
+    <div class="stat-card"><div class="stat-label">Entries this period</div><div class="stat-value">${CURRENT_ENTRIES.length}</div><div class="stat-note">${monthLabel(CURRENT_PERIOD)}</div></div>
+    <div class="stat-card"><div class="stat-label">On top slab</div><div class="stat-value">${topSlab}</div><div class="stat-note">${topSlabPct()}% · royalty-eligible upline</div></div>`;
+  renderHomeResults();
+  renderSlabChart();
+}
+function renderHomeResults() {
+  const q = (document.getElementById('home-search').value || '').trim().toLowerCase();
+  document.getElementById('home-results-title').textContent = q ? 'Search results' : 'All members';
+  const list = MEMBERS.filter(m => !q || m.name.toLowerCase().includes(q) || String(m.id).includes(q)).slice(0, 10);
+  document.getElementById('home-results').innerHTML = list.map(m => `
+    <tr class="clickable" onclick="openMemberDetail(${m.id})">
+      <td class="name-cell">${m.name}</td>
+      <td class="id-cell">${m.id}</td>
+      <td class="num">${fmt(m.tbv)}</td>
+      <td><span class="pill pill-slab">${lookupSlab(m.tbv)}%</span></td>
+      <td>${m.isActive ? '<span class="pill pill-active">● Active</span>' : '<span class="pill pill-inactive">Inactive</span>'}</td>
+    </tr>`).join('') || '<tr><td colspan="5" style="color:var(--text-muted);">No members match.</td></tr>';
+}
+function renderSlabChart() {
+  const buckets = [0,2,4,6,8,10,12,14];
+  const counts = buckets.map(p => MEMBERS.filter(m => lookupSlab(m.tbv) === p).length);
+  const max = Math.max(...counts, 1);
+  const seq = ['seq-1','seq-2','seq-3','seq-4','seq-5','seq-6','seq-7','seq-8'];
+  const rows = buckets.map((p, i) => `
+    <div class="bar-col">
+      <div class="bar-val">${counts[i]}</div>
+      <div class="bar" style="height:${Math.max(4,(counts[i]/max)*100)}%; background:var(--${seq[i]});"></div>
+      <div class="bar-label">${p}%</div>
+    </div>`).join('');
+  document.getElementById('slab-chart').innerHTML = `<div class="bar-chart-row">${rows}</div>`;
+}
+
+/* ---------- MEMBER DETAIL ---------- */
+function renderMemberDetail(id) {
+  const m = getMember(id);
+  const hasBack = viewStack.length > 0;
+  document.getElementById('member-crumb').innerHTML = hasBack
+    ? `<a onclick="goBack()">← Back</a><span class="sep" style="margin:0 6px;">/</span><a onclick="showView('home')">Home</a> / Member`
+    : `<a onclick="showView('home')">Home</a> / Member`;
+  const ownSlab = lookupSlab(m.tbv);
+  const r = computeRewards(id);
+  const legs = getChildren(id).length;
+  const initials = m.name.split(' ').map(s => s[0]).slice(0,2).join('');
+  const introducer = m.introducerId ? getMember(m.introducerId) : null;
+
+  let royaltyNote = '';
+  if (r.royalty > 0) {
+    royaltyNote = `<p style="font-size:12px;color:var(--text-muted);margin:10px 16px 0 16px;">
+      ${r.qualifying.length} direct legs are on the top slab, so ${m.name.split(' ')[0]} earns royalty on
+      them instead of differential — the two mechanisms never pay on the same person (Rule 11).</p>`;
+  }
+
+  document.getElementById('member-detail-content').innerHTML = `
+    <div class="page-head">
+      <div style="display:flex;gap:14px;align-items:center;">
+        <div class="avatar" style="width:44px;height:44px;font-size:15px;">${initials}</div>
+        <div>
+          <h1 style="display:flex;align-items:center;gap:8px;">${m.name}
+            ${m.isActive ? '<span class="pill pill-active">● Active</span>' : '<span class="pill pill-inactive">Inactive</span>'}</h1>
+          <div class="sub" style="display:flex;gap:10px;font-variant-numeric:tabular-nums;">
+            <span>Member #${m.id}</span>·<span>${m.phone}</span>·<span>Joined ${m.joiningDate}</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" onclick="openMemberModal(${m.id})">Edit member</button>
+        <button class="btn btn-primary" onclick="showView('bv'); prefillBv(${m.id})">Record volume</button>
+      </div>
+    </div>
+    <div class="stats" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-card"><div class="stat-label">Business Volume</div><div class="stat-value">${fmt(m.bv)}</div></div>
+      <div class="stat-card"><div class="stat-label">Total Business Volume</div><div class="stat-value">${fmt(m.tbv)}</div></div>
+      <div class="stat-card"><div class="stat-label">Slab</div><div class="stat-value accent">${ownSlab}%</div></div>
+      <div class="stat-card"><div class="stat-label">Rewards this period</div><div class="stat-value accent">${fmt(r.rewards)}</div></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="panel">
+          <div class="panel-head"><h2>Rewards detail — ${monthLabel(CURRENT_PERIOD)}</h2>
+            <p>Differential against each of ${legs} direct leg${legs===1?'':'s'}, plus royalty.</p></div>
+          ${legs ? `<div class="table-scroll"><table>
+            <thead><tr><th>Direct leg</th><th class="num">Total Business Volume</th><th>Their slab</th><th>Differential</th><th class="num">Amount</th></tr></thead>
+            <tbody>${r.rows.map(row => `
+              <tr class="clickable" onclick="openMemberDetail(${row.id})">
+                <td><div class="name-cell">${row.name}</div><div class="id-cell">${row.id}</div></td>
+                <td class="num">${fmt(row.tbv)}</td>
+                <td><span class="pill pill-slab">${row.slab}%</span></td>
+                <td style="font-size:11.5px;font-weight:600;color:var(--text-muted);">${ownSlab}% − ${row.slab}% = ${row.diffPct}%</td>
+                <td class="num">${fmt(row.amount)}</td>
+              </tr>`).join('')}</tbody>
+            <tfoot><tr><td colspan="4" style="font-weight:600;border-top:1px solid var(--border);background:var(--bg);">Differential subtotal</td>
+              <td class="num" style="font-weight:600;border-top:1px solid var(--border);background:var(--bg);">${fmt(r.differential)}</td></tr></tfoot>
+          </table></div>` : '<div class="panel-body" style="color:var(--text-muted);font-size:13px;">No direct legs.</div>'}
+          <div style="display:flex;justify-content:space-between;padding:9px 16px;font-size:13px;border-top:1px solid var(--border);">
+            <span style="color:var(--text-muted);">Royalty — ${r.qualifying.length} of ${SETTINGS.royaltyMinChildren} required direct legs on top slab</span>
+            <span>${fmt(r.royalty)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:9px 16px;font-size:13px;border-top:1px solid var(--border);font-weight:600;">
+            <span>Rewards total</span><span>${fmt(r.rewards)}</span>
+          </div>
+          ${royaltyNote}
+        </div>
+      </div>
+      <div>
+        <div class="panel"><div class="panel-head"><h2>Details</h2></div>
+          <div class="panel-body"><dl class="fieldlist">
+            <div class="field-line"><dt>Address</dt><dd>${m.address}</dd></div>
+            <div class="field-line"><dt>Email</dt><dd>${m.email || '—'}</dd></div>
+            <div class="field-line"><dt>Introduced by</dt><dd>${introducer ? introducer.name + ' · ' + introducer.id : '— (root)'}</dd></div>
+            <div class="field-line"><dt>Level</dt><dd>${m.level}</dd></div>
+            <div class="field-line"><dt>Legs</dt><dd>${legs}</dd></div>
+            <div class="field-line"><dt>Consent recorded</dt><dd>${m.consentDate}</dd></div>
+          </dl></div>
+        </div>
+        <button class="btn" style="width:100%;" onclick="jumpToStructure(${m.id})">View in structure</button>
+      </div>
+    </div>`;
+}
+
+/* ---------- STRUCTURE ---------- */
+let structurePath = [112990];
+function jumpToStructure(id) {
+  const path = [id];
+  let cur = getMember(id);
+  while (cur && cur.introducerId) { path.unshift(cur.introducerId); cur = getMember(cur.introducerId); }
+  structurePath = path;
+  showView('structure');
+}
+function drillInto(id) { structurePath.push(id); renderStructure(); }
+function truncatePath(index) { structurePath = structurePath.slice(0, index + 1); renderStructure(); }
+function renderStructure() {
+  const focusId = structurePath[structurePath.length - 1];
+  const focus = getMember(focusId);
+  const upLink = structurePath.length > 1
+    ? `<a onclick="truncatePath(${structurePath.length - 2})">← Up to parent</a><span class="sep">/</span>`
+    : '';
+  document.getElementById('structure-breadcrumb').innerHTML = upLink + structurePath.map((id, i) => {
+    const mm = getMember(id);
+    const isLast = i === structurePath.length - 1;
+    return (i > 0 ? '<span class="sep">/</span>' : '') +
+      (isLast ? `<span>${mm.name}</span>` : `<a onclick="truncatePath(${i})">${mm.name}</a>`);
+  }).join('');
+
+  const children = getChildren(focusId);
+  const rootRow = `<div class="root-row"><div class="node root">
+      <div class="node-name">${focus.name}</div><div class="node-id">${focus.id}</div>
+      <div class="node-bv-label">Business Volume</div><div class="node-bv-value">${fmt(focus.bv)}</div>
+      <div class="node-foot"><span></span><a class="node-view-link" onclick="openMemberDetail(${focus.id})">View member →</a></div>
+    </div></div>`;
+
+  if (!children.length) {
+    document.getElementById('structure-tree').innerHTML = `<div class="tree-inner">${rootRow}</div>
+      <p style="color:var(--text-muted);font-size:13px;margin-top:24px;text-align:center;">No direct legs.</p>`;
+    return;
+  }
+
+  // Exact pixel math, not an assumed/stretched viewBox: each node slot is 158px wide with a 14px gap,
+  // so the row's real content width is n*172-14 (n slots of 172, minus one trailing gap). The SVG is
+  // given that same width with no scaling, so its coordinates and the flex row's real positions are
+  // the same numbers — see plan item 3.
+  const n = children.length, w = n * 172 - 14, mid = w / 2;
+  const paths = children.map((c, i) => `<path d="M ${mid} 0 V 18 H ${i * 172 + 79} V 50" />`).join('');
+  const childrenRow = `<svg class="connectors" width="${w}" height="50" viewBox="0 0 ${w} 50">${paths}</svg>
+    <div class="children-row">${children.map(c => `
+      <div class="node clickable ${c.isActive?'':'inactive'}" onclick="handleNodeClick(${c.id})">
+        <div class="node-name">${c.name}</div><div class="node-id">${c.id}${c.isActive?'':' · inactive'}</div>
+        <div class="node-bv-label">Business Volume</div><div class="node-bv-value">${fmt(c.bv)}</div>
+        <div class="node-foot">
+          <span class="node-legs">${getChildren(c.id).length ? getChildren(c.id).length + ' legs' : ''}</span>
+          <a class="node-view-link" onclick="event.stopPropagation(); openMemberDetail(${c.id})">View →</a>
+        </div>
+      </div>`).join('')}</div>`;
+
+  document.getElementById('structure-tree').innerHTML = `<div class="tree-inner">${rootRow}${childrenRow}</div>`;
+}
+function handleNodeClick(id) {
+  // Fix 4: a leaf has nothing to drill into — a "Structure" screen with no legs is a dead end,
+  // so land directly on their detail instead.
+  if (getChildren(id).length > 0) drillInto(id); else openMemberDetail(id);
+}
+
+/* ---------- BV ENTRY ---------- */
+let bvSelectedId = null;
+function prefillBv(id) { bvSelectedId = id; renderBv(); }
+function renderBv() {
+  renderBanner();
+  document.getElementById('bv-search').value = '';
+  document.getElementById('bv-search-results').style.display = 'none';
+  if (!bvSelectedId) bvSelectedId = 114502;
+  renderBvSelected();
+}
+function renderBvSearch() {
+  const q = document.getElementById('bv-search').value.trim().toLowerCase();
+  const box = document.getElementById('bv-search-results');
+  if (!q) { box.style.display = 'none'; return; }
+  const list = MEMBERS.filter(m => m.name.toLowerCase().includes(q) || String(m.id).includes(q)).slice(0, 6);
+  box.innerHTML = list.map(m => `<div class="res-row" onclick="selectBvMember(${m.id})">
+      <span>${m.name}</span><span class="id-cell">${m.id}</span></div>`).join('') ||
+    '<div class="res-row" style="color:var(--text-muted);">No matches</div>';
+  box.style.display = 'block';
+}
+function selectBvMember(id) {
+  bvSelectedId = id;
+  document.getElementById('bv-search').value = '';
+  document.getElementById('bv-search-results').style.display = 'none';
+  renderBvSelected();
+}
+function renderBvSelected() {
+  const m = getMember(bvSelectedId);
+  const initials = m.name.split(' ').map(s => s[0]).slice(0,2).join('');
+  document.getElementById('bv-selected').innerHTML = `
+    <div class="avatar">${initials}</div>
+    <div class="info"><div class="name">${m.name}</div><div class="meta">Member #${m.id}</div></div>
+    <div class="current">Current slab<b>${lookupSlab(m.tbv)}%</b></div>`;
+  document.getElementById('bv-note').textContent = `Recorded today, ${todayLabel()} · up to two decimal places · no currency field`;
+  document.getElementById('bv-amount').value = '';
+  document.getElementById('bv-save-btn').disabled = true;
+  document.getElementById('bv-entries-title').textContent = `This period's entries — ${m.name}`;
+  renderBvEntries();
+}
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.id === 'bv-amount') {
+    const v = parseFloat(e.target.value);
+    document.getElementById('bv-save-btn').disabled = !(v > 0);
+  }
+});
+function renderBvEntries() {
+  const list = CURRENT_ENTRIES.filter(en => en.memberId === bvSelectedId);
+  document.getElementById('bv-entries-list').innerHTML = list.length
+    ? list.map(en => `<div class="entry-row"><span class="date">${en.date}</span><span class="amt">${fmt(en.amount)}</span></div>`).join('')
+    : '<p style="font-size:12.5px;color:var(--text-muted);">No entries yet this period.</p>';
+}
+function saveBvEntry() {
+  const amt = parseFloat(document.getElementById('bv-amount').value);
+  if (!(amt > 0)) return;
+  const date = todayISO();
+  CURRENT_ENTRIES.push({ memberId: bvSelectedId, amount: amt, date });
+  AUDIT_LOG.unshift({ at: date + ' ' + nowTime(), member: getMember(bvSelectedId).name, field: 'Business Volume', before: '—', after: fmt(amt), cause: 'Entry' });
+  toast(`Saved ${fmt(amt)} for ${getMember(bvSelectedId).name}. Live figures recalculate instantly in the real build (Rule 26).`);
+  renderBvSelected();
+}
+function todayISO() { return '2026-08-04'; }
+function todayLabel() { return '4 Aug 2026'; }
+function nowTime() { const d = new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+
+/* ---------- MONTHLY CLOSE ---------- */
+let closeStep = 0; // 0 confirm, 1 backup, 2 writing, 3 done
+let backupDone = false;
+let lastClosedMonth = null;
+function renderClose() {
+  const el = document.getElementById('close-wizard');
+  const steps = ['step','step','step','step'];
+  const stepsHtml = steps.map((_,i)=>`<div class="step ${i<closeStep?'done':i===closeStep?'current':''}"></div>`).join('');
+
+  if (closeStep === 3) {
+    const month = lastClosedMonth;
+    el.innerHTML = `<div class="wizard-icon" style="background:var(--success-soft);color:var(--success);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <h2>${monthLabel(month)} closed</h2>
+      <p class="desc">Every live figure is back to zero. The record is permanent and reachable from Past
+        snapshot. Recording is unlocked${PERIODS.some(p=>p.status==='ended_locked') ? ' for the next outstanding month' : ' for ' + monthLabel(CURRENT_PERIOD)}.</p>
+      <div class="wizard-foot"><span></span><button class="btn btn-primary" onclick="showView('snapshot');">View snapshot</button></div>`;
+    return;
+  }
+
+  const outstanding = PERIODS.filter(p => p.status === 'ended_locked').sort((a,b)=>a.month.localeCompare(b.month));
+  if (outstanding.length === 0) {
+    el.innerHTML = `<div class="wizard-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <h2>Nothing outstanding</h2><p class="desc">Every month is closed. Recording stays open for ${monthLabel(CURRENT_PERIOD)}.</p>`;
+    return;
+  }
+  const month = outstanding[0].month;
+
+  if (closeStep === 0) {
+    el.innerHTML = `<div class="wizard-steps">${stepsHtml}</div>
+      <div class="wizard-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>
+      <h2>Close ${monthLabel(month)}?</h2>
+      <p class="desc">This closes ${monthLabel(month)} specifically — whichever month it belongs to, regardless of
+        today's date (Rule 21). All ${MEMBERS.length} member records will be captured before anything is cleared.</p>
+      <div class="wizard-foot"><span></span><button class="btn btn-primary" onclick="closeStep=1;renderClose();">Continue</button></div>`;
+  } else if (closeStep === 1) {
+    el.innerHTML = `<div class="wizard-steps">${stepsHtml}</div>
+      <div class="wizard-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg></div>
+      <h2>Back up ${monthLabel(month)}</h2>
+      <p class="desc">A backup is required before anything is cleared. The retained copy inside the system is
+        the actual gate; the copy you download is a convenience on top of it (Rule 18, RQ-6).</p>
+      <div class="backup-status ${backupDone?'ok':''}" id="backup-status">
+        ${backupDone ? '✓ Backup confirmed and retained' : '<span class="spin"></span> Not started'}
+      </div>
+      <div class="wizard-foot">
+        <button class="btn" onclick="closeStep=0;renderClose();">Back</button>
+        ${backupDone
+          ? `<button class="btn btn-primary" onclick="closeStep=2;renderClose();">Continue</button>`
+          : `<button class="btn btn-primary" onclick="runBackup();">Generate backup</button>`}
+      </div>`;
+  } else if (closeStep === 2) {
+    el.innerHTML = `<div class="wizard-steps">${stepsHtml}</div>
+      <div class="wizard-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4M12 3l9 4.5v9L12 21l-9-4.5v-9z"/></svg></div>
+      <h2>Write the permanent record</h2>
+      <p class="desc">Before anything is cleared, a snapshot is captured for every member: Business Volume,
+        Total Business Volume, slab, Rewards, royalty and active status (Rule 38).</p>
+      <div class="backup-status ok">✓ ${MEMBERS.length} member records captured</div>
+      <div class="wizard-foot"><button class="btn" onclick="closeStep=1;renderClose();">Back</button>
+        <button class="btn btn-primary" onclick="finishClose('${month}');">Clear live figures &amp; close</button></div>`;
+  }
+}
+function runBackup() {
+  document.getElementById('backup-status').innerHTML = '<span class="spin"></span> Generating and verifying…';
+  setTimeout(() => { backupDone = true; renderClose(); }, 900);
+}
+function finishClose(month) {
+  const snap = MEMBERS.map(m => ({ id: m.id, name: m.name, bv: m.bv, tbv: m.tbv, slab: lookupSlab(m.tbv), rewards: computeRewards(m.id).rewards, status: m.isActive ? 'Active' : 'Inactive' }));
+  SNAPSHOTS[month] = snap;
+  PERIODS = PERIODS.filter(p => p.month !== month);
+  lastClosedMonth = month;
+  closeStep = 3; backupDone = false;
+  renderClose(); renderBanner();
+}
+
+/* ---------- PAST SNAPSHOT ---------- */
+function renderSnapshot(refreshPicker) {
+  const picker = document.getElementById('snapshot-picker');
+  if (refreshPicker || picker.options.length === 0) {
+    const months = Object.keys(SNAPSHOTS).sort().reverse();
+    picker.innerHTML = months.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join('');
+  }
+  const month = picker.value || picker.options[0]?.value;
+  const rows = SNAPSHOTS[month] || [];
+  document.getElementById('snapshot-content').innerHTML = `
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-head"><h2>${monthLabel(month)} — as closed</h2>
+        <a class="link" onclick="toast('Backup file for ${monthLabel(month)} would download here.')">Re-download backup</a></div>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Name</th><th>Member #</th><th class="num">Business Volume</th><th class="num">Total Business Volume</th><th>Slab</th><th class="num">Rewards</th><th>Status</th></tr></thead>
+        <tbody>${rows.map(r => `<tr><td class="name-cell">${r.name}</td><td class="id-cell">${r.id}</td>
+          <td class="num">${fmt(r.bv)}</td><td class="num">${fmt(r.tbv)}</td><td><span class="pill pill-slab">${r.slab}%</span></td>
+          <td class="num">${fmt(r.rewards)}</td><td>${r.status === 'Active' ? '<span class="pill pill-active">● Active</span>' : '<span class="pill pill-inactive">Inactive</span>'}</td></tr>`).join('')}
+        </tbody></table></div>
+    </div>`;
+}
+
+/* ---------- REPORTS ---------- */
+const ALL_COLUMNS = [
+  ['name','Name'], ['id','Member number'], ['phone','Phone number'], ['bv','Business Volume'],
+  ['email','Email address'], ['address','Address'], ['introducerId','Introducer number'], ['introducerName','Introducer name'],
+  ['level','Level'], ['legs','Number of direct legs'], ['tbv','Total Business Volume'], ['slab','Slab percentage'],
+  ['rewards','Rewards'], ['royalty','Royalty earned'], ['joiningDate','Joining date'], ['status','Active/inactive status'],
+];
+function renderReports() {
+  const checklist = ALL_COLUMNS.map(([key,label]) => {
+    const isDefault = SETTINGS.defaultExportColumns.includes(key);
+    return `<label><input type="checkbox" ${isDefault ? 'checked disabled' : ''} /> <span>${label}${isDefault?' (always included)':''}</span></label>`;
+  }).join('');
+
+  // yearly line chart — Priya Singh, joined partway through the year (Rule 23)
+  const months = ['Mar','Apr','May','Jun','Jul'];
+  const vals = [50, 80, 50, 140, 50];
+  const max = Math.max(...vals) * 1.2;
+  const w = 460, h = 120, step = w / (vals.length - 1);
+  const pts = vals.map((v,i) => `${i*step},${h - (v/max)*h}`).join(' ');
+  const avg = (vals.reduce((a,b)=>a+b,0) / vals.length).toFixed(2);
+
+  document.getElementById('reports-content').innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h2>Monthly data — ${monthLabel(CURRENT_PERIOD)}</h2>
+        <button class="btn btn-primary btn-sm" onclick="toast('management-system-monthly-2026-08.xlsx would download here.')">Export</button></div>
+      <div class="panel-body"><p class="sub" style="margin:0 0 12px 0;">Four defaults always included. Choose any others.</p>
+        <div class="checklist">${checklist}</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Yearly average</h2>
+        <button class="btn btn-primary btn-sm" onclick="toast('management-system-yearly-average.xlsx would download here.')">Export</button></div>
+      <div class="panel-body">
+        <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+          <div>
+            <svg width="${w}" height="${h+20}" viewBox="0 0 ${w} ${h+20}">
+              <line x1="0" y1="${h}" x2="${w}" y2="${h}" stroke="var(--border)" stroke-width="1" />
+              <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" />
+              ${vals.map((v,i)=>`<circle cx="${i*step}" cy="${h-(v/max)*h}" r="${i===vals.length-1?4:2.5}" fill="var(--accent)" />`).join('')}
+            </svg>
+            <div style="display:flex;justify-content:space-between;width:${w}px;font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums;">
+              ${months.map(m=>`<span>${m}</span>`).join('')}
+            </div>
+          </div>
+          <div class="stat-card" style="min-width:160px;">
+            <div class="stat-label">Priya Singh — avg Total Business Volume</div>
+            <div class="stat-value">${avg}</div>
+            <div class="stat-note">Based on 5 of 7 months — joined March, so earlier months carry no
+              snapshot and are correctly excluded (Rule 23)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Below-threshold report</h2>
+        <button class="btn btn-primary btn-sm" onclick="toast('management-system-low-contribution.xlsx would download here.')">Export</button></div>
+      <div class="panel-body">
+        <div class="field-group" style="max-width:220px;">
+          <span class="field-label">Yearly average threshold</span>
+          <input class="field-input" id="lowthresh" type="number" value="${SETTINGS.lowContributionThreshold}" oninput="renderLowCount()" />
+        </div>
+        <p class="sub" id="lowcount-note" style="margin:0;"></p>
+        <p class="field-hint">Filters on each member's own yearly average Business Volume, not Total Business
+          Volume — what they personally brought in, independent of their team (Rule 24).</p>
+      </div>
+    </div>`;
+  renderLowCount();
+}
+function renderLowCount() {
+  const t = parseFloat(document.getElementById('lowthresh')?.value) || 0;
+  const count = MEMBERS.filter(m => m.bv < t).length;
+  const note = document.getElementById('lowcount-note');
+  if (note) note.textContent = `${count} of ${MEMBERS.length} members currently fall below ${fmt(t)}.`;
+}
+
+/* ---------- SETTINGS ---------- */
+function renderSettings() {
+  const slabRows = SETTINGS.slabRows.map((r,i) => `
+    <div class="settings-slab-row">
+      <div><span class="field-label" style="margin-bottom:4px;">Threshold</span>
+        <input class="field-input" type="number" value="${r.threshold}" onchange="SETTINGS.slabRows[${i}].threshold=parseFloat(this.value)||0" /></div>
+      <div><span class="field-label" style="margin-bottom:4px;">Percentage</span>
+        <input class="field-input" type="number" value="${r.pct}" onchange="SETTINGS.slabRows[${i}].pct=parseFloat(this.value)||0" /></div>
+      <button class="btn btn-sm btn-danger-ghost" onclick="removeSlabRow(${i})">Remove</button>
+    </div>`).join('');
+
+  document.getElementById('settings-content').innerHTML = `
+    <div class="panel"><div class="panel-head"><h2>Slab table</h2>
+      <p>0% applies implicitly below the lowest row. Top slab (royalty trigger) is always the
+        highest-percentage row — recalculated automatically (Rule 27).</p></div>
+      <div class="panel-body">${slabRows}
+        <button class="btn btn-sm" style="margin-top:12px;" onclick="addSlabRow()">+ Add row</button>
+      </div>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Royalty</h2></div>
+      <div class="panel-body settings-grid">
+        <div class="field-group"><span class="field-label">Qualifying direct legs</span>
+          <input class="field-input" type="number" value="${SETTINGS.royaltyMinChildren}" onchange="SETTINGS.royaltyMinChildren=parseInt(this.value)||1" /></div>
+        <div class="field-group"><span class="field-label">Royalty rate (%)</span>
+          <input class="field-input" type="number" value="${SETTINGS.royaltyRate}" onchange="SETTINGS.royaltyRate=parseFloat(this.value)||0" /></div>
+      </div>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Structure</h2><p>Widths are advisory — they warn, never block (Rule 1).</p></div>
+      <div class="panel-body settings-grid">
+        <div class="field-group"><span class="field-label">Maximum depth</span><input class="field-input" type="number" value="${SETTINGS.hierarchyDepth}" /></div>
+        <div class="field-group"><span class="field-label">Level 2 width</span><input class="field-input" type="number" value="${SETTINGS.levelWidths.l2}" /></div>
+        <div class="field-group"><span class="field-label">Level 3 width</span><input class="field-input" type="number" value="${SETTINGS.levelWidths.l3}" /></div>
+        <div class="field-group"><span class="field-label">Level 4 width</span><input class="field-input" type="number" value="${SETTINGS.levelWidths.l4}" /></div>
+      </div>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Reporting</h2></div>
+      <div class="panel-body settings-grid">
+        <div class="field-group"><span class="field-label">Yearly cycle start</span><input class="field-input" value="${SETTINGS.yearlyCycleStart}" /></div>
+        <div class="field-group"><span class="field-label">Yearly cycle end</span><input class="field-input" value="${SETTINGS.yearlyCycleEnd}" /></div>
+        <div class="field-group"><span class="field-label">Low-contribution threshold</span><input class="field-input" type="number" value="${SETTINGS.lowContributionThreshold}" /></div>
+        <div class="field-group"><span class="field-label">Reference unit value (never displayed elsewhere)</span><input class="field-input" type="number" value="${SETTINGS.referenceUnitValue}" /></div>
+      </div>
+    </div>`;
+}
+function addSlabRow() { SETTINGS.slabRows.push({ threshold: 0, pct: 0 }); renderSettings(); }
+function removeSlabRow(i) { if (SETTINGS.slabRows.length <= 1) { toast('At least one slab row must exist.'); return; } SETTINGS.slabRows.splice(i,1); renderSettings(); }
+function saveSettings() { SETTINGS.slabRows.sort((a,b)=>a.threshold-b.threshold); toast('Settings saved. Applied immediately — the current period re-works under the new table (Rule 26, RQ-18).'); renderSettings(); }
+
+/* ---------- AUDIT LOG ---------- */
+function renderAudit() {
+  const q = (document.getElementById('audit-filter').value || '').trim().toLowerCase();
+  const rows = AUDIT_LOG.filter(a => !q || a.member.toLowerCase().includes(q));
+  document.getElementById('audit-body').innerHTML = rows.map(a => `
+    <tr><td class="id-cell">${a.at}</td><td class="name-cell">${a.member}</td><td>${a.field}</td>
+      <td style="color:var(--text-muted);">${a.before}</td><td>${a.after}</td><td>${a.cause}</td></tr>`).join('')
+    || '<tr><td colspan="6" style="color:var(--text-muted);">No matching entries.</td></tr>';
+}
+
+/* ---------- MEMBER MODAL (add / edit) ---------- */
+let editingMemberId = null;
+function openMemberModal(id) {
+  editingMemberId = id;
+  document.getElementById('mm-error').classList.remove('active');
+  document.getElementById('mm-title').textContent = id ? 'Edit member' : 'Add member';
+  const m = id ? getMember(id) : null;
+  document.getElementById('mm-name').value = m ? m.name : '';
+  document.getElementById('mm-phone').value = m ? m.phone : '';
+  document.getElementById('mm-email').value = m && m.email ? m.email : '';
+  document.getElementById('mm-address').value = m ? m.address : '';
+  document.getElementById('mm-introducer').value = m && m.introducerId ? m.introducerId : '';
+  document.getElementById('mm-introducer').disabled = !!m;
+  document.getElementById('mm-introducer-req').style.display = m ? 'none' : 'inline';
+  document.getElementById('mm-introducer').nextElementSibling.textContent = m
+    ? 'Fixed at creation and can never change (Rule 37).'
+    : 'Must resolve to an existing, active member (Rule 30).';
+  document.getElementById('mm-consent').checked = !!m;
+  document.getElementById('mm-consent').disabled = !!m;
+  document.getElementById('member-modal-overlay').classList.add('active');
+}
+function closeMemberModal() { document.getElementById('member-modal-overlay').classList.remove('active'); }
+function saveMember() {
+  const name = document.getElementById('mm-name').value.trim();
+  const phone = document.getElementById('mm-phone').value.trim();
+  const address = document.getElementById('mm-address').value.trim();
+  const introducerRaw = document.getElementById('mm-introducer').value.trim();
+  const consent = document.getElementById('mm-consent').checked;
+  const err = document.getElementById('mm-error');
+  const showErr = (msg) => { err.textContent = msg; err.classList.add('active'); };
+
+  if (!name) return showErr('Name is required.');
+  if (!phone) return showErr('Phone number is required.');
+  if (!address) return showErr('Address is required.');
+  const dupe = MEMBERS.find(x => x.phone === phone && x.id !== editingMemberId);
+  if (dupe) return showErr(`This number belongs to ${dupe.name} (#${dupe.id})${dupe.isActive ? '' : ' — inactive; reactivate them instead of adding a new record'}.`);
+  if (!editingMemberId) {
+    if (!introducerRaw) return showErr('Introducer member number is required.');
+    const intro = getMember(parseInt(introducerRaw, 10));
+    if (!intro || !intro.isActive) return showErr('Introducer must resolve to an existing, active member.');
+    if (!consent) return showErr('Consent must be confirmed before this member can be saved.');
+  }
+
+  if (editingMemberId) {
+    const m = getMember(editingMemberId);
+    m.name = name; m.phone = phone; m.email = document.getElementById('mm-email').value.trim() || null; m.address = address;
+    toast(`${name} updated.`);
+  } else {
+    const intro = getMember(parseInt(introducerRaw, 10));
+    let newId; do { newId = 100001 + Math.floor(Math.random() * 899999); } while (getMember(newId));
+    MEMBERS.push({ id: newId, name, phone, email: document.getElementById('mm-email').value.trim() || null, address,
+      introducerId: intro.id, level: intro.level + 1, isActive: true, joiningDate: todayISO(), consentDate: todayISO(), bv: 0, tbv: 0 });
+    AUDIT_LOG.unshift({ at: todayISO() + ' ' + nowTime(), member: name, field: 'Member added', before: '—', after: `#${newId}`, cause: 'New member' });
+    toast(`${name} added as #${newId}.`);
+  }
+  closeMemberModal();
+  if (document.querySelector('.view[data-view="home"]').classList.contains('active')) renderHome();
+}
+
+/* ---------- boot ---------- */
+buildKeypad();
+renderPinDots();
+</script>
+</body>
+</html>
