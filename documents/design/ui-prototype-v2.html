@@ -367,6 +367,12 @@ td.cell-primary { font-weight: 550; }
 .bar-track { height: 9px; background: var(--bg); border-radius: 5px; overflow: hidden; }
 .bar-fill { height: 100%; background: var(--accent); border-radius: 5px; transition: width 0.3s ease; }
 .bar-row-count { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.bar-list-lg { gap: 14px; }
+.bar-row-lg { grid-template-columns: 60px 1fr 90px; gap: 14px; }
+.bar-row-label-lg { font-size: 13.5px; font-weight: 650; color: var(--text); }
+.bar-track-lg { height: 16px; border-radius: 8px; }
+.bar-track-lg .bar-fill { border-radius: 8px; }
+.bar-row-count-lg { font-size: 13.5px; font-weight: 650; color: var(--text); }
 
 /* ============================================================
    STRUCTURE TREE
@@ -379,6 +385,9 @@ td.cell-primary { font-weight: 550; }
 .tree-connectors line { stroke: var(--border); stroke-width: 1.5; }
 .tree-root-row { display: flex; justify-content: center; margin-bottom: 6px; }
 .tree-children-row { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; padding-top: 6px; }
+.tree-scroll { max-height: 65vh; overflow: auto; }
+.tree-subtree { display: flex; flex-direction: column; align-items: center; }
+.tree-generation { display: flex; justify-content: center; gap: 18px; flex-wrap: nowrap; padding-top: 36px; }
 .tree-node {
   width: 172px; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-lg);
   padding: 12px 13px; cursor: pointer; transition: border-color .1s, transform .1s;
@@ -629,7 +638,6 @@ let SETTINGS = {
   royaltyRatePct: 1,
   structureDepthGuidance: 4,
   widthL2: 9, widthL3: 6, widthL4: 3,
-  referenceUnitValue: 500,
   yearlyCycleStart: '01-01', yearlyCycleEnd: '12-31',
   lowContributionThreshold: 100,
   defaultExportColumns: ['name', 'id', 'phone', 'bv'],
@@ -948,6 +956,7 @@ let APP = {
   lockedBeforeModal: null,
   memberEntriesForId: null, memberEntriesPage: 0, memberEntriesPageSize: 10,
   correctionEntriesForKey: null, correctionEntriesPage: 0, correctionEntriesPageSize: 10,
+  structureFullTree: false,      // persists across navigation by design — not reset per member
 };
 let toastSeq = 0;
 
@@ -1107,15 +1116,10 @@ function measureTopbarHeight() {
   if (!topbar) return;
   document.documentElement.style.setProperty('--topbar-h', topbar.getBoundingClientRect().height + 'px');
 }
-function drawTreeConnectors() {
-  const svg = document.getElementById('tree-connectors');
-  const wrap = document.getElementById('tree-wrap');
-  const currentId = APP.params && APP.params.id ? APP.params.id : ROOT_ID;
-  const rootEl = document.getElementById('tree-node-' + currentId);
-  if (!svg || !wrap || !rootEl) return;
-  const kids = directChildren(currentId);
-  if (!kids.length) { svg.innerHTML = ''; return; }
-  const wrapRect = wrap.getBoundingClientRect();
+function connectorLinesForParent(parentId, wrapRect) {
+  const rootEl = document.getElementById('tree-node-' + parentId);
+  const kids = directChildren(parentId);
+  if (!rootEl || !kids.length) return '';
   const rootRect = rootEl.getBoundingClientRect();
   const rootX = rootRect.left + rootRect.width / 2 - wrapRect.left;
   const rootBottomY = rootRect.bottom - wrapRect.top;
@@ -1152,6 +1156,24 @@ function drawTreeConnectors() {
     if (row.xs.length > 1) lines += line(row.minX, row.trunkY, row.maxX, row.trunkY);
     row.xs.forEach(function (x) { lines += line(x, row.trunkY, x, row.topY); });
   });
+  return lines;
+}
+function drawTreeConnectors() {
+  const svg = document.getElementById('tree-connectors');
+  const wrap = document.getElementById('tree-wrap');
+  const currentId = APP.params && APP.params.id ? APP.params.id : ROOT_ID;
+  if (!svg || !wrap || !document.getElementById('tree-node-' + currentId)) return;
+  const wrapRect = wrap.getBoundingClientRect();
+  let lines;
+  if (APP.structureFullTree) {
+    lines = '';
+    (function walk(id) {
+      lines += connectorLinesForParent(id, wrapRect);
+      directChildren(id).forEach(function (c) { walk(c.id); });
+    })(currentId);
+  } else {
+    lines = connectorLinesForParent(currentId, wrapRect);
+  }
   svg.innerHTML = lines;
 }
 
@@ -1291,13 +1313,15 @@ function searchMembers(q) {
 }
 function homeResultsHtml(q) {
   const results = searchMembers(q);
-  const list = results || MEMBERS.slice().sort(function (a, b) { return (LIVE_TBV.get(b.id) || 0) - (LIVE_TBV.get(a.id) || 0); }).slice(0, 10);
-  const rows = list.map(function (m) {
+  if (!results) {
+    return '<div class="empty-state">' + ICON.search.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:10px;opacity:.5" ') + '<div class="empty-state-title">Search for a member to see their details</div><div class="empty-state-sub">Type a name or 6-digit member number above — nothing is shown until you search.</div></div>';
+  }
+  const rows = results.map(function (m) {
     return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + m.id + '})"><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td class="num">' + fmtInt(LIVE_TBV.get(m.id) || 0) + '</td><td>' + pillSlab(LIVE_REWARDS.get(m.id).ownSlab) + '</td><td>' + pillActive(m.active) + '</td></tr>';
   }).join('');
-  return '<div class="card-head"><div><div class="card-title">' + (results ? results.length + ' result' + (results.length === 1 ? '' : 's') : 'All members') + '</div>' +
-    '<div class="card-sub">' + (results ? 'Matching "' + esc(q) + '"' : 'Showing top 10 by Total Business Volume — search to find anyone') + '</div></div></div>' +
-    (list.length === 0
+  return '<div class="card-head"><div><div class="card-title">' + results.length + ' result' + (results.length === 1 ? '' : 's') + '</div>' +
+    '<div class="card-sub">Matching "' + esc(q) + '"</div></div></div>' +
+    (results.length === 0
       ? '<div class="empty-state">' + ICON.inbox.replace('<svg ', '<svg style="width:32px;height:32px;margin-bottom:10px;opacity:.5" ') + '<div class="empty-state-title">No members match "' + esc(q) + '"</div><div class="empty-state-sub">Try a different name or member number.</div></div>'
       : '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Member #</th><th class="num">Total Business Volume</th><th>Slab</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>');
 }
@@ -1307,8 +1331,9 @@ VIEWS.home = function () {
   const topSlabCount = MEMBERS.filter(function (m) { return LIVE_REWARDS.get(m.id).ownSlab === topSlabPct(); }).length;
   const buckets = sortedSlabTable().map(function (row) { return { pct: row.pct, count: MEMBERS.filter(function (m) { return LIVE_REWARDS.get(m.id).ownSlab === row.pct; }).length }; });
   const maxCount = Math.max.apply(null, buckets.map(function (b) { return b.count; }).concat([1]));
+  const totalMembers = MEMBERS.length;
   const barsHtml = buckets.map(function (b) {
-    return '<div class="bar-row"><div class="bar-row-label">' + pct(b.pct) + '</div><div class="bar-track"><div class="bar-fill" style="width:' + Math.round(b.count / maxCount * 100) + '%"></div></div><div class="bar-row-count">' + b.count + '</div></div>';
+    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="width:' + Math.round(b.count / maxCount * 100) + '%"></div></div><div class="bar-row-count bar-row-count-lg">' + b.count + '<span class="muted" style="font-weight:400"> / ' + totalMembers + '</span></div></div>';
   }).join('');
   const content =
     '<div class="stat-row n3">' +
@@ -1316,11 +1341,9 @@ VIEWS.home = function () {
     '<div class="stat-card"><div class="stat-label">Entries this period</div><div class="stat-value">' + fmtInt(entriesThisPeriod) + '</div><div class="stat-foot">' + (isRecordingLocked() ? 'Recording locked' : ymLabel(CURRENT_YM)) + '</div></div>' +
     '<div class="stat-card"><div class="stat-label">On top slab</div><div class="stat-value">' + fmtInt(topSlabCount) + '</div><div class="stat-foot">' + pct(topSlabPct()) + ' and above</div></div>' +
     '</div>' +
-    '<div class="two-col">' +
-    '<div class="card"><div class="field" style="margin-bottom:16px"><div class="search-input-wrap">' + ICON.search + '<input id="home-search" type="text" placeholder="Search by name or 6-digit member number" oninput="P.homeSearchInput(this.value)"></div></div>' +
-    '<div id="home-results">' + homeResultsHtml('') + '</div></div>' +
-    '<div class="card"><div class="card-title">Members by slab</div><div class="card-sub" style="margin-bottom:14px">Current live figures</div><div class="bar-list">' + barsHtml + '</div></div>' +
-    '</div>';
+    '<div class="card"><div class="field" style="margin-bottom:0"><div class="search-input-wrap">' + ICON.search + '<input id="home-search" type="text" placeholder="Search by name or 6-digit member number" oninput="P.homeSearchInput(this.value)"></div></div>' +
+    '<div id="home-results" class="mt-3">' + homeResultsHtml('') + '</div></div>' +
+    '<div class="card mt-3"><div class="card-title">Members by slab</div><div class="card-sub" style="margin-bottom:20px">Current live figures across all ' + totalMembers + ' members</div><div class="bar-list bar-list-lg">' + barsHtml + '</div></div>';
   return shell(content, { title: 'Home', sub: 'Search any member, or scan today’s standing', actions: '<button class="btn btn-primary" onclick="P.openAddMember()">' + ICON.plus + ' Add member</button>' });
 };
 
@@ -1484,6 +1507,7 @@ VIEWS.structure = function (params) {
 
   const kids = directChildren(currentId);
   const guidance = LEVEL_WIDTH_GUIDANCE[node.level + 1];
+  const fullTree = !!APP.structureFullTree;
   const nodeCard = function (n, isRoot) {
     return '<div class="tree-node' + (isRoot ? ' root-node' : '') + '" id="tree-node-' + n.id + '" onclick="P.nav(\'structure\',{id:' + n.id + '})">' +
       '<div class="flex" style="justify-content:space-between;align-items:flex-start"><div><div class="tree-node-name">' + esc(n.name) + (n.active ? '' : ' <span class="pill pill-inactive" style="margin-left:4px">Inactive</span>') + '</div><div class="tree-node-id">#' + n.id + '</div></div>' +
@@ -1491,19 +1515,37 @@ VIEWS.structure = function (params) {
       '<div class="tree-node-bv"><span class="tree-node-bv-label">Business Volume</span><span class="tree-node-bv-val num">' + fmtInt(LIVE_BV.get(n.id) || 0) + '</span></div>' +
       '<div class="tree-node-foot muted" style="font-size:11.5px">' + directChildren(n.id).length + ' direct leg' + (directChildren(n.id).length === 1 ? '' : 's') + '</div></div>';
   };
+  const buildTreeSubtree = function (n, isRoot) {
+    const nKids = directChildren(n.id);
+    return '<div class="tree-subtree">' + nodeCard(n, isRoot) +
+      (nKids.length ? '<div class="tree-generation">' + nKids.map(function (k) { return buildTreeSubtree(k, false); }).join('') + '</div>' : '') +
+      '</div>';
+  };
+
+  const toggle = '<div class="segmented" style="margin-left:auto"><button class="' + (fullTree ? '' : 'active') + '" onclick="P.setStructureFullTree(false)">Direct legs</button><button class="' + (fullTree ? 'active' : '') + '" onclick="P.setStructureFullTree(true)">Full hierarchy</button></div>';
+
+  const childrenHtml = !kids.length
+    ? '<div class="empty-state">' + ICON.tree.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No direct legs</div><div class="empty-state-sub">This member has no one introduced beneath them.</div></div>'
+    : fullTree
+      ? '<div class="tree-generation">' + kids.map(function (k) { return buildTreeSubtree(k, false); }).join('') + '</div>'
+      : '<div class="tree-children-row" style="padding-top:36px">' + kids.map(function (k) { return nodeCard(k, false); }).join('') + '</div>';
+
+  const treeWrapHtml = '<div class="tree-wrap" id="tree-wrap"><svg class="tree-connectors" id="tree-connectors"></svg>' +
+    '<div class="tree-root-row">' + nodeCard(node, true) + '</div>' + childrenHtml +
+    (guidance && kids.length > guidance ? '<div class="tree-advisory">This member has ' + kids.length + ' direct legs — structure guidance suggests up to ' + guidance + ' at this level. Guidance only; entry is never blocked.</div>' : '') +
+    '</div>';
 
   const content =
-    '<div class="tree-legend"><span><span class="legend-swatch" style="background:var(--accent)"></span>Current member</span><span><span class="legend-swatch" style="background:var(--border)"></span>Direct leg</span></div>' +
-    '<div class="tree-wrap" id="tree-wrap"><svg class="tree-connectors" id="tree-connectors"></svg>' +
-    '<div class="tree-root-row">' + nodeCard(node, true) + '</div>' +
-    (kids.length ? '<div class="tree-children-row" style="padding-top:36px">' + kids.map(function (k) { return nodeCard(k, false); }).join('') + '</div>' :
-      '<div class="empty-state">' + ICON.tree.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No direct legs</div><div class="empty-state-sub">This member has no one introduced beneath them.</div></div>') +
-    (guidance && kids.length > guidance ? '<div class="tree-advisory">This member has ' + kids.length + ' direct legs — structure guidance suggests up to ' + guidance + ' at this level. Guidance only; entry is never blocked.</div>' : '') +
-    '</div>' +
-    '<div class="muted" style="font-size:12px;margin-top:12px;text-align:center">Showing direct legs one level at a time — each card shows name, member number and own Business Volume only.</div>';
+    '<div class="tree-legend"><span><span class="legend-swatch" style="background:var(--accent)"></span>Current member</span><span><span class="legend-swatch" style="background:var(--border)"></span>Direct leg</span>' + toggle + '</div>' +
+    (fullTree ? '<div class="tree-scroll">' + treeWrapHtml + '</div>' : treeWrapHtml) +
+    '<div class="muted" style="font-size:12px;margin-top:12px;text-align:center">' +
+    (fullTree ? 'Showing the full hierarchy beneath this member, scrollable — each card shows name, member number and own Business Volume only.'
+      : 'Showing direct legs one level at a time — each card shows name, member number and own Business Volume only.') +
+    '</div>';
 
-  return shell(content, { title: 'Structure', sub: 'One level of direct legs at a time', breadcrumb: breadcrumb });
+  return shell(content, { title: 'Structure', sub: fullTree ? 'Full hierarchy beneath this member' : 'One level of direct legs at a time', breadcrumb: breadcrumb });
 };
+function setStructureFullTree(v) { APP.structureFullTree = !!v; render(); }
 
 function val(id) { const n = document.getElementById(id); return n ? n.value : ''; }
 function pwFieldHtml(id, opts) {
@@ -2019,12 +2061,6 @@ function saveReporting() {
   pushAudit({ member: '—', field: 'Reporting settings', before: '—', after: 'Updated', cause: 'Settings changed by administrator' });
   toast('Reporting settings saved', 'success');
 }
-function buildReferenceCard() {
-  return '<div class="card section-anchor" id="settings-card-reference"><div class="card-title">Reference unit value</div><div class="card-sub mb-3">Display only — never used in any calculation</div>' +
-    '<div class="field" style="max-width:220px"><input id="reference-unit" type="number" min="0" value="' + SETTINGS.referenceUnitValue + '"></div>' +
-    '<button class="btn btn-primary mt-3" onclick="P.saveReferenceUnit()">Save</button></div>';
-}
-function saveReferenceUnit() { SETTINGS.referenceUnitValue = parseFloat(val('reference-unit')) || 0; toast('Saved', 'success'); pushAudit({ member: '—', field: 'Reference unit value', before: '—', after: String(SETTINGS.referenceUnitValue), cause: 'Settings changed by administrator' }); }
 function buildSessionCard() {
   return '<div class="card section-anchor" id="settings-card-session"><div class="card-title">Session</div><div class="card-sub mb-3">How long the console waits before locking on its own</div>' +
     '<div class="field" style="max-width:220px"><label>Inactivity timeout (minutes)</label><input id="session-timeout" type="number" min="1" value="' + SETTINGS.sessionTimeoutMinutes + '"></div>' +
@@ -2034,9 +2070,9 @@ function saveSessionTimeout() { SETTINGS.sessionTimeoutMinutes = parseInt(val('s
 VIEWS.settings = function () {
   const content = '<div class="settings-layout">' +
     '<div class="settings-nav">' +
-    ['slab:Slab table', 'royalty:Royalty', 'structure:Structure', 'reporting:Reporting', 'reference:Reference unit', 'session:Session'].map(function (s) { const p = s.split(':'); return '<a class="nav-item" href="#settings-card-' + p[0] + '">' + esc(p[1]) + '</a>'; }).join('') +
+    ['slab:Slab table', 'royalty:Royalty', 'structure:Structure', 'reporting:Reporting', 'session:Session'].map(function (s) { const p = s.split(':'); return '<a class="nav-item" href="#settings-card-' + p[0] + '">' + esc(p[1]) + '</a>'; }).join('') +
     '</div><div style="display:flex;flex-direction:column;gap:16px">' +
-    buildSlabCard() + buildRoyaltyCard() + buildStructureCard() + buildReportingCard() + buildReferenceCard() + buildSessionCard() +
+    buildSlabCard() + buildRoyaltyCard() + buildStructureCard() + buildReportingCard() + buildSessionCard() +
     '</div></div>';
   return shell(content, { title: 'Settings', sub: 'Each section saves independently' });
 };
@@ -2293,7 +2329,7 @@ window.P = {
   setLoginMode: setLoginMode, pinPress: pinPress, pinBackspace: pinBackspace, passwordSubmit: passwordSubmit,
   startRecovery: startRecovery, cancelRecovery: cancelRecovery, recoveryVerify: recoveryVerify, setRecoveryMode: setRecoveryMode,
   recoverySetContinue: recoverySetContinue, setRecoveryConfirmed: setRecoveryConfirmed, recoveryFinish: recoveryFinish,
-  homeSearchInput: homeSearchInput, openAddMember: openAddMember,
+  homeSearchInput: homeSearchInput, openAddMember: openAddMember, setStructureFullTree: setStructureFullTree,
   openEditMember: openEditMember, confirmDeactivate: confirmDeactivate, reactivateMember: reactivateMember,
   setMemberEntriesPageSize: setMemberEntriesPageSize, memberEntriesPrevPage: memberEntriesPrevPage, memberEntriesNextPage: memberEntriesNextPage,
   openEditEntry: openEditEntry, validateEditEntry: validateEditEntry, saveEditEntry: saveEditEntry,
@@ -2307,7 +2343,7 @@ window.P = {
   closeWizardExit: closeWizardExit, closeWizardNext: closeWizardNext, closeWizardBack: closeWizardBack, generateBackup: generateBackup,
   addSlabRow: addSlabRow, removeSlabRow: removeSlabRow, saveSlabTable: saveSlabTable, updateRoyaltyExample: updateRoyaltyExample,
   saveRoyalty: saveRoyalty, saveStructureGuidance: saveStructureGuidance, saveReporting: saveReporting,
-  saveReferenceUnit: saveReferenceUnit, saveSessionTimeout: saveSessionTimeout,
+  saveSessionTimeout: saveSessionTimeout,
   exportMonthly: exportMonthly, exportYearly: exportYearly, updateLowThreshold: updateLowThreshold, exportLow: exportLow, exportClosedSnapshot: exportClosedSnapshot,
   filterAudit: filterAudit,
 };
