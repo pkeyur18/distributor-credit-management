@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-06T14:20:00Z",
+  "title": "Design System: Member Rewards Console",
+  "extensions": {
+    "colorMeta": {
+      "indigo": { "role": "primary", "displayName": "Indigo", "canonical": "#4f46e5", "dark": "#6366f1", "tonalRamp": ["#1e1b4b", "#312e81", "#3730a3", "#4338ca", "#4f46e5", "#6366f1", "#818cf8", "#c7d2fe"] },
+      "indigo-weak": { "role": "primary-tint", "displayName": "Indigo, weak", "canonical": "#eef2ff", "dark": "#1e1b4b", "tonalRamp": ["#1e1b4b", "#312e81", "#4338ca", "#6366f1", "#a5b4fc", "#c7d2fe", "#e0e7ff", "#eef2ff"] },
+      "slate-bg": { "role": "neutral", "displayName": "Slate background", "canonical": "#f8fafc", "dark": "#0f172a", "tonalRamp": ["#0f172a", "#1e293b", "#334155", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0", "#f8fafc"] },
+      "white-surface": { "role": "neutral", "displayName": "White surface", "canonical": "#ffffff", "dark": "#1e293b", "tonalRamp": ["#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#f1f5f9", "#ffffff"] },
+      "slate-border": { "role": "neutral", "displayName": "Slate border", "canonical": "#e2e8f0", "dark": "#334155", "tonalRamp": ["#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#0f172a", "dark": "#f1f5f9", "tonalRamp": ["#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#f1f5f9"] },
+      "slate-muted": { "role": "neutral", "displayName": "Slate, muted", "canonical": "#64748b", "dark": "#94a3b8", "tonalRamp": ["#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0", "#f1f5f9"] },
+      "ledger-green": { "role": "success", "displayName": "Ledger green", "canonical": "#059669", "dark": "#10b981", "tonalRamp": ["#022c22", "#064e3b", "#065f46", "#047857", "#059669", "#10b981", "#6ee7b7", "#ecfdf5"] },
+      "ledger-green-weak": { "role": "success-tint", "displayName": "Ledger green, weak", "canonical": "#ecfdf5", "dark": "#052e21", "tonalRamp": ["#052e21", "#064e3b", "#065f46", "#10b981", "#6ee7b7", "#a7f3d0", "#d1fae5", "#ecfdf5"] },
+      "amber": { "role": "warning", "displayName": "Amber", "canonical": "#d97706", "dark": "#f59e0b", "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fcd34d", "#fffbeb"] },
+      "amber-text": { "role": "warning-on-light-text", "displayName": "Amber, text", "canonical": "#92400e", "dark": "#f59e0b", "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fcd34d", "#fffbeb"] },
+      "amber-weak": { "role": "warning-tint", "displayName": "Amber, weak", "canonical": "#fffbeb", "dark": "#3a2a06", "tonalRamp": ["#3a2a06", "#78350f", "#92400e", "#f59e0b", "#fcd34d", "#fde68a", "#fef3c7", "#fffbeb"] },
+      "red": { "role": "danger", "displayName": "Red", "canonical": "#dc2626", "dark": "#ef4444", "tonalRamp": ["#450a0a", "#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#fca5a5", "#fef2f2"] },
+      "red-weak": { "role": "danger-tint", "displayName": "Red, weak", "canonical": "#fef2f2", "dark": "#3d1414", "tonalRamp": ["#3d1414", "#7f1d1d", "#991b1b", "#ef4444", "#fca5a5", "#fecaca", "#fee2e2", "#fef2f2"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Page titles — one per screen, top of the content column." },
+      "title": { "displayName": "Title", "purpose": "Modal, section, and card headers." },
+      "body": { "displayName": "Body", "purpose": "Default text, table cells, form values." },
+      "label": { "displayName": "Label", "purpose": "Column headers, stat labels, sidebar section labels — always muted, uppercase." },
+      "numeric": { "displayName": "Numeric", "purpose": "Stat card values — one of the system's few large, load-bearing figures." },
+      "title-sm": { "displayName": "Title, small", "purpose": "Card titles — one step down from Title." },
+      "numeric-lg": { "displayName": "Numeric, large", "purpose": "The Business Volume entry field alone — the single largest text in the system." },
+      "caption": { "displayName": "Caption", "purpose": "Secondary explanatory text quieter than a Label — card subtitles, bar-chart row labels/counts, the structure legend, small inline notes." }
+    },
+    "shadows": [
+      { "name": "modal", "value": "0 20px 48px -12px rgb(15 23 42 / 0.28), 0 4px 12px -4px rgb(15 23 42 / 0.12)", "purpose": "Modals, toasts, and the search-results dropdown." },
+      { "name": "control-lift", "value": "0 1px 2px rgb(0 0 0 / 0.06)", "purpose": "The one other shadow in the system — the active segment of a segmented control, a 1px tactile lift standing in for a color-fill affordance it doesn't have." }
+    ],
+    "motion": [
+      { "name": "control-transition", "value": "0.1s", "purpose": "Buttons, inputs, nav items, pin dots — fast, functional state changes, not decorative easing." },
+      { "name": "overlay-in", "value": "cubic-bezier(0.2, 0.7, 0.3, 1)", "purpose": "Modal/toast entrance (0.12–0.16s) — a small settle, not a bounce." },
+      { "name": "bar-fill", "value": "0.3s ease", "purpose": "Slab-distribution bar width transitions on data change." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one call-to-action color per screen — save, confirm, add member.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Save entry</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 6px; border: 1px solid transparent; font-size: 13px; font-weight: 550; cursor: pointer; white-space: nowrap; transition: background 0.1s, border-color 0.1s, opacity 0.1s; } .ds-btn-primary { background: #4f46e5; color: #fff; } .ds-btn-primary:hover { filter: brightness(1.08); } .ds-btn-primary:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The default, most-used button variant.",
+      "html": "<button class=\"ds-btn ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 6px; font-size: 13px; font-weight: 550; cursor: pointer; white-space: nowrap; transition: background 0.1s, border-color 0.1s; } .ds-btn-secondary { background: #ffffff; border: 1px solid #e2e8f0; color: #0f172a; } .ds-btn-secondary:hover { background: #f8fafc; } .ds-btn-secondary:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Pill — Active",
+      "kind": "chip",
+      "refersTo": "pill-active",
+      "description": "Color always paired with a text label — never color alone.",
+      "html": "<span class=\"ds-pill ds-pill-active\">Active</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; gap: 5px; height: 21px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 650; white-space: nowrap; } .ds-pill::before { content: \"\"; width: 6px; height: 6px; border-radius: 50%; } .ds-pill-active { background: #ecfdf5; color: #059669; } .ds-pill-active::before { background: #059669; }"
+    },
+    {
+      "name": "Status Pill — Inactive",
+      "kind": "chip",
+      "refersTo": "pill-inactive",
+      "description": "The inactive-member marker — display-only, no calculation effect, but always visible wherever a member row appears.",
+      "html": "<span class=\"ds-pill ds-pill-inactive\">Inactive</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; gap: 5px; height: 21px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 650; white-space: nowrap; } .ds-pill::before { content: \"\"; width: 6px; height: 6px; border-radius: 50%; } .ds-pill-inactive { background: #fef2f2; color: #dc2626; } .ds-pill-inactive::before { background: #dc2626; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "The system's single field style — used identically for search, entry amounts, and every form input.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search by name or 6-digit member number\">",
+      "css": ".ds-input { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0 11px; height: 34px; width: 100%; color: #0f172a; font-size: 14px; } .ds-input:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px #eef2ff; } .ds-input.ds-invalid { border-color: #dc2626; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Flat by default — border does the separation work, never a shadow.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Team total</div><div class=\"ds-card-sub\">This month</div></div>",
+      "css": ".ds-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; } .ds-card-title { font-size: 13px; font-weight: 650; margin-bottom: 2px; color: #0f172a; } .ds-card-sub { font-size: 12px; color: #64748b; }"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "The active item's indigo-weak fill is the single strongest 'you are here' signal in the system.",
+      "html": "<button class=\"ds-nav-item ds-active\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"16\" height=\"16\"><path d=\"M3 11l9-8 9 8\"/><path d=\"M5 10v10h14V10\"/></svg>Home</button>",
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; color: #0f172a; font-size: 13.5px; cursor: pointer; border: none; background: none; width: 100%; text-align: left; } .ds-nav-item svg { flex-shrink: 0; opacity: 0.75; } .ds-nav-item:hover { background: #f8fafc; } .ds-nav-item.ds-active { background: #eef2ff; color: #4f46e5; font-weight: 600; } .ds-nav-item.ds-active svg { opacity: 1; }"
+    },
+    {
+      "name": "Structure Tree Node",
+      "kind": "custom",
+      "refersTo": "tree-node",
+      "description": "Signature component — exactly three fields (name, number, own Business Volume), root node distinguished by an indigo border/fill, connectors always neutral so data outweighs scaffolding.",
+      "html": "<div class=\"ds-tree-node\"><div class=\"ds-tree-node-name\">Anita Sharma</div><div class=\"ds-tree-node-id\">402917</div><div class=\"ds-tree-node-bv\"><span class=\"ds-tree-node-bv-label\">Business Volume</span><span class=\"ds-tree-node-bv-val\">1,250.00</span></div></div>",
+      "css": ".ds-tree-node { width: 172px; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 12px 13px; cursor: pointer; transition: border-color 0.1s, transform 0.1s; } .ds-tree-node:hover { border-color: #4f46e5; transform: translateY(-1px); } .ds-tree-node-name { font-size: 13px; font-weight: 650; margin-bottom: 2px; color: #0f172a; } .ds-tree-node-id { font-size: 11px; color: #64748b; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; } .ds-tree-node-bv { display: flex; justify-content: space-between; align-items: baseline; margin-top: 9px; padding-top: 8px; border-top: 1px solid #e2e8f0; } .ds-tree-node-bv-label { font-size: 10.5px; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; } .ds-tree-node-bv-val { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; color: #0f172a; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Single Ledger",
+    "overview": "This is a private operating console for one person, read like a ledger every day: dense, numeric, and built to be trusted at a glance rather than admired. There is exactly one accent color and it is spent carefully — on the action that matters (primary buttons), the place the operator currently is (active nav), and the thing that just gained focus (inputs, rings) — never as decoration. Everything else lives in a tight range of slate neutrals against a near-white page.\n\nThe system is flat by design. Surfaces sit directly on the page with a 1px hairline border, not a shadow — depth is reserved for the handful of things that genuinely float above the page (a modal, a toast, a search-results dropdown). Status is never color alone: an inactive member gets a labelled pill, not a colored dot, because the one operator here is not asked to rely on color perception to run their business.\n\nNumbers are the product. Every figure — a Business Volume entry, a team total, a stat card — is tabular and right-aligned so columns line up the way a real ledger's would; six-digit member numbers additionally take a monospace face so they read as fixed-width codes, distinct from prose. Nothing here uses the vocabulary of a commercial platform — the visible word list is closed (member, Business Volume, Rewards, royalty, volume, slab, level, leg) and that restraint extends to the visual language too: no gradients, no marketing hero type, no rounded-SaaS softness.",
+    "keyCharacteristics": [
+      "One accent (indigo), spent sparingly, never decoratively",
+      "Flat by default; shadows only on things that float (modal, toast, search dropdown)",
+      "Status is a labelled pill, never a color alone",
+      "Every number is tabular; identifiers are monospace",
+      "Dense, ~40px table rows, restrained 6-8px radius, no ornament"
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Indigo is the only brand color in the system. There is no secondary or tertiary accent — a second color need is solved with a status color or a neutral, never a new hue.", "section": "colors" },
+      { "name": "The Color-Plus-Label Rule", "body": "No status is ever conveyed by color alone. Active/Inactive, locked/unlocked, and every pill in the system pairs its color with a text label — this is a hard requirement (§11.8 accessibility, M4.5/M6.5), not a preference.", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Every number that could sit in a column — table cells, stat values, entered figures — uses font-variant-numeric: tabular-nums. Digits must line up; this system is read as a ledger, not prose.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest. A shadow appears only on something that overlays the page and will disappear again (modal, toast, dropdown) — never on a card, row, or anything that's part of the page's permanent layout.", "section": "elevation" },
+      { "name": "The Blended Alert Border Rule", "body": "Warning and danger callouts don't use a pure status-colored border or a plain neutral one — they blend the status color 35% into the neutral border (color-mix(in srgb, var(--warning) 35%, var(--border))), softer than a solid alert color but still legible as one.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the accent to one hue (Indigo) system-wide; solve a second-color need with a status color or a neutral.",
+      "Do pair every status color with a text label — pills, banners, and inactive-member rows are never color-only.",
+      "Do use tabular numerals for every figure that could sit in a column, and monospace specifically for member ID numbers.",
+      "Do keep the outstanding-month banner undismissable — no close icon, no auto-hide, ever (Rule 20).",
+      "Do stay inside the restricted vocabulary (member, Business Volume, Rewards, royalty, volume, slab, level, leg) in every visible string, including placeholder/empty-state copy and error messages.",
+      "Do reserve shadow for things that float temporarily above the page (modal, toast, search dropdown), plus the one narrow control-lift exception on a segmented control's active state.",
+      "Do gate any view that renders an unbounded number of nodes at once behind an explicit confirmation past a readable threshold — scrollable is not the same as readable."
+    ],
+    "donts": [
+      "Don't add a shadow to a card, table row, or sidebar — flat-by-default is load-bearing to this system's density, not a stylistic default that can flex.",
+      "Don't introduce a second accent color, a gradient, or decorative color anywhere — this is a discreet, non-commercial tool by explicit client requirement, not a marketing surface.",
+      "Don't use commercial/MLM vocabulary (sale, purchase, order, cash, payment, commission, invoice) anywhere, including in mock or placeholder data.",
+      "Don't invent a new radius value outside the documented tiers (3px tiny marks, 6px controls, 8px containers, 10-14px large icon containers by formula, 999px fully round).",
+      "Don't let a structure-tree connector line take on the accent color or grow thicker than the node borders it connects — the diagram's data must always outweigh its scaffolding."
+    ]
+  }
+}

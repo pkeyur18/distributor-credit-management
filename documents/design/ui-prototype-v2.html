@@ -20,6 +20,7 @@
   --success-weak: #ecfdf5;
   --warning: #d97706;
   --warning-weak: #fffbeb;
+  --warning-text: #92400e;
   --danger: #dc2626;
   --danger-weak: #fef2f2;
   --radius-sm: 6px;
@@ -41,6 +42,7 @@
     --success-weak: #052e21;
     --warning: #f59e0b;
     --warning-weak: #3a2a06;
+    --warning-text: #f59e0b;
     --danger: #ef4444;
     --danger-weak: #3d1414;
     --shadow-modal: 0 20px 48px -12px rgb(0 0 0 / 0.55), 0 4px 12px -4px rgb(0 0 0 / 0.35);
@@ -50,14 +52,14 @@
 :root[data-theme="dark"] {
   --accent: #6366f1; --accent-weak: #1e1b4b; --bg: #0f172a; --surface: #1e293b; --border: #334155;
   --text: #f1f5f9; --text-muted: #94a3b8; --success: #10b981; --success-weak: #052e21;
-  --warning: #f59e0b; --warning-weak: #3a2a06; --danger: #ef4444; --danger-weak: #3d1414;
+  --warning: #f59e0b; --warning-weak: #3a2a06; --warning-text: #f59e0b; --danger: #ef4444; --danger-weak: #3d1414;
   --shadow-modal: 0 20px 48px -12px rgb(0 0 0 / 0.55), 0 4px 12px -4px rgb(0 0 0 / 0.35);
   color-scheme: dark;
 }
 :root[data-theme="light"] {
   --accent: #4f46e5; --accent-weak: #eef2ff; --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
   --text: #0f172a; --text-muted: #64748b; --success: #059669; --success-weak: #ecfdf5;
-  --warning: #d97706; --warning-weak: #fffbeb; --danger: #dc2626; --danger-weak: #fef2f2;
+  --warning: #d97706; --warning-weak: #fffbeb; --warning-text: #92400e; --danger: #dc2626; --danger-weak: #fef2f2;
   --shadow-modal: 0 20px 48px -12px rgb(15 23 42 / 0.28), 0 4px 12px -4px rgb(15 23 42 / 0.12);
   color-scheme: light;
 }
@@ -103,7 +105,7 @@ a:hover { text-decoration: underline; }
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; }
 .brand-mark {
-  width: 26px; height: 26px; border-radius: 7px; background: var(--accent);
+  width: 26px; height: 26px; border-radius: var(--radius-sm); background: var(--accent);
   display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 13px; flex-shrink: 0;
 }
 .brand-name { font-weight: 600; font-size: 13.5px; letter-spacing: -0.01em; }
@@ -181,6 +183,7 @@ a:hover { text-decoration: underline; }
 .btn-danger:hover:not(:disabled) { background: var(--danger-weak); border-color: var(--danger); }
 .btn-sm { height: 27px; padding: 0 9px; font-size: 12.5px; }
 .btn-block { width: 100%; }
+.btn-commit { height: 36px; padding: 0 18px; font-weight: 700; }
 .btn svg { width: 14px; height: 14px; }
 
 /* ============================================================
@@ -204,9 +207,9 @@ a:hover { text-decoration: underline; }
    FORMS
    ============================================================ */
 .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
-.field label { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.field label, .field .field-label { font-size: 12.5px; font-weight: 600; color: var(--text); }
 .field .hint { font-size: 11.5px; color: var(--text-muted); }
-.field .hint.warn { color: var(--warning); }
+.field .hint.warn { color: var(--warning-text); }
 .field .err { font-size: 11.5px; color: var(--danger); }
 input[type="text"], input[type="tel"], input[type="email"], input[type="number"], input[type="password"], input[type="date"], select, textarea {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -220,7 +223,7 @@ input:disabled, select:disabled { background: var(--bg); color: var(--text-muted
 .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; margin-top: 1px; accent-color: var(--accent); flex-shrink: 0; }
 .pw-field-wrap { position: relative; }
 .pw-field-wrap input { padding-right: 38px; letter-spacing: 0.06em; }
-.pw-toggle { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border: none; background: none; color: var(--text-muted); cursor: pointer; border-radius: 5px; display: flex; align-items: center; justify-content: center; }
+.pw-toggle { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border: none; background: none; color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; }
 .pw-toggle:hover { background: var(--bg); color: var(--text); }
 .pw-toggle svg { width: 15px; height: 15px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
@@ -365,7 +368,7 @@ td.cell-primary { font-weight: 550; }
 .bar-row { display: grid; grid-template-columns: 46px 1fr 34px; align-items: center; gap: 10px; }
 .bar-row-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
 .bar-track { height: 9px; background: var(--bg); border-radius: 5px; overflow: hidden; }
-.bar-fill { height: 100%; background: var(--accent); border-radius: 5px; transition: width 0.3s ease; }
+.bar-fill { height: 100%; width: 100%; background: var(--accent); border-radius: 5px; transform-origin: left; transition: transform 0.3s ease; }
 .bar-row-count { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 .bar-list-lg { gap: 14px; }
 .bar-row-lg { grid-template-columns: 60px 1fr 90px; gap: 14px; }
@@ -401,7 +404,7 @@ td.cell-primary { font-weight: 550; }
 .tree-node-bv-label { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
 .tree-node-bv-val { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .tree-node-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
-.tree-advisory { font-size: 11.5px; color: var(--warning); background: var(--warning-weak); border-radius: 5px; padding: 6px 9px; margin-top: 12px; text-align: center; }
+.tree-advisory { font-size: 11.5px; color: var(--warning); background: var(--warning-weak); border-radius: var(--radius-sm); padding: 6px 9px; margin-top: 12px; text-align: center; }
 
 /* ============================================================
    WIZARD (monthly close)
@@ -557,6 +560,11 @@ function makeMember(opts) {
 }
 function addMember(m) { MEMBERS.push(m); membersById.set(m.id, m); if (m.refId) { if (!childrenOf.has(m.refId)) childrenOf.set(m.refId, []); childrenOf.get(m.refId).push(m.id); } return m; }
 function directChildren(id) { return (childrenOf.get(id) || []).map(function (cid) { return membersById.get(cid); }); }
+function totalDescendants(id) {
+  let count = 0;
+  (function walk(pid) { directChildren(pid).forEach(function (c) { count++; walk(c.id); }); })(id);
+  return count;
+}
 function levelOf(id) { return membersById.get(id).level; }
 
 let ROOT_ID, LEGA_ID, LEGB_ID, LEGC_ID, LEGD_ID;
@@ -958,6 +966,7 @@ let APP = {
   memberEntriesForId: null, memberEntriesPage: 0, memberEntriesPageSize: 10,
   correctionEntriesForKey: null, correctionEntriesPage: 0, correctionEntriesPageSize: 10,
   structureFullTree: false,      // persists across navigation by design — not reset per member
+  structureFullTreeConfirmedId: null, // re-gates per member so a huge subtree always needs one explicit confirm
 };
 let toastSeq = 0;
 
@@ -987,6 +996,10 @@ function openModal(innerHtml, opts) {
   wrap.innerHTML = '<div class="modal' + (opts.wide ? ' wide' : '') + '">' + innerHtml + '</div>';
   wrap.addEventListener('mousedown', function (e) { if (e.target === wrap && opts.dismissable !== false) closeModal(); });
   document.body.appendChild(wrap);
+  if (opts.autofocus !== false) {
+    const first = wrap.querySelector('input:not([type="hidden"]):not([disabled]), select, textarea');
+    if (first) first.focus();
+  }
 }
 function closeModal() { const m = document.getElementById('active-modal'); if (m) m.remove(); }
 
@@ -1001,6 +1014,8 @@ function confirmAction(opts) {
     '</div>', { dismissable: true }
   );
   document.getElementById('confirm-modal-btn').addEventListener('click', function () { closeModal(); opts.onConfirm(); });
+  const cancelBtn = document.querySelector('#active-modal .btn-secondary');
+  if (cancelBtn) cancelBtn.focus();
 }
 
 /* ============================================================
@@ -1199,10 +1214,10 @@ function renderSetup() {
       '<div class="auth-body">' +
       '<div class="segmented mb-3"><button class="' + (d.mode === 'pin' ? 'active' : '') + '" onclick="P.setSetupMode(\'pin\')">PIN</button><button class="' + (d.mode === 'password' ? 'active' : '') + '" onclick="P.setSetupMode(\'password\')">Password</button></div>' +
       (d.mode === 'pin'
-        ? '<div class="field"><label>Choose a 6-digit PIN</label>' + pwFieldHtml('setup-pin', { numeric: true, maxlength: 6, placeholder: '••••••' }) + '<span class="hint">Numbers only, exactly 6 digits.</span></div>' +
-          '<div class="field"><label>Confirm PIN</label>' + pwFieldHtml('setup-pin2', { numeric: true, maxlength: 6, placeholder: '••••••' }) + '</div>'
-        : '<div class="field"><label>Choose a password</label>' + pwFieldHtml('setup-pw', { placeholder: 'At least 8 characters' }) + '<span class="hint">At least 8 characters, with a letter and a number.</span></div>' +
-          '<div class="field"><label>Confirm password</label>' + pwFieldHtml('setup-pw2', { placeholder: 'Re-type your password' }) + '</div>') +
+        ? '<div class="field"><label for="setup-pin">Choose a 6-digit PIN</label>' + pwFieldHtml('setup-pin', { numeric: true, maxlength: 6, placeholder: '••••••' }) + '<span class="hint">Numbers only, exactly 6 digits.</span></div>' +
+          '<div class="field"><label for="setup-pin2">Confirm PIN</label>' + pwFieldHtml('setup-pin2', { numeric: true, maxlength: 6, placeholder: '••••••' }) + '</div>'
+        : '<div class="field"><label for="setup-pw">Choose a password</label>' + pwFieldHtml('setup-pw', { placeholder: 'At least 8 characters' }) + '<span class="hint">At least 8 characters, with a letter and a number.</span></div>' +
+          '<div class="field"><label for="setup-pw2">Confirm password</label>' + pwFieldHtml('setup-pw2', { placeholder: 'Re-type your password' }) + '</div>') +
       (d.error ? '<div class="field"><span class="err">' + esc(d.error) + '</span></div>' : '') +
       '<button class="btn btn-primary btn-block" onclick="P.setupContinue()">Continue</button>' +
       '</div></div></div>';
@@ -1212,7 +1227,7 @@ function renderSetup() {
     '<div class="auth-brand"><div class="wizard-icon-wrap" style="margin:0 auto"> ' + ICON.shield + '</div><div class="auth-title" style="margin-top:14px">Save your recovery code</div>' +
     '<div class="auth-sub">If you ever forget your ' + (d.mode === 'pin' ? 'PIN' : 'password') + ', this is the only way back in. It is shown once.</div></div>' +
     '<div class="auth-body">' +
-    '<div class="field"><label>Recovery code</label><input class="mono" style="text-align:center;font-size:15px;letter-spacing:0.04em" readonly value="' + esc(d.recoveryCode) + '" onclick="this.select()" onfocus="this.select()"></div>' +
+    '<div class="field"><label for="setup-recovery-code">Recovery code</label><input id="setup-recovery-code" class="mono" style="text-align:center;font-size:15px;letter-spacing:0.04em" readonly value="' + esc(d.recoveryCode) + '" onclick="this.select()" onfocus="this.select()"></div>' +
     '<label class="checkbox-row mt-3 mb-3"><input type="checkbox" id="setup-confirm-saved" onchange="P.setSetupConfirmed(this.checked)"' + (d.confirmed ? ' checked' : '') + '><span>I have saved this recovery code somewhere safe, outside this console.</span></label>' +
     '<button class="btn btn-primary btn-block" ' + (d.confirmed ? '' : 'disabled') + ' onclick="P.setupFinish()">Enter the console</button>' +
     '</div></div></div>';
@@ -1243,7 +1258,7 @@ function renderLogin() {
     body = '<div class="pin-dots">' + dots + '</div><div class="keypad">' + keypad + '</div>' +
       (APP.loginError ? '<div class="field" style="margin-top:12px"><span class="err">' + esc(APP.loginError) + '</span></div>' : '');
   } else {
-    body = '<div class="field"><label>Password</label>' + pwFieldHtml('login-pw', { placeholder: 'Enter your password', onkeydown: "if(event.key==='Enter')P.passwordSubmit()" }) + '</div>' +
+    body = '<div class="field"><label for="login-pw">Password</label>' + pwFieldHtml('login-pw', { placeholder: 'Enter your password', onkeydown: "if(event.key==='Enter')P.passwordSubmit()" }) + '</div>' +
       (APP.loginError ? '<div class="field"><span class="err">' + esc(APP.loginError) + '</span></div>' : '') +
       '<button class="btn btn-primary btn-block" onclick="P.passwordSubmit()">Unlock</button>';
   }
@@ -1260,20 +1275,20 @@ function renderRecovery() {
   let body, title, sub;
   if (r.step === 0) {
     title = 'Recover access'; sub = 'Enter the recovery code you saved when this console was first set up.';
-    body = '<div class="field"><label>Recovery code</label><input id="recovery-code-input" class="mono" placeholder="XXXXX-XXXXX-XXXXX" value="' + esc(r.code) + '"></div>' +
+    body = '<div class="field"><label for="recovery-code-input">Recovery code</label><input id="recovery-code-input" class="mono" placeholder="XXXXX-XXXXX-XXXXX" value="' + esc(r.code) + '"></div>' +
       (r.codeError ? '<div class="field"><span class="err">' + esc(r.codeError) + '</span></div>' : '') +
       '<button class="btn btn-primary btn-block" onclick="P.recoveryVerify()">Verify code</button>';
   } else if (r.step === 1) {
     title = 'Set a new credential'; sub = 'Your old PIN or password will no longer work once this is confirmed.';
     body = '<div class="segmented mb-3"><button class="' + (r.newMode === 'pin' ? 'active' : '') + '" onclick="P.setRecoveryMode(\'pin\')">PIN</button><button class="' + (r.newMode === 'password' ? 'active' : '') + '" onclick="P.setRecoveryMode(\'password\')">Password</button></div>' +
       (r.newMode === 'pin'
-        ? '<div class="field"><label>New 6-digit PIN</label>' + pwFieldHtml('recovery-pin', { numeric: true, maxlength: 6 }) + '</div><div class="field"><label>Confirm PIN</label>' + pwFieldHtml('recovery-pin2', { numeric: true, maxlength: 6 }) + '</div>'
-        : '<div class="field"><label>New password</label>' + pwFieldHtml('recovery-pw', {}) + '<span class="hint">At least 8 characters, with a letter and a number.</span></div><div class="field"><label>Confirm password</label>' + pwFieldHtml('recovery-pw2', {}) + '</div>') +
+        ? '<div class="field"><label for="recovery-pin">New 6-digit PIN</label>' + pwFieldHtml('recovery-pin', { numeric: true, maxlength: 6 }) + '</div><div class="field"><label for="recovery-pin2">Confirm PIN</label>' + pwFieldHtml('recovery-pin2', { numeric: true, maxlength: 6 }) + '</div>'
+        : '<div class="field"><label for="recovery-pw">New password</label>' + pwFieldHtml('recovery-pw', {}) + '<span class="hint">At least 8 characters, with a letter and a number.</span></div><div class="field"><label for="recovery-pw2">Confirm password</label>' + pwFieldHtml('recovery-pw2', {}) + '</div>') +
       (r.error ? '<div class="field"><span class="err">' + esc(r.error) + '</span></div>' : '') +
       '<button class="btn btn-primary btn-block" onclick="P.recoverySetContinue()">Continue</button>';
   } else {
     title = 'Save your new recovery code'; sub = 'This replaces your old recovery code, which no longer works.';
-    body = '<div class="field"><label>Recovery code</label><input class="mono" style="text-align:center;font-size:15px;letter-spacing:0.04em" readonly value="' + esc(r.recoveryCode) + '" onclick="this.select()" onfocus="this.select()"></div>' +
+    body = '<div class="field"><label for="recovery-new-code">Recovery code</label><input id="recovery-new-code" class="mono" style="text-align:center;font-size:15px;letter-spacing:0.04em" readonly value="' + esc(r.recoveryCode) + '" onclick="this.select()" onfocus="this.select()"></div>' +
       '<label class="checkbox-row mt-3 mb-3"><input type="checkbox" onchange="P.setRecoveryConfirmed(this.checked)"' + (r.confirmed ? ' checked' : '') + '><span>I have saved this recovery code somewhere safe.</span></label>' +
       '<button class="btn btn-primary btn-block" ' + (r.confirmed ? '' : 'disabled') + ' onclick="P.recoveryFinish()">Sign in with new credential</button>';
   }
@@ -1293,7 +1308,7 @@ function renderLockedScreen() {
   }).join('');
   const body = APP.loginMode === 'pin'
     ? '<div class="pin-dots">' + dots + '</div><div class="keypad">' + keypad + '</div>'
-    : '<div class="field"><label>Password</label>' + pwFieldHtml('login-pw', { onkeydown: "if(event.key==='Enter')P.passwordSubmit()" }) + '</div><button class="btn btn-primary btn-block" onclick="P.passwordSubmit()">Unlock</button>';
+    : '<div class="field"><label for="login-pw">Password</label>' + pwFieldHtml('login-pw', { onkeydown: "if(event.key==='Enter')P.passwordSubmit()" }) + '</div><button class="btn btn-primary btn-block" onclick="P.passwordSubmit()">Unlock</button>';
   return '<div class="auth-shell"><div class="auth-card">' +
     '<div class="auth-brand"><div class="wizard-icon-wrap" style="margin:0 auto">' + ICON.lock + '</div><div class="auth-title" style="margin-top:14px">Session locked</div><div class="auth-sub">Enter your PIN or password to continue where you left off.</div></div>' +
     '<div class="auth-body">' +
@@ -1334,7 +1349,7 @@ VIEWS.home = function () {
   const maxCount = Math.max.apply(null, buckets.map(function (b) { return b.count; }).concat([1]));
   const totalMembers = MEMBERS.length;
   const barsHtml = buckets.map(function (b) {
-    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="width:' + Math.round(b.count / maxCount * 100) + '%"></div></div><div class="bar-row-count bar-row-count-lg">' + b.count + '<span class="muted" style="font-weight:400"> / ' + totalMembers + '</span></div></div>';
+    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="transform:scaleX(' + (maxCount ? b.count / maxCount : 0) + ')"></div></div><div class="bar-row-count bar-row-count-lg">' + b.count + '<span class="muted" style="font-weight:400"> / ' + totalMembers + '</span></div></div>';
   }).join('');
   const content =
     '<div class="stat-row n3">' +
@@ -1462,8 +1477,8 @@ function openEditEntry(memberId, entryId) {
   openModal(
     '<div class="modal-header"><h2>Edit entry</h2><button class="modal-close" onclick="P.closeModal()">✕</button></div>' +
     '<div class="modal-body"><div id="edit-entry-errors"></div>' +
-    '<div class="field"><label>Date</label><input id="edit-entry-date" type="date" min="' + bounds.min + '" max="' + bounds.max + '" value="' + entry.date + '" oninput="P.validateEditEntry()"><span class="hint">Must stay within ' + esc(ymLabel(isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM)) + '.</span></div>' +
-    '<div class="field"><label>Business Volume</label><input id="edit-entry-amount" type="number" step="0.01" min="0.01" value="' + entry.amount + '" oninput="P.validateEditEntry()"></div>' +
+    '<div class="field"><label for="edit-entry-date">Date</label><input id="edit-entry-date" type="date" min="' + bounds.min + '" max="' + bounds.max + '" value="' + entry.date + '" oninput="P.validateEditEntry()"><span class="hint">Must stay within ' + esc(ymLabel(isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM)) + '.</span></div>' +
+    '<div class="field"><label for="edit-entry-amount">Business Volume</label><input id="edit-entry-amount" type="number" step="0.01" min="0.01" value="' + entry.amount + '" oninput="P.validateEditEntry()"></div>' +
     '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button><button class="btn btn-primary" id="edit-entry-save-btn" onclick="P.saveEditEntry()">Save</button></div>',
     { dismissable: true }
   );
@@ -1525,28 +1540,40 @@ VIEWS.structure = function (params) {
 
   const toggle = '<div class="segmented" style="margin-left:auto"><button class="' + (fullTree ? '' : 'active') + '" onclick="P.setStructureFullTree(false)">Direct legs</button><button class="' + (fullTree ? 'active' : '') + '" onclick="P.setStructureFullTree(true)">Full hierarchy</button></div>';
 
+  const FULL_TREE_WARN_AT = 60; // beyond this many descendants, ask before rendering — a flat unconstrained tree stops being readable well before it stops being technically scrollable
+  const descendantCount = fullTree && kids.length ? totalDescendants(currentId) : 0;
+  const needsConfirm = fullTree && descendantCount > FULL_TREE_WARN_AT && APP.structureFullTreeConfirmedId !== currentId;
+
   const childrenHtml = !kids.length
     ? '<div class="empty-state">' + ICON.tree.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No direct legs</div><div class="empty-state-sub">This member has no one introduced beneath them.</div></div>'
-    : fullTree
-      ? '<div class="tree-generation">' + kids.map(function (k) { return buildTreeSubtree(k, false); }).join('') + '</div>'
-      : '<div class="tree-children-row" style="padding-top:36px">' + kids.map(function (k) { return nodeCard(k, false); }).join('') + '</div>';
+    : needsConfirm
+      ? ''
+      : fullTree
+        ? '<div class="tree-generation">' + kids.map(function (k) { return buildTreeSubtree(k, false); }).join('') + '</div>'
+        : '<div class="tree-children-row" style="padding-top:36px">' + kids.map(function (k) { return nodeCard(k, false); }).join('') + '</div>';
 
-  const treeWrapHtml = '<div class="tree-wrap' + (fullTree ? ' tree-wrap-full' : '') + '" id="tree-wrap"><svg class="tree-connectors" id="tree-connectors"></svg>' +
-    '<div class="tree-root-row">' + nodeCard(node, true) + '</div>' + childrenHtml +
-    (guidance && kids.length > guidance ? '<div class="tree-advisory">This member has ' + kids.length + ' direct legs — structure guidance suggests up to ' + guidance + ' at this level. Guidance only; entry is never blocked.</div>' : '') +
-    '</div>';
+  const treeWrapHtml = needsConfirm
+    ? '<div class="tree-wrap" id="tree-wrap"><div class="empty-state">' + ICON.alert.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:8px;opacity:.5" ') +
+      '<div class="empty-state-title">' + fmtInt(descendantCount) + ' people beneath ' + esc(node.name) + '</div>' +
+      '<div class="empty-state-sub">That is too many to read comfortably in one view. You can still show it — the view will scroll — or stay with direct legs one level at a time.</div>' +
+      '<button class="btn btn-primary mt-3" onclick="P.confirmStructureFullTree(' + currentId + ')">Show full hierarchy anyway</button></div></div>'
+    : '<div class="tree-wrap' + (fullTree ? ' tree-wrap-full' : '') + '" id="tree-wrap"><svg class="tree-connectors" id="tree-connectors"></svg>' +
+      '<div class="tree-root-row">' + nodeCard(node, true) + '</div>' + childrenHtml +
+      (guidance && kids.length > guidance ? '<div class="tree-advisory">This member has ' + kids.length + ' direct legs — structure guidance suggests up to ' + guidance + ' at this level. Guidance only; entry is never blocked.</div>' : '') +
+      '</div>';
 
   const content =
     '<div class="tree-legend"><span><span class="legend-swatch" style="background:var(--accent)"></span>Current member</span><span><span class="legend-swatch" style="background:var(--border)"></span>Direct leg</span>' + toggle + '</div>' +
-    (fullTree ? '<div class="tree-scroll">' + treeWrapHtml + '</div>' : treeWrapHtml) +
-    '<div class="muted" style="font-size:12px;margin-top:12px;text-align:center">' +
+    (fullTree && !needsConfirm ? '<div class="tree-scroll">' + treeWrapHtml + '</div>' : treeWrapHtml) +
+    (needsConfirm ? '' : '<div class="muted" style="font-size:12px;margin-top:12px;text-align:center">' +
     (fullTree ? 'Showing the full hierarchy beneath this member, scrollable — each card shows name, member number and own Business Volume only.'
       : 'Showing direct legs one level at a time — each card shows name, member number and own Business Volume only.') +
-    '</div>';
+    '</div>');
 
   return shell(content, { title: 'Structure', sub: fullTree ? 'Full hierarchy beneath this member' : 'One level of direct legs at a time', breadcrumb: breadcrumb });
 };
 function setStructureFullTree(v) { APP.structureFullTree = !!v; render(); }
+function confirmStructureFullTree(id) { APP.structureFullTreeConfirmedId = id; render(); }
 
 function val(id) { const n = document.getElementById(id); return n ? n.value : ''; }
 function pwFieldHtml(id, opts) {
@@ -1563,7 +1590,7 @@ function togglePwField(id) {
   if (!input) return;
   const showing = input.type === 'text';
   input.type = showing ? 'password' : 'text';
-  if (btn) btn.innerHTML = showing ? ICON.eye : ICON.eyeOff;
+  if (btn) { btn.innerHTML = showing ? ICON.eye : ICON.eyeOff; btn.setAttribute('aria-label', showing ? 'Show' : 'Hide'); }
 }
 function setHtml(id, html) { const n = document.getElementById(id); if (n) n.innerHTML = html; }
 
@@ -1582,9 +1609,9 @@ function refFieldInner() {
   const s = MODAL_STATE;
   if (s.mode === 'edit') {
     const parent = s.refId ? membersById.get(s.refId) : null;
-    return '<label>Introducer (Reference ID)</label><input type="text" disabled value="' + (parent ? esc(parent.name) + ' — #' + parent.id : 'None — root member') + '"><span class="hint">Cannot be changed after onboarding — a member’s introducer is permanent.</span>';
+    return '<label for="ref-locked-display">Introducer (Reference ID)</label><input id="ref-locked-display" type="text" disabled value="' + (parent ? esc(parent.name) + ' — #' + parent.id : 'None — root member') + '"><span class="hint">Cannot be changed after onboarding — a member’s introducer is permanent.</span>';
   }
-  return '<label>Introducer (Reference ID) *</label>' +
+  return '<label for="ref-search">Introducer (Reference ID) *</label>' +
     (s.refId ? refChip(s.refId) :
       '<div class="search-box"><div class="search-input-wrap">' + ICON.search + '<input id="ref-search" type="text" placeholder="Search an existing active member" oninput="P.refSearchInput(this.value)" autocomplete="off"></div><div id="ref-search-results"></div></div>') +
     '<span class="hint">Must resolve to an existing, active member. Locked once saved.</span>';
@@ -1603,15 +1630,15 @@ function memberModalHtml() {
     '<div class="modal-body"><div id="modal-errors"></div>' +
     (reactivating ? '<div class="modal-warn">This number matches an existing inactive member. Saving will reactivate <strong>' + esc(m.name) + '</strong> (#' + m.id + ') and preserve their original member number and history.</div>' : '') +
     '<div class="form-grid">' +
-    '<div class="field"><label>Name *</label><input id="member-name" type="text" value="' + esc(nameVal) + '"></div>' +
-    '<div class="field"><label>Phone *</label><input id="member-phone" type="tel" value="' + esc(phoneVal) + '" onblur="P.checkPhone()"></div>' +
+    '<div class="field"><label for="member-name">Name *</label><input id="member-name" type="text" value="' + esc(nameVal) + '"></div>' +
+    '<div class="field"><label for="member-phone">Phone *</label><input id="member-phone" type="tel" value="' + esc(phoneVal) + '" onblur="P.checkPhone()"></div>' +
     '<div class="field span2" id="phone-banner"></div>' +
-    '<div class="field"><label>Email</label><input id="member-email" type="email" value="' + esc(emailVal) + '"></div>' +
-    '<div class="field"><label>Address *</label><input id="member-address" type="text" value="' + esc(addressVal) + '"></div>' +
+    '<div class="field"><label for="member-email">Email</label><input id="member-email" type="email" value="' + esc(emailVal) + '"></div>' +
+    '<div class="field"><label for="member-address">Address *</label><input id="member-address" type="text" value="' + esc(addressVal) + '"></div>' +
     '<div class="field span2" id="ref-field-wrap">' + refFieldInner() + '</div>' +
     '<div class="field span2">' +
     (showsCaptured
-      ? '<label>Consent</label><div class="flex gap-2" style="align-items:center"><span class="pill pill-active">Captured</span><span class="muted" style="font-size:12px">' + (m ? ddmmyyyy(m.consentDate) : '') + '</span></div>'
+      ? '<div class="field-label">Consent</div><div class="flex gap-2" style="align-items:center"><span class="pill pill-active">Captured</span><span class="muted" style="font-size:12px">' + (m ? ddmmyyyy(m.consentDate) : '') + '</span></div>'
       : '<label class="checkbox-row"><input type="checkbox" id="member-consent" onchange="P.toggleConsent(this.checked)"><span>The member has consented to their name, contact number and address being recorded in this system.</span></label>') +
     '</div></div></div>' +
     '<div class="modal-footer"><button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button>' +
@@ -1752,8 +1779,8 @@ VIEWS.entry = function (params) {
     '<div class="card">' +
     (APP.entrySelectedId ? entrySelectedCardHtml(APP.entrySelectedId) :
       '<div class="search-box mb-3"><div class="search-input-wrap">' + ICON.search + '<input id="entry-search" type="text" placeholder="Search by name or 6-digit member number" oninput="P.entrySearchInput(this.value)" autocomplete="off"></div><div id="entry-search-results"></div></div>') +
-    '<div class="field"><label>Date *</label><input id="entry-date" type="date" min="' + addBounds.min + '" max="' + addBounds.max + '" value="' + addBounds.max + '" ' + (APP.entrySelectedId ? '' : 'disabled') + ' oninput="P.validateEntryForm()"></div>' +
-    '<div class="field"><label>Business Volume *</label><input id="entry-amount" class="entry-amount-input" type="number" step="0.01" min="0.01" placeholder="0.00" ' + (APP.entrySelectedId ? '' : 'disabled') + ' oninput="P.validateEntryForm()"><span class="hint" id="entry-amount-hint">Up to two decimals · no currency field</span></div>' +
+    '<div class="field"><label for="entry-date">Date *</label><input id="entry-date" type="date" min="' + addBounds.min + '" max="' + addBounds.max + '" value="' + addBounds.max + '" ' + (APP.entrySelectedId ? '' : 'disabled') + ' oninput="P.validateEntryForm()"></div>' +
+    '<div class="field"><label for="entry-amount">Business Volume *</label><input id="entry-amount" class="entry-amount-input" type="number" step="0.01" min="0.01" placeholder="0.00" ' + (APP.entrySelectedId ? '' : 'disabled') + ' oninput="P.validateEntryForm()"><span class="hint" id="entry-amount-hint">Up to two decimals · no currency field</span></div>' +
     '<button class="btn btn-primary btn-block" id="entry-save-btn" disabled onclick="P.saveEntry()">Save entry</button>' +
     '</div><div class="auth-foot" style="margin-top:14px;text-align:left"><a href="javascript:void(0)" onclick="P.toggleCorrectionMode()">Correct a closed month instead →</a></div>' +
     '<div class="card mt-3"><div class="card-title mb-3">This period’s entries</div>' + entryEntriesListHtml() + '</div>') + '</div>';
@@ -1766,7 +1793,7 @@ function renderCorrectionPanel() {
   const historicalSlab = APP.correctionSelectedId && snap ? (snap.rows.find(function (r) { return r.id === APP.correctionSelectedId; }) || {}).slab : null;
   return '<div class="modal-warn mb-3">Editing a record recalculates the affected chain and writes a <strong>new snapshot version</strong> — the original record is never overwritten.</div>' +
     '<div class="card">' +
-    '<div class="field"><label>Month</label><select id="correction-ym" onchange="P.correctionMonthChange(this.value)">' + yms.map(function (y) { return '<option value="' + y + '"' + (y === ym ? ' selected' : '') + '>' + ymLabel(y) + '</option>'; }).join('') + '</select></div>' +
+    '<div class="field"><label for="correction-ym">Month</label><select id="correction-ym" onchange="P.correctionMonthChange(this.value)">' + yms.map(function (y) { return '<option value="' + y + '"' + (y === ym ? ' selected' : '') + '>' + ymLabel(y) + '</option>'; }).join('') + '</select></div>' +
     (APP.correctionSelectedId ? entrySelectedCardHtml(APP.correctionSelectedId, historicalSlab, 'clearCorrectionSelection') :
       '<div class="search-box"><div class="search-input-wrap">' + ICON.search + '<input id="correction-search" type="text" placeholder="Search by name or member number" oninput="P.correctionSearchInput(this.value)" autocomplete="off"></div><div id="correction-search-results"></div></div>') +
     '</div>' +
@@ -1819,8 +1846,8 @@ function openClosedEntryModal(ym, memberId, entryId) {
   openModal(
     '<div class="modal-header"><h2>' + (isNew ? 'Add record' : 'Edit record') + '</h2><button class="modal-close" onclick="P.closeModal()">✕</button></div>' +
     '<div class="modal-body"><div id="closed-entry-errors"></div>' +
-    '<div class="field"><label>Date</label><input id="closed-entry-date" type="date" min="' + bounds.min + '" max="' + bounds.max + '" value="' + entry.date + '" oninput="P.validateClosedEntryModal()"><span class="hint">Must stay within ' + esc(ymLabel(ym)) + '.</span></div>' +
-    '<div class="field"><label>Business Volume</label><input id="closed-entry-amount" type="number" step="0.01" min="0.01" value="' + entry.amount + '" oninput="P.validateClosedEntryModal()"></div>' +
+    '<div class="field"><label for="closed-entry-date">Date</label><input id="closed-entry-date" type="date" min="' + bounds.min + '" max="' + bounds.max + '" value="' + entry.date + '" oninput="P.validateClosedEntryModal()"><span class="hint">Must stay within ' + esc(ymLabel(ym)) + '.</span></div>' +
+    '<div class="field"><label for="closed-entry-amount">Business Volume</label><input id="closed-entry-amount" type="number" step="0.01" min="0.01" value="' + entry.amount + '" oninput="P.validateClosedEntryModal()"></div>' +
     '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button><button class="btn btn-primary" id="closed-entry-save-btn" onclick="P.saveClosedEntryModal()" disabled>Save</button></div>',
     { dismissable: true }
   );
@@ -1875,7 +1902,7 @@ function entrySearchInput(q) {
     return '<div class="search-result-row" onclick="P.entrySelectMember(' + m.id + ')">' + avatar(m.name, true) + '<div><div class="search-result-name">' + esc(m.name) + '</div><div class="search-result-meta">#' + m.id + (m.active ? '' : ' · Inactive') + '</div></div></div>';
   }).join('') : '<div class="search-empty">No members match</div>') + '</div>');
 }
-function entrySelectMember(id) { APP.entrySelectedId = id; render(); }
+function entrySelectMember(id) { APP.entrySelectedId = id; render(); setTimeout(function () { const el = document.getElementById('entry-amount'); if (el) el.focus(); }, 0); }
 function entryClearSelection() { APP.entrySelectedId = null; render(); }
 function validateEntryForm() {
   const btn = document.getElementById('entry-save-btn'); const hint = document.getElementById('entry-amount-hint');
@@ -1935,7 +1962,7 @@ function renderCloseWizard() {
   if (w.step === 0) {
     const liveCount = MEMBERS.filter(function (m) { return (LIVE_BV.get(m.id) || 0) > 0; }).length;
     body = '<div class="wizard-icon-wrap">' + ICON.close + '</div><div class="wizard-title">Close ' + esc(ymLabel(ym)) + '</div>' +
-      '<div class="wizard-sub">This writes a permanent record for every member, then clears live Business Volume, Total Business Volume and Rewards to zero for the new period.</div>' +
+      '<div class="wizard-sub">This writes a permanent record for every member, then clears live Business Volume, Total Business Volume and Rewards to zero for the new period. <strong>This step cannot be undone.</strong></div>' +
       '<div class="wizard-body"><div class="stat-row n3" style="margin-bottom:0">' +
       '<div class="stat-card"><div class="stat-label">Members</div><div class="stat-value">' + fmtInt(MEMBERS.length) + '</div></div>' +
       '<div class="stat-card"><div class="stat-label">With an entry</div><div class="stat-value">' + fmtInt(liveCount) + '</div></div>' +
@@ -1946,9 +1973,10 @@ function renderCloseWizard() {
       '<div class="wizard-sub">A reset never proceeds without a confirmed backup. The copy is downloaded here, and retained permanently inside the console on a separate medium.</div>' +
       '<div class="wizard-body">' +
       '<div class="checklist-row"><div class="checklist-icon ' + (w.backupConfirmed ? 'done' : 'pending') + '">' + (w.backupConfirmed ? ICON.check.replace('<svg ', '<svg style="width:11px;height:11px" ') : '') + '</div><span>Backup copy generated and confirmed</span></div>' +
+      (w.backupConfirmed ? '<div class="muted" style="font-size:12px;margin-top:10px">Closing writes the permanent record and clears live figures immediately — there is no way to reopen ' + esc(ymLabel(ym)) + ' after this.</div>' : '') +
       '</div><div class="wizard-actions">' +
       (w.backupConfirmed
-        ? '<button class="btn btn-secondary" onclick="P.closeWizardBack()">Back</button><button class="btn btn-primary" onclick="P.closeWizardNext()">Continue</button>'
+        ? '<button class="btn btn-secondary" onclick="P.closeWizardBack()">Back</button><button class="btn btn-primary btn-commit" onclick="P.closeWizardNext()">Close ' + esc(ymLabel(ym)) + ' — cannot be undone</button>'
         : '<button class="btn btn-primary" onclick="P.generateBackup()">' + (w.backupGenerating ? '<span class="spinner"></span> Generating…' : 'Generate backup') + '</button>') +
       '</div>';
   } else if (w.step === 2) {
@@ -2019,8 +2047,8 @@ function saveSlabTable() {
 function buildRoyaltyCard() {
   return '<div class="card section-anchor" id="settings-card-royalty"><div class="card-title">Royalty</div><div class="card-sub mb-3">Paid when enough direct legs land on the top slab</div>' +
     '<div class="form-grid">' +
-    '<div class="field"><label>Minimum qualifying legs</label><input id="royalty-min" type="number" min="1" value="' + SETTINGS.royaltyMinChildren + '" oninput="P.updateRoyaltyExample()"></div>' +
-    '<div class="field"><label>Royalty rate (%)</label><input id="royalty-rate" type="number" min="0" step="0.1" value="' + SETTINGS.royaltyRatePct + '" oninput="P.updateRoyaltyExample()"></div>' +
+    '<div class="field"><label for="royalty-min">Minimum qualifying legs</label><input id="royalty-min" type="number" min="1" value="' + SETTINGS.royaltyMinChildren + '" oninput="P.updateRoyaltyExample()"></div>' +
+    '<div class="field"><label for="royalty-rate">Royalty rate (%)</label><input id="royalty-rate" type="number" min="0" step="0.1" value="' + SETTINGS.royaltyRatePct + '" oninput="P.updateRoyaltyExample()"></div>' +
     '</div><div class="hint" id="royalty-example">' + royaltyExampleText(SETTINGS.royaltyMinChildren, SETTINGS.royaltyRatePct) + '</div>' +
     '<button class="btn btn-primary mt-3" onclick="P.saveRoyalty()">Save royalty settings</button></div>';
 }
@@ -2036,10 +2064,10 @@ function saveRoyalty() {
 function buildStructureCard() {
   return '<div class="card section-anchor" id="settings-card-structure"><div class="card-title">Structure guidance</div><div class="card-sub mb-3">Advisory only — never blocks a new member being added</div>' +
     '<div class="form-grid">' +
-    '<div class="field"><label>Level 2 width</label><input id="width-l2" type="number" min="1" value="' + SETTINGS.widthL2 + '"></div>' +
-    '<div class="field"><label>Level 3 width</label><input id="width-l3" type="number" min="1" value="' + SETTINGS.widthL3 + '"></div>' +
-    '<div class="field"><label>Level 4 width</label><input id="width-l4" type="number" min="1" value="' + SETTINGS.widthL4 + '"></div>' +
-    '<div class="field"><label>Depth guidance</label><input id="depth-guidance" type="number" min="1" value="' + SETTINGS.structureDepthGuidance + '"></div>' +
+    '<div class="field"><label for="width-l2">Level 2 width</label><input id="width-l2" type="number" min="1" value="' + SETTINGS.widthL2 + '"></div>' +
+    '<div class="field"><label for="width-l3">Level 3 width</label><input id="width-l3" type="number" min="1" value="' + SETTINGS.widthL3 + '"></div>' +
+    '<div class="field"><label for="width-l4">Level 4 width</label><input id="width-l4" type="number" min="1" value="' + SETTINGS.widthL4 + '"></div>' +
+    '<div class="field"><label for="depth-guidance">Depth guidance</label><input id="depth-guidance" type="number" min="1" value="' + SETTINGS.structureDepthGuidance + '"></div>' +
     '</div><div class="hint">These numbers only produce an advisory note on the Structure screen — entry is never blocked.</div>' +
     '<button class="btn btn-primary mt-3" onclick="P.saveStructureGuidance()">Save structure guidance</button></div>';
 }
@@ -2053,8 +2081,8 @@ function saveStructureGuidance() {
 function buildReportingCard() {
   return '<div class="card section-anchor" id="settings-card-reporting"><div class="card-title">Reporting</div><div class="card-sub mb-3">Controls the yearly cycle and the low-contribution report</div>' +
     '<div class="form-grid">' +
-    '<div class="field"><label>Yearly cycle starts</label><select id="cycle-start">' + MONTH_NAMES.map(function (mn, i) { return '<option value="' + pad2(i + 1) + '-01"' + (SETTINGS.yearlyCycleStart === pad2(i + 1) + '-01' ? ' selected' : '') + '>' + mn + '</option>'; }).join('') + '</select></div>' +
-    '<div class="field"><label>Low-contribution threshold</label><input id="low-threshold-setting" type="number" min="0" value="' + SETTINGS.lowContributionThreshold + '"></div>' +
+    '<div class="field"><label for="cycle-start">Yearly cycle starts</label><select id="cycle-start">' + MONTH_NAMES.map(function (mn, i) { return '<option value="' + pad2(i + 1) + '-01"' + (SETTINGS.yearlyCycleStart === pad2(i + 1) + '-01' ? ' selected' : '') + '>' + mn + '</option>'; }).join('') + '</select></div>' +
+    '<div class="field"><label for="low-threshold-setting">Low-contribution threshold</label><input id="low-threshold-setting" type="number" min="0" value="' + SETTINGS.lowContributionThreshold + '"></div>' +
     '</div><button class="btn btn-primary mt-3" onclick="P.saveReporting()">Save reporting settings</button></div>';
 }
 function saveReporting() {
@@ -2064,7 +2092,7 @@ function saveReporting() {
 }
 function buildSessionCard() {
   return '<div class="card section-anchor" id="settings-card-session"><div class="card-title">Session</div><div class="card-sub mb-3">How long the console waits before locking on its own</div>' +
-    '<div class="field" style="max-width:220px"><label>Inactivity timeout (minutes)</label><input id="session-timeout" type="number" min="1" value="' + SETTINGS.sessionTimeoutMinutes + '"></div>' +
+    '<div class="field" style="max-width:220px"><label for="session-timeout">Inactivity timeout (minutes)</label><input id="session-timeout" type="number" min="1" value="' + SETTINGS.sessionTimeoutMinutes + '"></div>' +
     '<button class="btn btn-primary mt-3" onclick="P.saveSessionTimeout()">Save</button></div>';
 }
 function saveSessionTimeout() { SETTINGS.sessionTimeoutMinutes = parseInt(val('session-timeout'), 10) || 1; toast('Saved', 'success'); }
@@ -2236,12 +2264,12 @@ VIEWS.reports = function () {
 
     '<div class="card mb-3"><div class="card-head"><div><div class="card-title">Low-contribution report</div><div class="card-sub">Yearly average of own Business Volume, below a threshold</div></div>' +
     '<button class="btn btn-primary btn-sm" onclick="P.exportLow()">' + ICON.file + ' Export .xlsx</button></div>' +
-    '<div class="field" style="max-width:200px"><label>Threshold</label><input id="low-threshold" type="number" min="0" value="' + threshold + '" oninput="P.updateLowThreshold(this.value)"></div>' +
+    '<div class="field" style="max-width:200px"><label for="low-threshold">Threshold</label><input id="low-threshold" type="number" min="0" value="' + threshold + '" oninput="P.updateLowThreshold(this.value)"></div>' +
     '<div id="low-section">' + lowSectionHtml(threshold) + '</div></div>' +
 
     '<div class="card"><div class="card-head"><div><div class="card-title">Closed month snapshot</div><div class="card-sub">Every field as recorded when that month closed</div></div>' +
     '<button class="btn btn-primary btn-sm" onclick="P.exportClosedSnapshot()">' + ICON.file + ' Export .xlsx</button></div>' +
-    '<div class="field" style="max-width:260px"><label>Month</label><select id="closed-snapshot-ym">' + closedYms().slice().reverse().map(function (y) { const s = latestSnapshot(y); return '<option value="' + y + '">' + ymLabel(y) + (s.version > 1 ? ' — corrected, v' + s.version : '') + '</option>'; }).join('') + '</select></div>' +
+    '<div class="field" style="max-width:260px"><label for="closed-snapshot-ym">Month</label><select id="closed-snapshot-ym">' + closedYms().slice().reverse().map(function (y) { const s = latestSnapshot(y); return '<option value="' + y + '">' + ymLabel(y) + (s.version > 1 ? ' — corrected, v' + s.version : '') + '</option>'; }).join('') + '</select></div>' +
     '<div class="hint">Always exports the latest version. If this month has since been corrected, the export reflects the correction — the original stays in the audit trail, not the file.</div>' +
     '</div>';
   return shell(content, { title: 'Reports', sub: 'Spreadsheet extracts only — no on-screen history of past months' });
@@ -2330,7 +2358,7 @@ window.P = {
   setLoginMode: setLoginMode, pinPress: pinPress, pinBackspace: pinBackspace, passwordSubmit: passwordSubmit,
   startRecovery: startRecovery, cancelRecovery: cancelRecovery, recoveryVerify: recoveryVerify, setRecoveryMode: setRecoveryMode,
   recoverySetContinue: recoverySetContinue, setRecoveryConfirmed: setRecoveryConfirmed, recoveryFinish: recoveryFinish,
-  homeSearchInput: homeSearchInput, openAddMember: openAddMember, setStructureFullTree: setStructureFullTree,
+  homeSearchInput: homeSearchInput, openAddMember: openAddMember, setStructureFullTree: setStructureFullTree, confirmStructureFullTree: confirmStructureFullTree,
   openEditMember: openEditMember, confirmDeactivate: confirmDeactivate, reactivateMember: reactivateMember,
   setMemberEntriesPageSize: setMemberEntriesPageSize, memberEntriesPrevPage: memberEntriesPrevPage, memberEntriesNextPage: memberEntriesNextPage,
   openEditEntry: openEditEntry, validateEditEntry: validateEditEntry, saveEditEntry: saveEditEntry,
