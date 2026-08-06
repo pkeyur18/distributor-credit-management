@@ -386,6 +386,7 @@ td.cell-primary { font-weight: 550; }
 .tree-root-row { display: flex; justify-content: center; margin-bottom: 6px; }
 .tree-children-row { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; padding-top: 6px; }
 .tree-scroll { max-height: 65vh; overflow: auto; }
+.tree-wrap.tree-wrap-full { width: max-content; min-width: 100%; }
 .tree-subtree { display: flex; flex-direction: column; align-items: center; }
 .tree-generation { display: flex; justify-content: center; gap: 18px; flex-wrap: nowrap; padding-top: 36px; }
 .tree-node {
@@ -1530,7 +1531,7 @@ VIEWS.structure = function (params) {
       ? '<div class="tree-generation">' + kids.map(function (k) { return buildTreeSubtree(k, false); }).join('') + '</div>'
       : '<div class="tree-children-row" style="padding-top:36px">' + kids.map(function (k) { return nodeCard(k, false); }).join('') + '</div>';
 
-  const treeWrapHtml = '<div class="tree-wrap" id="tree-wrap"><svg class="tree-connectors" id="tree-connectors"></svg>' +
+  const treeWrapHtml = '<div class="tree-wrap' + (fullTree ? ' tree-wrap-full' : '') + '" id="tree-wrap"><svg class="tree-connectors" id="tree-connectors"></svg>' +
     '<div class="tree-root-row">' + nodeCard(node, true) + '</div>' + childrenHtml +
     (guidance && kids.length > guidance ? '<div class="tree-advisory">This member has ' + kids.length + ' direct legs — structure guidance suggests up to ' + guidance + ' at this level. Guidance only; entry is never blocked.</div>' : '') +
     '</div>';
