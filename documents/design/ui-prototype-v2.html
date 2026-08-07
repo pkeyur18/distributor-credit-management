@@ -290,6 +290,26 @@ td.cell-primary { font-weight: 550; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); }
 .modal-warn { background: var(--warning-weak); border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border)); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12.5px; margin-bottom: 14px; }
 .modal-danger-note { background: var(--danger-weak); border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border)); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12.5px; margin-bottom: 14px; }
+.modal-warn-row { display: flex; gap: 9px; align-items: flex-start; }
+.modal-warn-row svg { width: 15px; height: 15px; color: var(--warning); flex-shrink: 0; margin-top: 1px; }
+.modal-warn-text { color: var(--warning-text); }
+.modal-warn-text b { font-weight: 650; }
+
+/* Settings pre-save impact summary */
+.impact { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 14px; }
+.impact-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 9px 12px; font-size: 12.5px; }
+.impact-row + .impact-row { border-top: 1px solid var(--border); }
+.impact-label { color: var(--text-muted); }
+.impact-val { font-weight: 650; font-variant-numeric: tabular-nums; }
+.impact-val .was { color: var(--text-muted); font-weight: 400; }
+.impact-val .arrow { color: var(--text-muted); font-weight: 400; padding: 0 3px; }
+.impact-heading { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.045em; color: var(--text-muted); margin-bottom: 8px; }
+.impact-tbl { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.impact-tbl td { height: 34px; }
+.impact-more { font-size: 12px; color: var(--text-muted); padding: 8px 12px; background: var(--bg); border-top: 1px solid var(--border); }
+.slab-move { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.slab-move .to { font-weight: 650; }
+.slab-move .sep { color: var(--text-muted); }
 
 #toast-root { position: fixed; bottom: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
 .toast {
@@ -298,6 +318,7 @@ td.cell-primary { font-weight: 550; }
   animation: toast-in 0.16s ease;
 }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.toast svg { width: 15px; height: 15px; flex-shrink: 0; }
 .toast.success { background: var(--success); color: #fff; }
 .toast.danger { background: var(--danger); color: #fff; }
 
@@ -325,6 +346,16 @@ td.cell-primary { font-weight: 550; }
 .keypad button:hover { background: var(--accent-weak); border-color: var(--accent); }
 .keypad button:active { transform: scale(0.96); }
 .keypad button.empty { visibility: hidden; }
+
+.restore-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.restore-opt { display: flex; gap: 10px; align-items: flex-start; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; cursor: pointer; background: var(--surface); text-align: left; }
+.restore-opt:hover { background: var(--bg); }
+.restore-opt.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); background: var(--surface); }
+.restore-radio { width: 15px; height: 15px; border-radius: 999px; border: 1px solid var(--border); flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; }
+.restore-opt.sel .restore-radio { border-color: var(--accent); }
+.restore-opt.sel .restore-radio::after { content: ""; width: 7px; height: 7px; border-radius: 999px; background: var(--accent); }
+.restore-main { display: block; font-size: 13px; font-weight: 600; }
+.restore-sub { display: block; font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
 
 .lockout-box { text-align: center; padding: 10px 0 4px; }
 .lockout-count { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 10px 0; color: var(--danger); }
@@ -380,31 +411,45 @@ td.cell-primary { font-weight: 550; }
 /* ============================================================
    STRUCTURE TREE
    ============================================================ */
-.tree-legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
-.tree-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
-.tree-wrap { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px 20px; min-height: 320px; }
+.tree-toolbar { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.tree-toolbar .search-box { flex: 1; max-width: 380px; }
+.tree-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow-x: auto; overflow-y: hidden; }
+/* max-content keeps every generation row inside a container at least as wide as itself — a centred
+   row that overflows its own container would push its first cards out of scrolling reach */
+.tree-canvas { position: relative; width: max-content; min-width: 100%; padding: 32px 20px 36px; min-height: 320px; transform-origin: 0 0; }
 .tree-connectors { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .tree-connectors line { stroke: var(--border); stroke-width: 1.5; }
 .tree-root-row { display: flex; justify-content: center; margin-bottom: 6px; }
-.tree-children-row { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; padding-top: 6px; }
-.tree-scroll { max-height: 65vh; overflow: auto; }
-.tree-wrap.tree-wrap-full { width: max-content; min-width: 100%; }
-.tree-subtree { display: flex; flex-direction: column; align-items: center; }
-.tree-generation { display: flex; justify-content: center; gap: 18px; flex-wrap: nowrap; padding-top: 36px; }
+.tree-children-row { display: flex; justify-content: center; gap: 18px; flex-wrap: nowrap; padding-top: 36px; }
+.tree-zoom { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px; background: var(--bg); }
+.tree-zoom button { border: none; background: none; height: 26px; min-width: 28px; padding: 0 8px; border-radius: 5px; cursor: pointer; color: var(--text-muted); font: inherit; font-size: 12.5px; font-weight: 550; }
+.tree-zoom button:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+.tree-zoom button:disabled { opacity: 0.4; cursor: not-allowed; }
+.tree-zoom .tree-zoom-level { min-width: 46px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 .tree-node {
   width: 172px; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-lg);
   padding: 12px 13px; cursor: pointer; transition: border-color .1s, transform .1s;
 }
 .tree-node:hover { border-color: var(--accent); transform: translateY(-1px); }
+.tree-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tree-node.root-node { border-color: var(--accent); background: var(--accent-weak); width: 190px; }
+.tree-node.open-node { border-color: var(--accent); }
+.tree-node.leaf-node { cursor: default; }
+.tree-node.leaf-node:hover { border-color: var(--border); transform: none; }
 .tree-node-name { font-size: 13px; font-weight: 650; margin-bottom: 2px; }
 .tree-node-id { font-size: 11px; color: var(--text-muted); }
 .tree-node-bv { display: flex; justify-content: space-between; align-items: baseline; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--border); }
 .tree-node-bv-label { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
 .tree-node-bv-val { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .tree-node-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.tree-node-legs { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 650; color: var(--accent); }
+.tree-node.leaf-node .tree-node-legs { color: var(--text-muted); font-weight: 400; }
+.tree-node-legs svg { width: 11px; height: 11px; transition: transform .12s; }
+.tree-node.open-node .tree-node-legs svg { transform: rotate(90deg); }
 .tree-advisory { font-size: 11.5px; color: var(--warning); background: var(--warning-weak); border-radius: var(--radius-sm); padding: 6px 9px; margin-top: 12px; text-align: center; }
+/* the canvas is width:max-content, so unconstrained prose inside it would set the chart's width
+   on its own and make a narrow chart scroll sideways for no reason — cap it instead */
+.tree-canvas .tree-advisory, .tree-canvas .empty-state { max-width: 460px; margin-left: auto; margin-right: auto; }
 
 /* ============================================================
    WIZARD (monthly close)
@@ -417,6 +462,7 @@ td.cell-primary { font-weight: 550; }
 .wizard-icon-wrap { width: 52px; height: 52px; border-radius: 14px; background: var(--accent-weak); color: var(--accent); display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; }
 .wizard-icon-wrap svg { width: 24px; height: 24px; }
 .wizard-icon-wrap.success { background: var(--success-weak); color: var(--success); }
+.wizard-icon-wrap.danger { background: var(--danger-weak); color: var(--danger); }
 .wizard-title { font-size: 19px; font-weight: 650; text-align: center; letter-spacing: -0.01em; }
 .wizard-sub { font-size: 13px; color: var(--text-muted); text-align: center; margin-top: 6px; max-width: 420px; margin-inline: auto; }
 .wizard-body { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px; margin-top: 22px; }
@@ -466,6 +512,7 @@ const ICON = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>',
   moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
@@ -560,12 +607,13 @@ function makeMember(opts) {
 }
 function addMember(m) { MEMBERS.push(m); membersById.set(m.id, m); if (m.refId) { if (!childrenOf.has(m.refId)) childrenOf.set(m.refId, []); childrenOf.get(m.refId).push(m.id); } return m; }
 function directChildren(id) { return (childrenOf.get(id) || []).map(function (cid) { return membersById.get(cid); }); }
-function totalDescendants(id) {
-  let count = 0;
-  (function walk(pid) { directChildren(pid).forEach(function (c) { count++; walk(c.id); }); })(id);
-  return count;
-}
 function levelOf(id) { return membersById.get(id).level; }
+function ancestorTrail(id) {
+  const out = [];
+  let walk = membersById.get(id);
+  while (walk) { out.unshift(walk); walk = walk.refId ? membersById.get(walk.refId) : null; }
+  return out;
+}
 
 let ROOT_ID, LEGA_ID, LEGB_ID, LEGC_ID, LEGD_ID;
 
@@ -706,6 +754,60 @@ function computeRewards(bvMap, tbvMap) {
     });
   });
   return rewards;
+}
+
+/* Dry run for the settings warning (RQ-18/V7.6): what would the open month look like
+   under different slab/royalty settings? Total Business Volume cannot move — rollupTBV
+   reads only the business-volume map and the hierarchy — so the live TBV is reused and
+   only computeRewards is re-run. slabFor/topSlabPct/computeRewards read SETTINGS
+   directly, so the candidate values are swapped in and restored in a finally block:
+   a throw must never leave the live settings holding uncommitted values. */
+function previewRecalcImpact(nextPartial) {
+  const beforeRewards = LIVE_REWARDS;
+  let beforeTotal = 0, beforeRoyaltyCount = 0;
+  const beforeSlab = new Map();
+  MEMBERS.forEach(function (m) {
+    const r = beforeRewards.get(m.id);
+    beforeTotal += r.total;
+    beforeSlab.set(m.id, r.ownSlab);
+    if (r.royalty > 0) beforeRoyaltyCount++;
+  });
+
+  const saved = { slabTable: SETTINGS.slabTable, royaltyMinChildren: SETTINGS.royaltyMinChildren, royaltyRatePct: SETTINGS.royaltyRatePct };
+  let after;
+  try {
+    if (nextPartial.slabTable) SETTINGS.slabTable = nextPartial.slabTable;
+    if (nextPartial.royaltyMinChildren != null) SETTINGS.royaltyMinChildren = nextPartial.royaltyMinChildren;
+    if (nextPartial.royaltyRatePct != null) SETTINGS.royaltyRatePct = nextPartial.royaltyRatePct;
+    after = computeRewards(LIVE_BV, LIVE_TBV);
+  } finally {
+    SETTINGS.slabTable = saved.slabTable;
+    SETTINGS.royaltyMinChildren = saved.royaltyMinChildren;
+    SETTINGS.royaltyRatePct = saved.royaltyRatePct;
+  }
+
+  let afterTotal = 0, afterRoyaltyCount = 0;
+  const slabMoves = [], royaltyMoves = [];
+  MEMBERS.forEach(function (m) {
+    const a = after.get(m.id);
+    afterTotal += a.total;
+    if (a.royalty > 0) afterRoyaltyCount++;
+    const fromSlab = beforeSlab.get(m.id);
+    if (fromSlab !== a.ownSlab) slabMoves.push({ id: m.id, name: m.name, from: fromSlab, to: a.ownSlab });
+    const wasEarning = beforeRewards.get(m.id).royalty > 0;
+    if (wasEarning !== (a.royalty > 0)) royaltyMoves.push({ id: m.id, name: m.name, starts: a.royalty > 0 });
+  });
+  slabMoves.sort(function (x, y) { return Math.abs(y.to - y.from) - Math.abs(x.to - x.from) || x.name.localeCompare(y.name); });
+  royaltyMoves.sort(function (x, y) { return (x.starts === y.starts) ? x.name.localeCompare(y.name) : (x.starts ? -1 : 1); });
+
+  return {
+    beforeTotal: Math.round(beforeTotal * 100) / 100,
+    afterTotal: Math.round(afterTotal * 100) / 100,
+    beforeRoyaltyCount: beforeRoyaltyCount,
+    afterRoyaltyCount: afterRoyaltyCount,
+    slabMoves: slabMoves,
+    royaltyMoves: royaltyMoves,
+  };
 }
 
 const CRC_TABLE = (function () {
@@ -948,7 +1050,8 @@ function pushAudit(entry) { AUDIT_LOG.unshift(Object.assign({ ts: isoToday(0) + 
    APP STATE
    ============================================================ */
 let APP = {
-  authPhase: 'setup',            // 'setup' | 'login' | 'locked' | 'app'
+  authPhase: 'setup',            // 'setup' | 'login' | 'locked' | 'db-error' | 'app'
+  dbRecovery: { selected: null },// restore point chosen on the data-recovery screen
   credentials: null,             // { pin, password, recoveryCode }
   failedAttempts: 0,
   lockoutUntil: 0,
@@ -965,8 +1068,8 @@ let APP = {
   lockedBeforeModal: null,
   memberEntriesForId: null, memberEntriesPage: 0, memberEntriesPageSize: 10,
   correctionEntriesForKey: null, correctionEntriesPage: 0, correctionEntriesPageSize: 10,
-  structureFullTree: false,      // persists across navigation by design — not reset per member
-  structureFullTreeConfirmedId: null, // re-gates per member so a huge subtree always needs one explicit confirm
+  structureOpenPath: [],         // member ids from the chart's root member down to the deepest open one — the whole state of the structure chart
+  structureZoom: 1,              // chart scale, clamped to ZOOM_MIN..ZOOM_MAX
 };
 let toastSeq = 0;
 
@@ -993,7 +1096,9 @@ function openModal(innerHtml, opts) {
   const wrap = document.createElement('div');
   wrap.className = 'modal-backdrop';
   wrap.id = 'active-modal';
-  wrap.innerHTML = '<div class="modal' + (opts.wide ? ' wide' : '') + '">' + innerHtml + '</div>';
+  wrap.innerHTML = '<div class="modal' + (opts.wide ? ' wide' : '') + '" role="dialog" aria-modal="true"' +
+    (opts.labelledBy ? ' aria-labelledby="' + opts.labelledBy + '"' : '') + '>' + innerHtml + '</div>';
+  wrap.dataset.dismissable = opts.dismissable === false ? 'false' : 'true';
   wrap.addEventListener('mousedown', function (e) { if (e.target === wrap && opts.dismissable !== false) closeModal(); });
   document.body.appendChild(wrap);
   if (opts.autofocus !== false) {
@@ -1002,6 +1107,14 @@ function openModal(innerHtml, opts) {
   }
 }
 function closeModal() { const m = document.getElementById('active-modal'); if (m) m.remove(); }
+
+/* Escape closes any modal that could already be dismissed by clicking the backdrop.
+   Modals opened with dismissable:false (add/edit member) deliberately stay put. */
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  const m = document.getElementById('active-modal');
+  if (m && m.dataset.dismissable !== 'false') closeModal();
+});
 
 function confirmAction(opts) {
   const btnClass = opts.danger ? 'btn-danger' : 'btn-primary';
@@ -1014,6 +1127,74 @@ function confirmAction(opts) {
     '</div>', { dismissable: true }
   );
   document.getElementById('confirm-modal-btn').addEventListener('click', function () { closeModal(); opts.onConfirm(); });
+  const cancelBtn = document.querySelector('#active-modal .btn-secondary');
+  if (cancelBtn) cancelBtn.focus();
+}
+
+/* Pre-save warning for settings that re-work the open month (RQ-18/V7.6).
+   Shows what actually moves before anything is committed; cancelling changes nothing. */
+const IMPACT_ROWS_SHOWN = 4;
+function confirmSettingsRecalc(opts) {
+  const ym = isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM;
+  const monthName = ymLabel(ym);
+  const im = opts.impact;
+  const movers = opts.kind === 'royalty' ? im.royaltyMoves : im.slabMoves;
+  const rewardsChanged = im.beforeTotal !== im.afterTotal;
+
+  let impactRows =
+    '<div class="impact-row"><span class="impact-label">Rewards this month</span>' +
+    '<span class="impact-val num">' + (rewardsChanged
+      ? '<span class="was">' + fmt2(im.beforeTotal) + '</span><span class="arrow">→</span>' + fmt2(im.afterTotal)
+      : fmt2(im.afterTotal) + ' <span class="was">unchanged</span>') +
+    '</span></div>';
+  if (opts.kind === 'royalty') {
+    impactRows += '<div class="impact-row"><span class="impact-label">Members earning royalty</span>' +
+      '<span class="impact-val num">' + (im.beforeRoyaltyCount !== im.afterRoyaltyCount
+        ? '<span class="was">' + fmtInt(im.beforeRoyaltyCount) + '</span><span class="arrow">→</span>' + fmtInt(im.afterRoyaltyCount)
+        : fmtInt(im.afterRoyaltyCount) + ' <span class="was">unchanged</span>') +
+      '</span></div>';
+  }
+
+  let listBlock = '';
+  if (movers.length) {
+    const shown = movers.slice(0, IMPACT_ROWS_SHOWN).map(function (mv) {
+      const change = opts.kind === 'royalty'
+        ? '<span class="slab-move">' + (mv.starts ? '<span class="to">Starts</span>' : 'Stops') + '</span>'
+        : '<span class="slab-move">' + mv.from + '% <span class="sep">→</span> <span class="to">' + mv.to + '%</span></span>';
+      return '<tr><td class="cell-primary">' + esc(mv.name) + '</td><td class="mono">' + mv.id + '</td><td class="num">' + change + '</td></tr>';
+    }).join('');
+    const heading = opts.kind === 'royalty'
+      ? fmtInt(movers.length) + (movers.length === 1 ? ' member changes royalty' : ' members change royalty')
+      : fmtInt(movers.length) + (movers.length === 1 ? ' member changes slab' : ' members change slab');
+    listBlock = '<div class="impact-heading">' + heading + '</div>' +
+      '<div class="impact-tbl"><table><thead><tr><th>Member</th><th>Number</th><th class="num">' +
+      (opts.kind === 'royalty' ? 'Royalty' : 'Slab') + '</th></tr></thead><tbody>' + shown + '</tbody></table>' +
+      (movers.length > IMPACT_ROWS_SHOWN ? '<div class="impact-more">and ' + fmtInt(movers.length - IMPACT_ROWS_SHOWN) + ' more</div>' : '') +
+      '</div>';
+  } else if (!rewardsChanged) {
+    listBlock = '<p class="hint">No member’s figures change under these settings.</p>';
+  } else {
+    listBlock = '<p class="hint">No member changes ' + (opts.kind === 'royalty' ? 'royalty' : 'slab') + ' — only the amounts earned move.</p>';
+  }
+
+  openModal(
+    '<div class="modal-header"><h2 id="recalc-modal-title">' + esc(opts.title) + '</h2>' +
+    '<button class="modal-close" onclick="P.closeModal()" aria-label="Close without saving">✕</button></div>' +
+    '<div class="modal-body">' +
+    '<div class="modal-warn"><div class="modal-warn-row">' +
+    ICON.alert +
+    '<span class="modal-warn-text"><b>' + esc(monthName) + ' is re-worked as soon as you save.</b> Closed months are never affected — their permanent records stay exactly as they are.</span>' +
+    '</div></div>' +
+    '<div class="impact">' + impactRows + '</div>' +
+    listBlock +
+    '</div>' +
+    '<div class="modal-footer">' +
+    '<button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button>' +
+    '<button class="btn btn-primary" id="recalc-confirm-btn">Save and re-work ' + esc(monthName.split(' ')[0]) + '</button>' +
+    '</div>',
+    { dismissable: true, autofocus: false, labelledBy: 'recalc-modal-title' }
+  );
+  document.getElementById('recalc-confirm-btn').addEventListener('click', function () { closeModal(); opts.onConfirm(); });
   const cancelBtn = document.querySelector('#active-modal .btn-secondary');
   if (cancelBtn) cancelBtn.focus();
 }
@@ -1111,6 +1292,7 @@ function shell(contentHtml, head) {
    ============================================================ */
 function render() {
   const app = document.getElementById('app');
+  if (APP.authPhase === 'db-error') { app.innerHTML = renderDbRecovery(); return; }
   if (APP.authPhase === 'setup') { app.innerHTML = renderSetup(); return; }
   if (APP.authPhase === 'login') { app.innerHTML = renderLogin(); return; }
   if (APP.authPhase === 'locked') { app.innerHTML = renderLockedScreen(); return; }
@@ -1120,8 +1302,15 @@ function render() {
   afterRender();
 }
 function afterRender() {
-  if (APP.route === 'structure') drawTreeConnectors();
+  if (APP.route === 'structure') { drawTreeConnectors(); scrollTreeToOpenBranch(); }
   if (APP.route === 'settings') measureTopbarHeight();
+}
+// the chart scrolls sideways, so a branch opened at the far end of a wide row would otherwise land off-screen
+function scrollTreeToOpenBranch() {
+  const wrap = document.getElementById('tree-wrap');
+  const deepest = document.getElementById('tree-node-' + APP.structureOpenPath[APP.structureOpenPath.length - 1]);
+  if (!wrap || !deepest) return;
+  wrap.scrollLeft = deepest.offsetLeft * APP.structureZoom + (deepest.offsetWidth * APP.structureZoom - wrap.clientWidth) / 2;
 }
 window.addEventListener('resize', function () {
   if (APP.route === 'structure') drawTreeConnectors();
@@ -1132,10 +1321,13 @@ function measureTopbarHeight() {
   if (!topbar) return;
   document.documentElement.style.setProperty('--topbar-h', topbar.getBoundingClientRect().height + 'px');
 }
-function connectorLinesForParent(parentId, wrapRect) {
+function connectorLinesForParent(parentId, wrapRect, zoom) {
   const rootEl = document.getElementById('tree-node-' + parentId);
   const kids = directChildren(parentId);
   if (!rootEl || !kids.length) return '';
+  // every measurement here is post-transform screen pixels; the svg sits inside the scaled canvas,
+  // so coordinates are divided by the zoom on the way out and the few fixed offsets are scaled into it
+  const z = zoom || 1;
   const rootRect = rootEl.getBoundingClientRect();
   const rootX = rootRect.left + rootRect.width / 2 - wrapRect.left;
   const rootBottomY = rootRect.bottom - wrapRect.top;
@@ -1151,46 +1343,42 @@ function connectorLinesForParent(parentId, wrapRect) {
   rows.sort(function (a, b) { return a.top - b.top; });
   rows.forEach(function (row) {
     row.topY = row.top - wrapRect.top;
-    row.trunkY = row.topY - 14;
+    row.trunkY = row.topY - 14 * z;
     row.minX = Math.min.apply(null, row.xs);
     row.maxX = Math.max.apply(null, row.xs);
     row.centerX = (row.minX + row.maxX) / 2;
   });
 
-  const line = function (x1, y1, x2, y2) { return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '"></line>'; };
-  const CHANNEL_X = 10;
+  const line = function (x1, y1, x2, y2) { return '<line x1="' + (x1 / z) + '" y1="' + (y1 / z) + '" x2="' + (x2 / z) + '" y2="' + (y2 / z) + '"></line>'; };
+  const CHANNEL_X = 10 * z;
   let lines = '';
   rows.forEach(function (row, i) {
+    let barMin = row.minX, barMax = row.maxX;
     if (i === 0) {
       lines += line(rootX, rootBottomY, rootX, row.trunkY);
+      // the parent card is one of a centred row of siblings, so it can sit outside the span of its
+      // own legs — widen the trunk until it reaches the parent's stem
+      barMin = Math.min(barMin, rootX); barMax = Math.max(barMax, rootX);
     } else {
       const prev = rows[i - 1];
       lines += line(prev.centerX, prev.trunkY, CHANNEL_X, prev.trunkY);
       lines += line(CHANNEL_X, prev.trunkY, CHANNEL_X, row.trunkY);
       lines += line(CHANNEL_X, row.trunkY, row.centerX, row.trunkY);
     }
-    if (row.xs.length > 1) lines += line(row.minX, row.trunkY, row.maxX, row.trunkY);
+    if (barMax > barMin) lines += line(barMin, row.trunkY, barMax, row.trunkY);
     row.xs.forEach(function (x) { lines += line(x, row.trunkY, x, row.topY); });
   });
   return lines;
 }
 function drawTreeConnectors() {
   const svg = document.getElementById('tree-connectors');
-  const wrap = document.getElementById('tree-wrap');
+  // measure against the canvas, not the scroller — both rects move together when the chart is scrolled
+  const canvas = document.getElementById('tree-canvas');
   const currentId = APP.params && APP.params.id ? APP.params.id : ROOT_ID;
-  if (!svg || !wrap || !document.getElementById('tree-node-' + currentId)) return;
-  const wrapRect = wrap.getBoundingClientRect();
-  let lines;
-  if (APP.structureFullTree) {
-    lines = '';
-    (function walk(id) {
-      lines += connectorLinesForParent(id, wrapRect);
-      directChildren(id).forEach(function (c) { walk(c.id); });
-    })(currentId);
-  } else {
-    lines = connectorLinesForParent(currentId, wrapRect);
-  }
-  svg.innerHTML = lines;
+  if (!svg || !canvas || !document.getElementById('tree-node-' + currentId)) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  // one generation row per open member — connectorLinesForParent returns '' for a member with no legs
+  svg.innerHTML = APP.structureOpenPath.map(function (id) { return connectorLinesForParent(id, canvasRect, APP.structureZoom); }).join('');
 }
 
 const VIEWS = {};
@@ -1317,6 +1505,63 @@ function renderLockedScreen() {
     (APP.loginError ? '<div class="field" style="margin-top:12px"><span class="err">' + esc(APP.loginError) + '</span></div>' : '') +
     '</div><div class="auth-foot"><a href="javascript:void(0)" onclick="P.signOut()">Sign out instead</a></div>' +
     '</div></div>';
+}
+
+/* ============================================================
+   DATA RECOVERY — shown at launch when the data cannot be opened.
+   Never reached in normal use; the prototype enters it via #db-recovery.
+   ============================================================ */
+function restorePoints() {
+  return Object.keys(SNAPSHOTS).sort().reverse().slice(0, 3).map(function (ym) {
+    const snap = latestSnapshot(ym);
+    return { ym: ym, version: snap.version, closedOn: snap.closedOn };
+  });
+}
+function renderDbRecovery() {
+  const points = restorePoints();
+  if (!APP.dbRecovery.selected && points.length) APP.dbRecovery.selected = points[0].ym;
+  const sel = APP.dbRecovery.selected;
+
+  const list = points.map(function (p, i) {
+    const isSel = p.ym === sel;
+    const sub = (i === 0 ? 'Most recent · ' : '') + 'version ' + p.version + (p.version > 1 ? ', corrected ' + ddmmyyyy(p.closedOn) : '');
+    return '<button class="restore-opt' + (isSel ? ' sel' : '') + '" onclick="P.selectRestorePoint(\'' + p.ym + '\')" aria-pressed="' + (isSel ? 'true' : 'false') + '">' +
+      '<span class="restore-radio"></span>' +
+      '<span><span class="restore-main">' + esc(ymLabel(p.ym)) + ' — closed ' + ddmmyyyy(p.closedOn) + '</span>' +
+      '<span class="restore-sub">' + esc(sub) + '</span></span></button>';
+  }).join('');
+
+  const body = points.length
+    ? '<div class="impact-heading">Restore from</div>' +
+      '<div class="restore-list">' + list + '</div>' +
+      '<button class="btn btn-primary btn-block" onclick="P.restoreFromBackup()">Restore from ' + esc(ymLabel(sel).split(' ')[0]) + '</button>' +
+      '<p class="hint" style="margin-top:10px;text-align:center">Anything recorded after that backup will need entering again.</p>'
+    : '<p class="hint" style="text-align:center">No backup has been taken yet, so there is nothing to restore from.</p>';
+
+  return '<div class="auth-shell"><div class="auth-card">' +
+    '<div class="auth-brand"><div class="wizard-icon-wrap danger" style="margin:0 auto">' + ICON.alert + '</div>' +
+    '<div class="auth-title" style="margin-top:14px">This console could not open its data</div>' +
+    '<div class="auth-sub">Nothing has been lost. Every backup this console has taken is still here — choose one to go back to.</div></div>' +
+    '<div class="auth-body">' + body + '</div>' +
+    '<div class="auth-foot"><a href="javascript:void(0)" onclick="P.retryOpenData()">Try opening the data again</a></div>' +
+    '</div></div>';
+}
+/* Adding the hash to an already-open page is a same-document navigation, so init() never
+   re-runs. Without this the demo trigger silently does nothing unless the page is reloaded. */
+window.addEventListener('hashchange', function () {
+  if (location.hash === '#db-recovery' && APP.authPhase !== 'db-error') { APP.authPhase = 'db-error'; render(); }
+});
+function selectRestorePoint(ym) { APP.dbRecovery.selected = ym; render(); }
+function restoreFromBackup() {
+  const ym = APP.dbRecovery.selected;
+  leaveDbRecovery();
+  toast('Restored from ' + ymLabel(ym), 'success');
+}
+function retryOpenData() { leaveDbRecovery(); toast('Data opened', 'success'); }
+function leaveDbRecovery() {
+  if (location.hash === '#db-recovery') history.replaceState(null, '', location.pathname + location.search);
+  APP.authPhase = APP.credentials ? 'login' : 'setup';
+  render();
 }
 
 /* ============================================================
@@ -1514,66 +1759,118 @@ function saveEditEntry() {
 VIEWS.structure = function (params) {
   const currentId = params && params.id ? params.id : ROOT_ID;
   const node = membersById.get(currentId);
-  const trail = [];
-  let walk = node;
-  while (walk) { trail.unshift(walk); walk = walk.refId ? membersById.get(walk.refId) : null; }
+  // the open path always starts at the member the chart is rooted on — reset it if navigation moved that member
+  if (!APP.structureOpenPath.length || APP.structureOpenPath[0] !== currentId) { APP.structureOpenPath = [currentId]; APP.structureZoom = 1; }
+  const openPath = APP.structureOpenPath;
+  const openSet = new Set(openPath);
+  const trail = ancestorTrail(currentId);
   const breadcrumb = '<div class="breadcrumb">' + (APP.navStack.length ? backLink() + '<span class="sep">/</span>' : '') + trail.map(function (n, i) {
     return (i > 0 ? '<span class="sep">/</span>' : '') + (i === trail.length - 1 ? '<span class="current">' + esc(n.name) + '</span>' : '<a href="javascript:void(0)" onclick="P.nav(\'structure\',{id:' + n.id + '},{replace:true})">' + esc(n.name) + '</a>');
   }).join('') + '</div>';
 
-  const kids = directChildren(currentId);
-  const guidance = LEVEL_WIDTH_GUIDANCE[node.level + 1];
-  const fullTree = !!APP.structureFullTree;
   const nodeCard = function (n, isRoot) {
-    return '<div class="tree-node' + (isRoot ? ' root-node' : '') + '" id="tree-node-' + n.id + '" onclick="P.nav(\'structure\',{id:' + n.id + '})">' +
+    const legs = directChildren(n.id).length;
+    const isOpen = openSet.has(n.id);
+    const cls = 'tree-node' + (isRoot ? ' root-node' : '') + (isOpen ? ' open-node' : '') + (legs ? '' : ' leaf-node');
+    return '<div class="' + cls + '" id="tree-node-' + n.id + '"' +
+      (legs ? ' role="button" tabindex="0" aria-expanded="' + (isOpen ? 'true' : 'false') + '" onclick="P.structureToggle(' + n.id + ')" onkeydown="P.structureNodeKey(event,' + n.id + ')"' : '') + '>' +
       '<div class="flex" style="justify-content:space-between;align-items:flex-start"><div><div class="tree-node-name">' + esc(n.name) + (n.active ? '' : ' <span class="pill pill-inactive" style="margin-left:4px">Inactive</span>') + '</div><div class="tree-node-id">#' + n.id + '</div></div>' +
       '<button class="icon-btn" style="width:24px;height:24px;flex-shrink:0" title="View member detail" onclick="event.stopPropagation();P.nav(\'member\',{id:' + n.id + '})">' + ICON.search.replace('<svg ', '<svg style="width:12px;height:12px" ') + '</button></div>' +
       '<div class="tree-node-bv"><span class="tree-node-bv-label">Business Volume</span><span class="tree-node-bv-val num">' + fmtInt(LIVE_BV.get(n.id) || 0) + '</span></div>' +
-      '<div class="tree-node-foot muted" style="font-size:11.5px">' + directChildren(n.id).length + ' direct leg' + (directChildren(n.id).length === 1 ? '' : 's') + '</div></div>';
-  };
-  const buildTreeSubtree = function (n, isRoot) {
-    const nKids = directChildren(n.id);
-    return '<div class="tree-subtree">' + nodeCard(n, isRoot) +
-      (nKids.length ? '<div class="tree-generation">' + nKids.map(function (k) { return buildTreeSubtree(k, false); }).join('') + '</div>' : '') +
-      '</div>';
+      '<div class="tree-node-foot"><span class="tree-node-legs">' +
+      (legs ? ICON.chevron + legs + ' direct leg' + (legs === 1 ? '' : 's') : 'No legs beneath') +
+      '</span></div></div>';
   };
 
-  const toggle = '<div class="segmented" style="margin-left:auto"><button class="' + (fullTree ? '' : 'active') + '" onclick="P.setStructureFullTree(false)">Direct legs</button><button class="' + (fullTree ? 'active' : '') + '" onclick="P.setStructureFullTree(true)">Full hierarchy</button></div>';
+  // one generation row per open member: only one branch is ever open, so a row is always a single
+  // set of siblings — kept on one line, with the chart scrolling sideways rather than wrapping
+  const generations = openPath.map(function (id) {
+    const legs = directChildren(id);
+    if (!legs.length) return '';
+    return '<div class="tree-children-row">' + legs.map(function (k) { return nodeCard(k, false); }).join('') + '</div>';
+  }).join('');
 
-  const FULL_TREE_WARN_AT = 60; // beyond this many descendants, ask before rendering — a flat unconstrained tree stops being readable well before it stops being technically scrollable
-  const descendantCount = fullTree && kids.length ? totalDescendants(currentId) : 0;
-  const needsConfirm = fullTree && descendantCount > FULL_TREE_WARN_AT && APP.structureFullTreeConfirmedId !== currentId;
+  const deepestId = openPath[openPath.length - 1];
+  const deepest = membersById.get(deepestId);
+  const deepestLegs = directChildren(deepestId).length;
+  const guidance = LEVEL_WIDTH_GUIDANCE[deepest.level + 1];
 
-  const childrenHtml = !kids.length
-    ? '<div class="empty-state">' + ICON.tree.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No direct legs</div><div class="empty-state-sub">This member has no one introduced beneath them.</div></div>'
-    : needsConfirm
-      ? ''
-      : fullTree
-        ? '<div class="tree-generation">' + kids.map(function (k) { return buildTreeSubtree(k, false); }).join('') + '</div>'
-        : '<div class="tree-children-row" style="padding-top:36px">' + kids.map(function (k) { return nodeCard(k, false); }).join('') + '</div>';
+  const emptyState = '<div class="empty-state">' + ICON.tree.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:8px;opacity:.5" ') +
+    '<div class="empty-state-title">No direct legs</div><div class="empty-state-sub">This member has no one introduced beneath them.</div></div>';
 
-  const treeWrapHtml = needsConfirm
-    ? '<div class="tree-wrap" id="tree-wrap"><div class="empty-state">' + ICON.alert.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:8px;opacity:.5" ') +
-      '<div class="empty-state-title">' + fmtInt(descendantCount) + ' people beneath ' + esc(node.name) + '</div>' +
-      '<div class="empty-state-sub">That is too many to read comfortably in one view. You can still show it — the view will scroll — or stay with direct legs one level at a time.</div>' +
-      '<button class="btn btn-primary mt-3" onclick="P.confirmStructureFullTree(' + currentId + ')">Show full hierarchy anyway</button></div></div>'
-    : '<div class="tree-wrap' + (fullTree ? ' tree-wrap-full' : '') + '" id="tree-wrap"><svg class="tree-connectors" id="tree-connectors"></svg>' +
-      '<div class="tree-root-row">' + nodeCard(node, true) + '</div>' + childrenHtml +
-      (guidance && kids.length > guidance ? '<div class="tree-advisory">This member has ' + kids.length + ' direct legs — structure guidance suggests up to ' + guidance + ' at this level. Guidance only; entry is never blocked.</div>' : '') +
-      '</div>';
+  const zoom = APP.structureZoom;
+  const treeWrapHtml = '<div class="tree-wrap" id="tree-wrap">' +
+    '<div class="tree-canvas" id="tree-canvas" style="transform:scale(' + zoom + ')">' +
+    '<svg class="tree-connectors" id="tree-connectors"></svg>' +
+    '<div class="tree-root-row">' + nodeCard(node, true) + '</div>' +
+    (directChildren(currentId).length ? generations : emptyState) +
+    (guidance && deepestLegs > guidance ? '<div class="tree-advisory">' + esc(deepest.name) + ' has ' + deepestLegs + ' direct legs — structure guidance suggests up to ' + guidance + ' at this level. Guidance only; entry is never blocked.</div>' : '') +
+    '</div></div>';
 
-  const content =
-    '<div class="tree-legend"><span><span class="legend-swatch" style="background:var(--accent)"></span>Current member</span><span><span class="legend-swatch" style="background:var(--border)"></span>Direct leg</span>' + toggle + '</div>' +
-    (fullTree && !needsConfirm ? '<div class="tree-scroll">' + treeWrapHtml + '</div>' : treeWrapHtml) +
-    (needsConfirm ? '' : '<div class="muted" style="font-size:12px;margin-top:12px;text-align:center">' +
-    (fullTree ? 'Showing the full hierarchy beneath this member, scrollable — each card shows name, member number and own Business Volume only.'
-      : 'Showing direct legs one level at a time — each card shows name, member number and own Business Volume only.') +
-    '</div>');
+  const toolbar = '<div class="tree-toolbar">' +
+    '<div class="search-box"><div class="search-input-wrap">' + ICON.search +
+    '<input id="structure-search" type="text" placeholder="Search any member by name or 6-digit member number" oninput="P.structureSearchInput(this.value)" autocomplete="off"></div>' +
+    '<div id="structure-search-results"></div></div>' +
+    '<div class="tree-zoom" style="margin-left:auto">' +
+    '<button' + (zoom <= ZOOM_MIN + 1e-6 ? ' disabled' : '') + ' title="Zoom out" aria-label="Zoom out" onclick="P.structureZoomBy(-1)">−</button>' +
+    '<span class="tree-zoom-level">' + Math.round(zoom * 100) + '%</span>' +
+    '<button' + (zoom >= ZOOM_MAX - 1e-6 ? ' disabled' : '') + ' title="Zoom in" aria-label="Zoom in" onclick="P.structureZoomBy(1)">+</button>' +
+    '<button onclick="P.structureZoomFit()">Fit width</button>' +
+    '</div>' +
+    '<button class="btn btn-secondary"' + (openPath.length > 1 ? '' : ' disabled') + ' onclick="P.structureCollapseAll()">Collapse all</button>' +
+    '</div>';
 
-  return shell(content, { title: 'Structure', sub: fullTree ? 'Full hierarchy beneath this member' : 'One level of direct legs at a time', breadcrumb: breadcrumb });
+  const content = toolbar + treeWrapHtml +
+    '<div class="muted" style="font-size:12px;margin-top:12px;text-align:center">' +
+    'Click a member to open the legs beneath them; opening one closes the branch already open at that level. ' +
+    'A wide level scrolls sideways — use the zoom to take more of it in. ' +
+    'Each card shows name, member number and own Business Volume only.</div>';
+
+  return shell(content, { title: 'Structure', sub: 'Open one branch at a time', breadcrumb: breadcrumb });
 };
-function setStructureFullTree(v) { APP.structureFullTree = !!v; render(); }
-function confirmStructureFullTree(id) { APP.structureFullTreeConfirmedId = id; render(); }
+
+function structureToggle(id) {
+  if (!directChildren(id).length) return;
+  const path = APP.structureOpenPath;
+  if (id === path[path.length - 1] && path.length > 1) APP.structureOpenPath = path.slice(0, -1);
+  else {
+    const ids = ancestorTrail(id).map(function (m) { return m.id; });
+    APP.structureOpenPath = ids.slice(ids.indexOf(path[0]));
+  }
+  render();
+}
+function structureNodeKey(e, id) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault(); structureToggle(id);
+}
+function structureCollapseAll() { APP.structureOpenPath = [APP.structureOpenPath[0]]; render(); }
+const ZOOM_MIN = 0.5, ZOOM_MAX = 1.5, ZOOM_STEP = 0.1;
+function clampZoom(z) { return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z / ZOOM_STEP) * ZOOM_STEP)); }
+function structureZoomBy(steps) { APP.structureZoom = clampZoom(APP.structureZoom + steps * ZOOM_STEP); render(); }
+function structureZoomFit() {
+  const wrap = document.getElementById('tree-wrap');
+  const canvas = document.getElementById('tree-canvas');
+  if (!wrap || !canvas) return;
+  // offsetWidth is the canvas's unscaled width, so this is independent of the zoom it is measured at
+  APP.structureZoom = clampZoom(wrap.clientWidth / canvas.offsetWidth);
+  render();
+}
+function structureSearchInput(q) {
+  const results = searchMembers(q);
+  if (!results) { setHtml('structure-search-results', ''); return; }
+  setHtml('structure-search-results', '<div class="search-results">' + (results.length ? results.slice(0, 8).map(function (m) {
+    return '<div class="search-result-row" onclick="P.structureSearchSelect(' + m.id + ')">' + avatar(m.name, true) + '<div><div class="search-result-name">' + esc(m.name) + '</div><div class="search-result-meta">#' + m.id + ' · level ' + m.level + (m.active ? '' : ' · Inactive') + '</div></div></div>';
+  }).join('') : '<div class="search-empty">No members match</div>') + '</div>');
+}
+function structureSearchSelect(id) {
+  const ids = ancestorTrail(id).map(function (m) { return m.id; });
+  const chartRoot = APP.params && APP.params.id ? APP.params.id : ROOT_ID;
+  // stay where we are if the member is beneath the chart's current member, otherwise show the whole structure
+  const rootFor = ids.indexOf(chartRoot) !== -1 ? chartRoot : ROOT_ID;
+  APP.structureOpenPath = ids.slice(ids.indexOf(rootFor));
+  if (rootFor !== chartRoot) APP.params = { id: rootFor };
+  render();
+}
 
 function val(id) { const n = document.getElementById(id); return n ? n.value : ''; }
 function pwFieldHtml(id, opts) {
@@ -2014,15 +2311,19 @@ function closeWizardExit() { APP.closeWizard.active = false; APP.route = 'close'
    ============================================================ */
 function buildSlabCard() {
   if (!APP.slabDraft) APP.slabDraft = SETTINGS.slabTable.map(function (r) { return { threshold: r.threshold, pct: r.pct }; });
+  const onlyRow = APP.slabDraft.length <= 1;
   const rows = APP.slabDraft.map(function (r, i) {
     return '<tr><td><input id="slab-th-' + i + '" type="number" min="0" value="' + r.threshold + '" style="height:30px"></td>' +
       '<td><input id="slab-pct-' + i + '" type="number" min="0" step="0.5" value="' + r.pct + '" style="height:30px"></td>' +
-      '<td style="width:1%"><button class="icon-btn" onclick="P.removeSlabRow(' + i + ')">✕</button></td></tr>';
+      '<td style="width:1%"><button class="icon-btn"' + (onlyRow ? ' disabled' : '') +
+      ' aria-label="' + (onlyRow ? 'Remove row — the table must keep at least one slab' : 'Remove this slab row') + '"' +
+      ' onclick="P.removeSlabRow(' + i + ')">✕</button></td></tr>';
   }).join('');
   return '<div class="card section-anchor" id="settings-card-slab"><div class="card-head"><div><div class="card-title">Slab table</div><div class="card-sub">The band looked up from Total Business Volume. Top slab recalculates automatically.</div></div>' +
     '<button class="btn btn-secondary btn-sm" onclick="P.addSlabRow()">' + ICON.plus + ' Add row</button></div>' +
     '<div class="table-wrap"><table><thead><tr><th>Threshold</th><th>Slab %</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     '<div class="hint mt-3">Rows are not checked for consistency against each other — this is deliberate. Misconfiguring the table can produce unexpected Rewards.</div>' +
+    (onlyRow ? '<div class="hint mt-3">The last slab cannot be removed — the console needs at least one to work out a member’s slab.</div>' : '') +
     '<button class="btn btn-primary mt-3" onclick="P.saveSlabTable()">Save slab table</button></div>';
 }
 function syncSlabDraftFromDom() {
@@ -2032,17 +2333,31 @@ function syncSlabDraftFromDom() {
   });
 }
 function addSlabRow() { syncSlabDraftFromDom(); APP.slabDraft.push({ threshold: 0, pct: 0 }); document.getElementById('settings-card-slab').outerHTML = buildSlabCard(); }
-function removeSlabRow(i) { syncSlabDraftFromDom(); APP.slabDraft.splice(i, 1); document.getElementById('settings-card-slab').outerHTML = buildSlabCard(); }
+function removeSlabRow(i) {
+  syncSlabDraftFromDom();
+  if (APP.slabDraft.length <= 1) { toast('The slab table must keep at least one row', 'danger'); return; }
+  APP.slabDraft.splice(i, 1);
+  document.getElementById('settings-card-slab').outerHTML = buildSlabCard();
+}
 function saveSlabTable() {
   syncSlabDraftFromDom();
   const seen = new Set(); let dup = false;
   APP.slabDraft.forEach(function (r) { if (seen.has(r.threshold)) dup = true; seen.add(r.threshold); });
+  // Bad input is refused outright — the warning is only for changes that could legitimately be saved.
   if (dup) { toast('Two rows share the same threshold — adjust before saving', 'danger'); return; }
-  SETTINGS.slabTable = APP.slabDraft.map(function (r) { return { threshold: r.threshold, pct: r.pct }; });
-  APP.slabDraft = null; recalcLive();
-  pushAudit({ member: '—', field: 'Slab table', before: 'Previous table', after: SETTINGS.slabTable.length + ' rows', cause: 'Settings changed by administrator' });
-  toast('Slab table saved', 'success');
-  document.getElementById('settings-card-slab').outerHTML = buildSlabCard();
+  const nextTable = APP.slabDraft.map(function (r) { return { threshold: r.threshold, pct: r.pct }; });
+  confirmSettingsRecalc({
+    kind: 'slab',
+    title: 'Save the slab table?',
+    impact: previewRecalcImpact({ slabTable: nextTable }),
+    onConfirm: function () {
+      SETTINGS.slabTable = nextTable;
+      APP.slabDraft = null; recalcLive();
+      pushAudit({ member: '—', field: 'Slab table', before: 'Previous table', after: SETTINGS.slabTable.length + ' rows', cause: 'Settings changed by administrator' });
+      toast('Slab table saved', 'success');
+      document.getElementById('settings-card-slab').outerHTML = buildSlabCard();
+    },
+  });
 }
 function buildRoyaltyCard() {
   return '<div class="card section-anchor" id="settings-card-royalty"><div class="card-title">Royalty</div><div class="card-sub mb-3">Paid when enough direct legs land on the top slab</div>' +
@@ -2055,11 +2370,20 @@ function buildRoyaltyCard() {
 function royaltyExampleText(min, rate) { return 'A member with ' + min + '+ direct legs on the top slab earns ' + rate + '% royalty on each qualifying leg’s Total Business Volume.'; }
 function updateRoyaltyExample() { setHtml('royalty-example', royaltyExampleText(val('royalty-min') || SETTINGS.royaltyMinChildren, val('royalty-rate') || SETTINGS.royaltyRatePct)); }
 function saveRoyalty() {
-  SETTINGS.royaltyMinChildren = parseInt(val('royalty-min'), 10) || 1;
-  SETTINGS.royaltyRatePct = parseFloat(val('royalty-rate')) || 0;
-  recalcLive();
-  pushAudit({ member: '—', field: 'Royalty settings', before: '—', after: SETTINGS.royaltyMinChildren + ' legs / ' + SETTINGS.royaltyRatePct + '%', cause: 'Settings changed by administrator' });
-  toast('Royalty settings saved', 'success');
+  const nextMin = parseInt(val('royalty-min'), 10) || 1;
+  const nextRate = parseFloat(val('royalty-rate')) || 0;
+  confirmSettingsRecalc({
+    kind: 'royalty',
+    title: 'Save royalty settings?',
+    impact: previewRecalcImpact({ royaltyMinChildren: nextMin, royaltyRatePct: nextRate }),
+    onConfirm: function () {
+      SETTINGS.royaltyMinChildren = nextMin;
+      SETTINGS.royaltyRatePct = nextRate;
+      recalcLive();
+      pushAudit({ member: '—', field: 'Royalty settings', before: '—', after: SETTINGS.royaltyMinChildren + ' legs / ' + SETTINGS.royaltyRatePct + '%', cause: 'Settings changed by administrator' });
+      toast('Royalty settings saved', 'success');
+    },
+  });
 }
 function buildStructureCard() {
   return '<div class="card section-anchor" id="settings-card-structure"><div class="card-title">Structure guidance</div><div class="card-sub mb-3">Advisory only — never blocks a new member being added</div>' +
@@ -2358,7 +2682,10 @@ window.P = {
   setLoginMode: setLoginMode, pinPress: pinPress, pinBackspace: pinBackspace, passwordSubmit: passwordSubmit,
   startRecovery: startRecovery, cancelRecovery: cancelRecovery, recoveryVerify: recoveryVerify, setRecoveryMode: setRecoveryMode,
   recoverySetContinue: recoverySetContinue, setRecoveryConfirmed: setRecoveryConfirmed, recoveryFinish: recoveryFinish,
-  homeSearchInput: homeSearchInput, openAddMember: openAddMember, setStructureFullTree: setStructureFullTree, confirmStructureFullTree: confirmStructureFullTree,
+  homeSearchInput: homeSearchInput, openAddMember: openAddMember,
+  structureToggle: structureToggle, structureNodeKey: structureNodeKey, structureCollapseAll: structureCollapseAll,
+  structureZoomBy: structureZoomBy, structureZoomFit: structureZoomFit,
+  structureSearchInput: structureSearchInput, structureSearchSelect: structureSearchSelect,
   openEditMember: openEditMember, confirmDeactivate: confirmDeactivate, reactivateMember: reactivateMember,
   setMemberEntriesPageSize: setMemberEntriesPageSize, memberEntriesPrevPage: memberEntriesPrevPage, memberEntriesNextPage: memberEntriesNextPage,
   openEditEntry: openEditEntry, validateEditEntry: validateEditEntry, saveEditEntry: saveEditEntry,
@@ -2375,9 +2702,16 @@ window.P = {
   saveSessionTimeout: saveSessionTimeout,
   exportMonthly: exportMonthly, exportYearly: exportYearly, updateLowThreshold: updateLowThreshold, exportLow: exportLow, exportClosedSnapshot: exportClosedSnapshot,
   filterAudit: filterAudit,
+  selectRestorePoint: selectRestorePoint, restoreFromBackup: restoreFromBackup, retryOpenData: retryOpenData,
 };
 
-function init() { document.documentElement.setAttribute('data-theme', 'light'); render(); }
+function init() {
+  document.documentElement.setAttribute('data-theme', 'light');
+  // Pre-flight: in the real console this is "can the data file be opened?". Here it is a
+  // hash, so the recovery screen stays demonstrable without putting a failure state in the UI.
+  if (location.hash === '#db-recovery') APP.authPhase = 'db-error';
+  render();
+}
 init();
 
 console.log('[prototype] members:', MEMBERS.length, 'self-check complete');

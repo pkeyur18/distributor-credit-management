@@ -263,4 +263,12 @@ Source: `requirement-spec.md` Rules 1–38, corrected/extended where `client-req
 
 ## BUSINESS RULE REQUIRED — none identified
 
-Every business rule needed to build the calculation engine, hierarchy, entry, reset, export, and auth modules is present above, sourced from an approved artifact. No gap was found that would require inventing a rule. The two HIGH items in [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) (export/backup command naming, DPDP erasure route) are reconciliation/compliance items, not missing business rules for the calculation or hierarchy domain.
+Every business rule needed to build the calculation engine, hierarchy, entry, reset, export, and auth modules is present above, sourced from an approved artifact. No gap was found that would require inventing a rule.
+
+One rule was added to this set on 6 August 2026 as a result of the decisions recorded in [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md):
+
+### Rule-42 — Members are never removed; all data persists **[NEW — client requirement]**
+**Rule:** No member is ever removed from the application, under any circumstance. All member data persists permanently — on screen, in calculations, and **in every export**. Deactivation (Rule-28) is the only lifecycle change available, and it is display-only.
+**Source:** Client requirement, confirmed via the architect 6 August 2026. Consistent with, and the reason behind, Rule-28's no-hard-delete and Rule-38's permanent snapshots.
+**Implementation impact:** No delete path, no "erasure requested" flag, no export filter that would omit a member. Do not propose one.
+**Test requirement:** Every export includes deactivated members; no code path removes a `members` row.

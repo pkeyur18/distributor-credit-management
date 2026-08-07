@@ -10,9 +10,14 @@
 
 ---
 
+> **Update — 6 August 2026.** All seven open items have since been decided and the three UI gaps built. The
+> verdict below stands as the record of the assessment at the time; **the conditions attached to it have all
+> been met**, and the project is now READY FOR IMPLEMENTATION. See
+> [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) for each decision.
+
 ## 1. Overall Status
 
-> ## READY WITH CONDITIONS
+> ## READY WITH CONDITIONS — conditions now met (6 Aug 2026)
 
 The project is **not** blocked on any unresolved business-logic question — all 22 of the client's original questions (requirement-spec.md's Q-B/Q-I/Q-M set, sourced from `open-questions-checklist.md`'s Questions 1–22) are closed, and a second, later round of 22 questions raised specifically while drafting `client-requirements-validation.md` (RQ-1–22) is also closed. The calculation model (differential, royalty, slab lookup) is proven against five client-supplied worked examples and reproduces all five totals exactly (35 / 22 / 450 / 1,000 / 980). The architecture document is unusually mature for a pre-code phase: 11 ADRs, a full DDL, and a complete IPC command surface — and it already reflects nearly every late correction the client made during requirements validation, rather than lagging behind them.
 
@@ -32,10 +37,12 @@ The "conditions" are two HIGH-priority reconciliation items and one MEDIUM UI ga
 
 Both should be resolved before the modules they touch (M6 Reports/Exports, M5 Monthly Close/Backups) reach detailed implementation. Full detail in [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md).
 
-| ID | Issue | Recommended default if unresolved when the module starts |
+Both have since been resolved — recorded here as raised, with their outcomes.
+
+| ID | Issue | Outcome |
 |---|---|---|
-| HIGH-1 | `architecture.md` Appendix C lists exactly 3 export commands (`export_monthly`, `export_yearly_average`, `export_low_contribution`), but the approved prototype's Reports screen shows a 4th export card ("Closed month snapshot," always the latest version), which functionally overlaps with the separately-documented `redownload_backup`/`list_backups` commands. | Treat "Closed month snapshot" as the UI's presentation of `redownload_backup`, not a 5th command. No new backend work implied — just an API-spec correction (already applied in [04-api-specification.md](04-api-specification.md)). |
-| HIGH-2 | Permanent retention + no hard-delete (Rule 28) is a deliberate design choice, but no artifact describes how a data-subject erasure or correction request under India's DPDP Act 2023 would be fulfilled, since nothing can ever be hard-deleted. This is not derivable from any artifact — it is a compliance question, not a technical one. | Do not build an erasure mechanism speculatively. Flag to the client/legal for a written answer before the M1 (Member Directory) module is considered done, since the answer may add a field (e.g., "erasure requested" flag) rather than a delete path. |
+| HIGH-1 | `architecture.md` Appendix C lists exactly 3 export commands (`export_monthly`, `export_yearly_average`, `export_low_contribution`), but the approved prototype's Reports screen shows a 4th export card ("Closed month snapshot," always the latest version), which functionally overlaps with the separately-documented `redownload_backup`/`list_backups` commands. | ✅ **Resolved 6 Aug 2026.** Confirmed by the architect: the card downloads a closed month's data as `.xlsx` — for when entries have since been corrected, or another copy is wanted — and maps to `redownload_backup`. No new command. Applied in [04-api-specification.md](04-api-specification.md). |
+| HIGH-2 | Raised as a possible gap: permanent retention (Rule 38) plus no hard-delete (Rule 28) appears to leave no route to fulfil a data-subject erasure request. | ✅ **Closed 6 Aug 2026 — not an issue.** The client has specifically required that members are **never** removed from the application and that all data persists throughout, including in exports. Complete permanent retention is the deliberate requirement; there is no compliance gap and nothing to build. |
 
 ## 5. Assumptions Made In This Analysis
 
@@ -46,32 +53,32 @@ Both should be resolved before the modules they touch (M6 Reports/Exports, M5 Mo
 
 ## 6. Client Clarifications Required
 
-Only one item genuinely requires the client (Siddharth Patel) rather than the architect:
+**None outstanding.** The one item raised for the client — the erasure route (HIGH-2) — was answered on 6 August 2026: the client requires that members are never removed and that all data persists throughout, including in exports. There is no compliance gap and nothing to build.
 
-- **DPDP erasure/correction route** (HIGH-2 above). This is a legal/compliance question about the client's own regulatory obligations, not a technical decision Claude Code or the architect can make unilaterally.
+One informational, non-blocking item remains, deliberately deferred:
+- Business Volume entries per month (sizing figure only — the member-count ceiling of 500–5,000, design ceiling 25,000, is settled and is what actually drives the architecture). Deferred to the later performance-testing phase.
 
-Two items are informational/non-blocking, previously flagged in the source documents and still open there, safe to carry forward without stalling work:
-- Business Volume entries per month (sizing figure only — member-count ceiling of 500–5,000, design ceiling 25,000, is already settled and drives the actual architecture).
-- None else — PIN-vs-password (resolved: both supported), empty-month averaging (resolved via RQ-16, see §11), and slab-table monotonicity (resolved: client explicitly declined the safeguard) are all closed, despite `requirement-spec.md` and `open-questions-checklist.md` still showing them as open in their own (uncorrected) text.
+PIN-vs-password (resolved: both supported), empty-month averaging (resolved via RQ-16), and slab-table monotonicity (resolved: client explicitly declined the safeguard) are all closed, despite `requirement-spec.md` and `open-questions-checklist.md` still showing them as open in their own uncorrected text.
 
 ## 7. Technical Decisions Required
 
-- HIGH-1 (export/backup command reconciliation) — technical decision, architect-owned, default recommendation stated above and already applied in the API spec deliverable.
-- The large-subtree (>60 descendants) confirmation gate in the hierarchy chart prototype has no requirement-document basis. Recommend keeping it as UI polish (flagged as `Prototype Behavior Not Explicitly Covered By Requirements`, not silently promoted to an approved requirement) — architect sign-off needed only if the client should be told about it explicitly.
-- The settings-mid-period-recalculation warning (required by RQ-18/V7.6 in prose, absent from the prototype's actual save flow) needs a small UI addition once the Settings module is built — tracked as a backlog acceptance-criteria item, not a new decision.
+**None outstanding.** All three are decided:
+- HIGH-1 (export/backup command reconciliation) — resolved, applied in the API spec.
+- The large-subtree (>60 descendants) confirmation gate — confirmed as a deliberate, already-rectified design decision; no longer flagged.
+- The settings-mid-period-recalculation warning — designed and **built** in the prototype (variant C), along with the last-slab-row refusal and the data-recovery screen.
 
 ## 8. Requirements ↔ Prototype, ↔ Design Cross-Checks (Summary)
 
 Full detail lives in [02-requirements-traceability-matrix.md](02-requirements-traceability-matrix.md) and [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md). Headline findings:
 
 - **Requirements ↔ Prototype**: the prototype implements every FR-1–9 screen and workflow described in `requirement-spec.md`, plus two elements not sourced from any requirement document (large-subtree confirm-gate; the 12-column optional export list is more granular than Appendix B's bare "editable" statement, but not contradictory). No missing screens, fields, or validation states were found.
-- **Requirements ↔ Design**: `architecture.md`'s data model, IPC surface, and NFR matrix cover every Rule 1–38 and every FR-1–9. The one true gap is the `reverse_entry` command, now resolved (§5). Non-functional requirements (performance, scalability to 25,000 members, security, DPDP) all have an architectural answer except the erasure-route question (HIGH-2).
-- **Design ↔ Prototype**: architecturally consistent. The one presentation-layer gap is the missing mid-period-recalculation warning dialog (§7).
+- **Requirements ↔ Design**: `architecture.md`'s data model, IPC surface, and NFR matrix cover every Rule 1–38 and every FR-1–9. The one true gap was the `reverse_entry` command, now resolved (§5). Non-functional requirements (performance, scalability to 25,000 members, security, retention) all have an architectural answer.
+- **Design ↔ Prototype**: architecturally consistent. The one presentation-layer gap — the missing mid-period-recalculation warning — has since been designed and built.
 
 ## 9. Recommended Next Steps
 
-1. Send the DPDP erasure-route question to the client (§6) — do not let it block Sprint 0.
-2. Apply the API-spec correction for HIGH-1 (already reflected in deliverable 04) — no client input needed, this is an internal documentation fix.
+1. ~~Send the DPDP erasure-route question to the client~~ — answered 6 Aug 2026; no gap.
+2. ~~Apply the API-spec correction for HIGH-1~~ — done, reflected in deliverable 04.
 3. Scaffold the actual stack: none of `package.json`, `Cargo.toml`, `tsconfig.json`, or a `src-tauri/` tree exist yet. This is Sprint 0 work, not part of this analysis phase.
 4. Begin implementation in the sequence given in [09-implementation-backlog.md](09-implementation-backlog.md) — hierarchy/member management (M1) and the calculation engine (M3) first, since every other module depends on them; auth (M8) can run in parallel since it has no data dependency on M1/M3.
 5. Treat [12-implementation-context.md](12-implementation-context.md) as the primary onboarding document for any future Claude Code session picking up implementation work.

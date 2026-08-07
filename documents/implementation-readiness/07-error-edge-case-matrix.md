@@ -50,9 +50,9 @@ Organized by major workflow. "Behaviour" is stated as defined wherever a source 
 |---|---|---|
 | Duplicate slab threshold on add/edit | Rejected — duplicate-threshold guard on save | Rule-4 (validated in prototype) |
 | Slab percentages configured non-monotonically vs. thresholds | **Not validated, not blocked** — explicitly declined by the client as a residual risk | Rule-41 / ADR-009 |
-| Attempt to remove the last remaining slab row | **Undefined in any source document.** Recommendation: reject (a slab table cannot be empty — the implicit 0% base has no meaning without at least one real row to compare against). Needs a UI-layer decision, not a blocker. | Not derivable — flagged, see [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) LOW item |
+| Attempt to remove the last remaining slab row | **Refused.** The remove control is disabled when one row remains, with an `aria-label` and an on-screen hint explaining why; the handler also refuses with a named message if reached another way. A slab table cannot be empty — there would be no way to work out any member's slab. | Decided and built 6 Aug 2026 (LOW-2) |
 | Settings change alters the current open period's figures (e.g. royalty rate) | Recalculates the current open period only; closed months are never affected | Described in prose (RQ-18/V7.6) |
-| Settings change is saved without the required warning being shown first | **UI gap** — architecture text requires a warning dialog; the approved prototype saves silently with only a success toast | MEDIUM item, see [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) |
+| Settings change that re-works the open month (slab table, royalty) | **Pre-save warning shown.** Names the open month, states that closed months are unaffected, shows Rewards before → after, and lists the members actually affected (slab moves, or royalty starts/stops on a royalty change). Cancel is a true no-op. Bad input (duplicate threshold) is still refused outright *before* the warning is offered. | Built 6 Aug 2026 (MEDIUM-1, variant C) |
 
 ## Workflow: Authentication (M8)
 
@@ -78,11 +78,11 @@ Organized by major workflow. "Behaviour" is stated as defined wherever a source 
 
 | Scenario | Behaviour | Source |
 |---|---|---|
-| Database file corruption or unreadable at launch | **Not explicitly addressed in any source document.** Recommendation: detect on launch, present a clear recovery-from-backup path rather than a silent crash — this is standard practice for an offline single-file-DB app, but needs explicit design before M5/M8 hardening is considered complete. | Not derivable — flagged, see [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) LOW item |
+| Database file corrupted or unreadable at launch | **Full-screen data-recovery state**, shown in place of sign-in. States that nothing has been lost, lists the most recent retained backups by the month they hold (marking corrected months), offers restore-from-backup and a retry, and states plainly that anything recorded after the chosen backup will need entering again. Never appears in normal use. | Decided and built 6 Aug 2026 (LOW-3, design D) |
 | Application crash mid-transaction (e.g. during chain-upward recalculation or during close) | Protected by SQLite's own transactional guarantees — a crash mid-transaction rolls back cleanly, no partial recalculation or partial close state can persist | `architecture.md` §9.1, "either the whole chain updates consistently or none of it does" |
 | Disk full during backup write | Covered by the same write-verify mechanism as any backup failure — verification fails, close aborts (Rule-18) | Rule-18 |
 | Timeout / retry | **Not applicable** — no network calls exist anywhere in the system; every operation is local disk I/O with no remote timeout surface | Structural (ADR-001) |
 
 ## Summary
 
-Most error and edge-case behaviour across the eight major workflows is explicitly defined in the approved artifacts — a strong signal for readiness. Three items are genuinely undefined and are carried into [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) as LOW-priority items (empty slab table, corrupted DB file at launch, settings-warning UI gap already tracked as MEDIUM). None of the three block starting implementation; all three should be resolved before the specific module they touch (M7, M8, M7 respectively) is marked done.
+Error and edge-case behaviour across all eight major workflows is now explicitly defined. The three items originally left undefined by the source artifacts — the empty slab table, a corrupted database file at launch, and the missing settings warning — were decided and built on 6 August 2026; see [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md). **No undefined behaviour remains** in the workflows covered here.

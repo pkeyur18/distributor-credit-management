@@ -152,10 +152,15 @@ No dedicated UI or IPC surface (see [04-api-specification.md](04-api-specificati
   - *Acceptance criteria:* Given a duplicate threshold, When saved, Then rejected. Given a non-monotonic percentage-vs-threshold configuration, When saved, Then it is **accepted without warning beyond the static on-screen disclaimer** (deliberate, Rule-41).
 - **US-M7.2** Edit royalty settings, structure guidance, reporting settings, session timeout.
   - *Requirement refs:* remaining §7 items.
-- **US-M7.3** Mid-period recalculation warning. **(new — closes the identified UI gap)**
+- **US-M7.3** Mid-period recalculation warning. **✅ Designed and built in the prototype, 6 Aug 2026 (variant C).**
   - *Requirement refs:* RQ-18/V7.6.
-  - *Acceptance criteria:* Given a settings change that affects the current open period's figures (royalty rate, royalty min-children, slab table), When the admin attempts to save, Then a warning dialog explains the current period will be recalculated before the save is confirmed — not a silent save-then-toast.
-  - *Status:* **Not present in the approved prototype** — this story exists specifically to close that gap; flagged MEDIUM in [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md).
+  - *Acceptance criteria:*
+    - Given a change to the slab table or royalty settings, When the admin saves, Then a warning names the open month, states that closed months are unaffected, shows Rewards before → after, and lists the affected members — before anything is committed.
+    - Given the admin cancels, When the modal closes, Then nothing is saved and their typed values remain exactly as they were.
+    - Given a duplicate slab threshold, When the admin saves, Then the change is refused outright and no warning is offered.
+    - Given a royalty change (which cannot move any slab), When the modal opens, Then it lists members who start or stop earning royalty, with a "Members earning royalty: before → after" row.
+  - *Technical note:* the preview reuses the live Total Business Volume — slab and royalty settings never feed `rollupTBV` — and re-runs `computeRewards` alone against a temporarily-swapped `SETTINGS`, restored in a `finally` block.
+  - *Remaining for the real build:* port this behaviour to the Rust/React implementation of M7; the prototype now carries the approved reference behaviour.
 
 ---
 
@@ -185,13 +190,15 @@ No dedicated UI or IPC surface (see [04-api-specification.md](04-api-specificati
 
 ---
 
-## Backlog items arising directly from this analysis (not present in any source document as a story, but required by findings above)
+## Backlog items arising directly from this analysis — all resolved 6 Aug 2026
 
-- **US-BACKLOG-1** — Resolve HIGH-1 (export/backup command reconciliation) with the client/architect before M6 is marked done; implement per the recommended default already applied in [04-api-specification.md](04-api-specification.md).
-- **US-BACKLOG-2** — Obtain the DPDP erasure-route answer (HIGH-2) before M1 is marked done; implement whatever mechanism the answer requires (may be a new flag/field, not a delete path).
-- **US-M7.3** above — settings mid-period warning (MEDIUM).
-- **US-BACKLOG-3** — Decide behaviour for "remove the last remaining slab row" (LOW, recommend reject) before M7 is marked done.
-- **US-BACKLOG-4** — Decide and implement a corrupted-database-at-launch recovery path (LOW) before M8/M5 hardening is marked done.
+Every item raised by the readiness analysis has since been decided; the three UI ones are built in the approved prototype and now need porting to the real implementation like any other approved behaviour.
+
+- **US-BACKLOG-1** — ✅ Resolved. "Closed month snapshot" downloads a closed month as `.xlsx` and maps to `redownload_backup`; no new command. No longer gates M6.
+- **US-BACKLOG-2** — ✅ Closed, not applicable. The client requires that members are never removed and that all data persists throughout, including in exports. No erasure mechanism is to be built. No longer gates M1.
+- **US-M7.3** — ✅ Built in the prototype (variant C). Port to M7.
+- **US-BACKLOG-3** — ✅ Built. The last slab row cannot be removed: control disabled with an explanatory `aria-label` and hint, handler refuses with a named message. Port to M7.
+- **US-BACKLOG-4** — ✅ Built. Data-recovery screen at launch (design D), listing retained backups by the month they hold. Port to M5/M8.
 
 ## Suggested sequencing
 

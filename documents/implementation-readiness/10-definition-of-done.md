@@ -25,7 +25,7 @@ A story is **Done** only when all of the following are true:
 
 A module (M1–M9) is **Done** only when, in addition to every story within it meeting the per-story bar above:
 - Every Rule/FR/NFR row in [02-requirements-traceability-matrix.md](02-requirements-traceability-matrix.md) attributed to that module shows a passing test, not just "Fully traced."
-- Any HIGH/MEDIUM item in [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) attributed to that module is resolved — not merely noted and deferred. (Concretely: M1 cannot be Done until the DPDP erasure-route question is answered; M6 cannot be Done until the export/backup reconciliation is confirmed; M7 cannot be Done until the mid-period-recalculation warning is implemented.)
+- Any open item in [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) attributed to that module is resolved — not merely noted and deferred. **As of 6 August 2026 none remain**: every item raised by the readiness analysis is closed, so no module is gated by one. The three that were built in the prototype (settings warning, last-slab-row refusal, data-recovery screen) count as approved reference behaviour and must be ported, like any other approved prototype behaviour, before M7 / M5 / M8 are Done.
 - The five worked scenarios (Scenario 1–5) still reproduce their golden totals through the real UI, not just in a unit test, once M2/M3/M4 are all Done together.
 
 ## Project-level (pre-handover)

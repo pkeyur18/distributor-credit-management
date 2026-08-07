@@ -67,11 +67,11 @@ There is no resource in this system with partial/conditional admin access — th
 |---|---|---|
 | Consent capture at collection | **Implemented** | Mandatory checkbox + auto-captured date at Add Member (Rule-40 / M1.7) |
 | Purpose limitation | Implicit — data is used only for hierarchy/reward calculation, never sold/shared (no network exists to share it over) | Not separately documented as a named control, but structurally true |
-| Retention | Permanent, by explicit business requirement (Rule-38's snapshot model, Rule-28's no-hard-delete) | Deliberate tension with data-minimization norms — accepted because the business need (explainable historical figures) is itself the stated justification |
-| Data-subject correction request | Handled — `edit_member`/`edit_entry` support correction of any field | |
-| **Data-subject erasure request** | **NOT DEFINED — open item, HIGH-2** | No artifact describes how an erasure request would be fulfilled given permanent retention and no hard-delete are both explicit requirements. This is a genuine gap, not derivable from any source document. See [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md). |
-| Audit obligation | Covered by `audit_log` (NFR-5/M9), though not explicitly framed as a DPDP-specific control in any source document | |
+| Retention | **Permanent and complete, by explicit client requirement** — members are never removed from the application, and all data persists throughout, including in exports (confirmed 6 Aug 2026). Implemented via Rule-38's snapshot model and Rule-28's no-hard-delete. | The business need — figures that can always be explained, years later — is itself the stated justification. This is the requirement, not a constraint to be worked around. |
+| Data-subject correction request | Handled — `edit_member`/`edit_entry` support correction of any field, fully audited | |
+| Data-subject removal / erasure | **Out of scope by client requirement** (confirmed 6 Aug 2026) | The client has specifically required that no member is ever removed from the application. There is no erasure path and none is to be built. Do not raise this as a gap. |
+| Audit obligation | Covered by `audit_log` (NFR-5/M9) | |
 
 ## 7. Summary
 
-The security design is unusually complete for a pre-code phase — every control a single-admin, offline, encrypted-at-rest desktop application needs is either implemented or explicitly, deliberately scoped out with a documented rationale. The **only** item without a documented answer is the DPDP erasure-request route (§6), which is a legal/compliance question for the client, not a technical gap in the architecture.
+The security design is unusually complete for a pre-code phase — every control a single-admin, offline, encrypted-at-rest desktop application needs is either implemented or explicitly, deliberately scoped out with a documented rationale. As of 6 August 2026 there are **no open security or compliance items**.

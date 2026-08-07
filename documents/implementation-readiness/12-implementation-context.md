@@ -94,7 +94,7 @@ The five worked scenarios are the project's golden regression set — any calcul
 
 - **Offline-only** — no network capability exists in the Tauri config, structurally, not by policy. No cloud sync, no remote auth, no telemetry.
 - **Single-user, single-machine, single-session** — no concurrency-control design is needed or should be added.
-- **DPDP Act 2023** — consent required at onboarding (implemented); permanent retention and no hard-delete are explicit requirements; erasure-request handling is unresolved (HIGH-2).
+- **Data protection** — consent is captured at onboarding (Rule-40). Permanent, complete retention is an explicit client requirement: members are **never** removed and all data persists throughout, including in exports. There is no erasure path by design.
 - **Desktop only** — no browser, phone, or tablet target, ever, by design.
 
 ## 15. Assumptions Carried Forward
@@ -107,7 +107,11 @@ See [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) "Re
 
 ## 17. Unresolved Items
 
-Two HIGH-priority items scoped to specific modules (export/backup command naming for M6; DPDP erasure route for M1), one MEDIUM (settings mid-period warning, a straightforward build item), several LOW. None block starting work. Full list with owners: [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md).
+**None.** As of 6 August 2026 every item raised by the readiness analysis is closed — see [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md). Three points worth carrying into any build session:
+
+- **Members are never removed, and all data persists throughout — including in exports.** This is an explicit client requirement, not an oversight. There is no erasure path and none is to be built or proposed.
+- **Three behaviours were added to the approved prototype after the original analysis** and are now approved reference behaviour to port: the settings mid-period recalculation warning (names the open month, Rewards before → after, lists affected members; fires on slab-table and royalty saves only), the refusal to remove the last slab row, and the data-recovery screen shown when the data file cannot be opened at launch.
+- Only the Business Volume entries-per-month sizing figure remains unsupplied, deliberately deferred to the later performance-testing phase. It affects test realism, not architecture.
 
 ## 18. Traceability References
 

@@ -1,102 +1,92 @@
 # Open Questions & Decisions
 
-This is the consolidated record — every item below also appears at its point of relevance in deliverables 01–10, but is gathered here as the single place to check "what's still outstanding" without re-reading everything else.
+Consolidated register. Every item below also appears at its point of relevance in deliverables 01–10; this is the single place to check what remains outstanding.
+
+**Status as of 6 August 2026: all seven items raised by the readiness analysis are closed.** Nothing outstanding blocks or gates any module.
 
 ---
 
 ## Blockers
 
-**None.** Zero items meet the bar of "implementation should not begin until resolved."
+**None**, at any point in this analysis. No item ever met the bar of "implementation should not begin until resolved."
 
 ---
 
-## High Priority
+## Closed — decided by the architect / client
 
-### HIGH-1 — Export/backup command reconciliation
-**Problem:** `architecture.md` Appendix C names exactly 3 export commands (`export_monthly`, `export_yearly_average`, `export_low_contribution`). The approved prototype's Reports screen shows a **4th** export card, "Closed month snapshot" (always the latest version), which functionally overlaps with the separately-documented `redownload_backup`/`list_backups` commands (M6 responsibilities).
-**Source:** Cross-check finding, this analysis (Design ↔ Prototype).
-**Impact:** API-spec ambiguity for module M6. Does not block starting the project or any other module.
-**Recommended resolution:** Treat "Closed month snapshot" as the UI's presentation of `redownload_backup` — no new backend command needed. **Already applied** as the working assumption throughout [04-api-specification.md](04-api-specification.md).
-**Requires confirmation from:** Architect (you) — this is a documentation/API-design reconciliation, not a client business decision. Recommend confirming before M6 is marked done (per [10-definition-of-done.md](10-definition-of-done.md)).
-**Implementation impact:** None if the recommended default is accepted — `redownload_backup` already covers the behaviour.
+### HIGH-1 — Export/backup command reconciliation ✅ RESOLVED 6 Aug 2026
+**Was:** `architecture.md` Appendix C names three export commands, but the approved prototype's Reports screen shows a fourth card, "Closed month snapshot," overlapping the separately-documented `redownload_backup`/`list_backups`.
+**Decision (architect):** Confirmed. "Closed month snapshot" downloads a closed month's data as `.xlsx` — used when entries in that month have since been corrected, or when the client simply wants another copy. It maps to `redownload_backup`; no new backend command exists.
+**Applied:** [04-api-specification.md](04-api-specification.md) carries this as the definitive mapping (API-20). No further work.
 
-### HIGH-2 — DPDP erasure/correction request route
-**Problem:** Permanent retention (Rule-38) and no hard-delete, ever (Rule-28) are both explicit, deliberate requirements. No artifact anywhere describes how a data-subject erasure request under India's Digital Personal Data Protection Act, 2023 would be fulfilled given that constraint.
-**Source:** This analysis (§6 compliance review, not previously flagged in any source document).
-**Impact:** Genuine compliance risk if the client is subject to DPDP obligations and never resolves this — but it is not derivable from any artifact, so it cannot be assumed either way.
-**Recommended resolution:** Do not build speculatively. Escalate to the client (and their legal counsel, if any) for a written answer. A likely resolution shape: an "erasure requested" flag that suppresses the member from all future exports/searches without violating the no-hard-delete/permanent-audit-trail requirements — but this is a guess, not a decision, and should not be implemented until confirmed.
-**Requires confirmation from:** Client (Siddharth Patel) — this is a legal/business decision, not a technical one.
-**Implementation impact:** Likely a small schema addition (a flag, not a delete path) once answered. Recommend resolving before M1 is marked done, per [10-definition-of-done.md](10-definition-of-done.md).
+### HIGH-2 — Data-subject erasure route ✅ CLOSED 6 Aug 2026 — not an issue
+**Was raised as:** a possible gap, on the reasoning that permanent retention (Rule-38) plus no hard-delete (Rule-28) leaves no path to fulfil an erasure request.
+**Decision (architect, on the client's stated requirement):** There is no gap and no compliance issue. The client has specifically required that **members are never removed from the application at all**, and that **all data persists throughout — including in exports**. Permanent, complete retention is the deliberate requirement, not an oversight to be worked around.
+**Applied:** recorded as a confirmed requirement in [06-security-authorization-matrix.md](06-security-authorization-matrix.md) §6. Removed from the outstanding register. **Not to be re-raised in future analysis.**
 
----
+### MEDIUM-1 — Settings mid-period recalculation warning ✅ BUILT 6 Aug 2026
+**Was:** RQ-18/V7.6 requires a pre-save warning when a settings change re-works the open month; the prototype saved silently with only a success toast.
+**Decision:** Build it. Design approved from mockups — **variant C**: the warning names the open month, states that closed months are unaffected, shows Rewards before → after, and lists the members actually affected.
+**Built in** `documents/design/ui-prototype-v2.html`:
+- `previewRecalcImpact()` — dry run against candidate settings, reusing the live Total Business Volume (unaffected by slab/royalty settings) and re-running `computeRewards` only.
+- `confirmSettingsRecalc()` — the variant-C modal.
+- Fires on **every** save of the Slab table and Royalty sections, and only those two — the other three settings sections change nothing already calculated and still save silently.
+- On a **Royalty** save no member's slab can move, so the list shows members who **start or stop earning royalty** instead, with a "Members earning royalty: before → after" row. Decided 6 Aug 2026.
+- Cancel is a true no-op; the duplicate-threshold guard still refuses bad input *before* the warning is offered.
 
-## Medium Priority
+### LOW-1 — Hierarchy chart's ">60 descendants" gate ✅ CLOSED — not applicable
+Already rectified in the prototype (commit `328c1a8`) as a deliberate design decision. No action, no flag.
 
-### MEDIUM-1 — Settings mid-period recalculation warning missing from the approved prototype
-**Problem:** `client-requirements-validation.md` (RQ-18/V7.6) requires a warning when a settings change (royalty rate, royalty min-children, slab table) recalculates the current open period. The approved prototype's Settings screen saves silently with only a success toast — no such warning is shown anywhere in the actual UI.
-**Source:** This analysis (Design ↔ Prototype cross-check).
-**Impact:** A genuine gap between documented intent and the approved visual reference. Does not block other modules.
-**Recommended resolution:** Add the warning dialog as a backlog item — tracked as **US-M7.3** in [09-implementation-backlog.md](09-implementation-backlog.md). This is additive UI work, not a redesign.
-**Requires confirmation from:** No one — this is simply a gap to build, the requirement text is already clear.
+### LOW-2 — Removing the last slab row ✅ BUILT 6 Aug 2026
+**Decision:** Reject, as recommended. Built: the row's remove control is `disabled` with an explanatory `aria-label` when one row remains, an explanatory hint appears beneath the table, and `removeSlabRow()` refuses with a named message if reached another way.
 
----
+### LOW-3 — Corrupted/unreadable data at launch ✅ BUILT 6 Aug 2026
+**Decision:** Build it — "very much required." Design D approved.
+**Built:** a full-screen data-recovery state (`APP.authPhase === 'db-error'`) in the same frame as the lock screen, listing the most recent retained backups by the month they hold, marking corrected months, and stating plainly that anything recorded after the chosen backup will need entering again. Reachable in the prototype via `#db-recovery` so the failure state stays demonstrable without appearing anywhere in the product UI.
 
-## Low Priority
-
-### LOW-1 — Hierarchy chart's ">60 descendants" confirmation gate has no requirement-document basis
-**Problem:** The prototype shows a confirm-before-render gate when a full-hierarchy view would exceed 60 descendants. No Rule, FR, or UN describes this threshold or this UX pattern.
-**Recommended resolution:** Keep it — reasonable, non-blocking UX polish, doesn't conflict with anything. Classified per the task's own required label: `Prototype Behavior Not Explicitly Covered By Requirements`. Not silently promoted to an approved requirement; recorded here so it's traceable as a UI-only decision if ever questioned.
-**Requires confirmation from:** No one, unless the client should be told this exists (optional courtesy, not a gate).
-
-### LOW-2 — "Remove the last remaining slab row" behaviour undefined
-**Problem:** No source document states what happens if the admin tries to remove every slab row down to zero.
-**Recommended resolution:** Reject — a slab table cannot be meaningfully empty. Tracked as **US-BACKLOG-3**.
-**Requires confirmation from:** No one; this is a safe, obvious default, but flagged rather than silently assumed, per the task's instruction to distinguish assumptions from confirmed requirements.
-
-### LOW-3 — Corrupted/unreadable database file at launch has no defined recovery path
-**Problem:** No source document addresses what the application should do if the SQLite/SQLCipher file is corrupted or unreadable at startup.
-**Recommended resolution:** Detect on launch, present a clear path to restore from the most recent internal or external backup rather than crashing silently. Tracked as **US-BACKLOG-4**.
-**Requires confirmation from:** Architect — this is a technical design decision, not a business one, but should be made explicitly rather than left to whatever the Tauri/SQLite error path happens to produce by default.
-
-### LOW-4 — Business Volume entries per month (sizing figure) still not supplied
-**Problem:** `open-questions-checklist.md` and `requirement-spec.md` §10 both flag this as outstanding. The member-count design ceiling (500–5,000 actual, 25,000 architectural) is settled and drives the actual performance architecture (ADR-005's chain-upward approach is member-count-independent), so this figure affects test planning and realistic data-volume rehearsal, not the architecture itself.
-**Recommended resolution:** Request from the client for performance-test realism; do not block anything on it.
-**Requires confirmation from:** Client, low urgency.
+### LOW-4 — Business Volume entries per month (sizing figure) ⏸️ DEFERRED
+Still not supplied by the client. **Deferred by decision, 6 Aug 2026** — performance-testing strategy is a later phase. The member-count ceiling (500–5,000 actual, 25,000 architectural) is settled and is what actually drives the architecture; this figure affects only realistic data-volume rehearsal. Not a gate on any module.
 
 ---
 
-## Resolved This Session (Technical Decisions, not open questions)
+## Technical decisions taken during analysis
 
-### DECIDED — `reverse_entry` is dropped
-**Context:** `architecture.md` Appendix C lists `reverse_entry` as an IPC command distinct from `edit_entry`. No requirement document (including the later `client-requirements-validation.md` RQ-7, which treats "edited or reversed" as synonymous) describes a functionally distinct reversal/void action, and the approved prototype implements only editing — no separate reverse/void UI element exists anywhere.
-**Decision:** Confirmed directly by the architect during this session's clarification step: `reverse_entry` was speculative/leftover in the architecture document; `edit_entry` (append-only, fully audited) is the real and complete mechanism, including for closed-month corrections (Rule-39).
-**Applied:** [04-api-specification.md](04-api-specification.md) drops the command from the surface with this rationale noted inline. [05-data-model-specification.md](05-data-model-specification.md)'s `audit_log.cause` enum retains the option to note this if the client wants the word "reversal" preserved as a cause label, but recommends `edit`/`correction` only going forward.
+### `reverse_entry` is dropped
+`architecture.md` Appendix C listed `reverse_entry` as distinct from `edit_entry`. No requirement document describes a functionally separate reversal — `client-requirements-validation.md` RQ-7 treats "edited or reversed" as synonymous — and the approved prototype implements only editing.
+**Decision (architect):** speculative leftover. `edit_entry`, append-only and fully audited, is the complete mechanism, including for closed-month corrections (Rule-39). Applied in [04-api-specification.md](04-api-specification.md).
 
----
-
-## Resolved, But the Original Source Document Is Stale — Cite the Correction, Not the Stale Text
-
-### RESOLVED — Empty elapsed month → yearly-average treatment
-`requirement-spec.md` marks this ☐ open ("Flagged for confirmation — empty elapsed months"). `open-questions-checklist.md`'s own copy of the same question (lines 112–116, 850–853) is **never updated** to a ✅ anywhere in that file, despite every one of its other 22 questions being closed. The actual resolution exists in `client-requirements-validation.md`'s **RQ-16** (3 August 2026): confirmed — an empty month produces no snapshot and is excluded from the yearly-averaging denominator, matching what both stale documents had already recommended. **When building or citing this rule, reference RQ-16, not the stale ☐ markers in the other two files** — they were simply never swept up when the later document closed the question.
-
-### RESOLVED — PIN vs. complex password
-`requirement-spec.md` Rule-29 frames this as still pending client choice, and `open-questions-checklist.md` line 745 shows it deferred. `client-requirements-validation.md` M8.5 (4 August 2026) resolves it: **both** may be configured simultaneously, not an either/or choice. See Rule-29 (corrected) in [03-business-rules.md](03-business-rules.md).
-
-### RESOLVED — Slab-table monotonicity validation
-Not a contradiction, but worth restating here since it reads like an obvious gap on first encounter: the client was offered this safeguard and **explicitly declined it** (`client-requirements-validation.md` V3.4/V7.5/RQ-1, `architecture.md` ADR-009). Do not "fix" this by adding validation unprompted — it is a documented, deliberate accepted risk (Rule-41 in [03-business-rules.md](03-business-rules.md)).
+### Improvements made while building the above
+Small, in-scope corrections to `ui-prototype-v2.html` made alongside the three features:
+- **Escape now closes a modal** — the impeccable critique flagged the total absence of an Escape handler and it was still unfixed. Modals opened with `dismissable: false` (add/edit member) deliberately still ignore it.
+- **`role="dialog"` / `aria-modal` / `aria-labelledby`** added to the modal primitive.
+- **Toast icons had no size rule** (`.toast svg`), so every toast icon rendered at the SVG default size. Pre-existing defect, one-line fix.
+- **`hashchange` listener** for the recovery-screen trigger — a hash appended to an already-open page is a same-document navigation, so `init()` never re-runs and the trigger would otherwise silently do nothing.
 
 ---
 
-## Summary Table
+## Resolved, but the original source document is stale — cite the correction
 
-| ID | Priority | Owner needed | Blocks |
-|---|---|---|---|
-| HIGH-1 | High | Architect | M6 done-marking only |
-| HIGH-2 | High | Client (legal) | M1 done-marking only |
-| MEDIUM-1 | Medium | None (build it) | M7 done-marking only |
-| LOW-1 | Low | None (keep as-is) | Nothing |
-| LOW-2 | Low | None (safe default) | M7 done-marking only |
-| LOW-3 | Low | Architect | M5/M8 done-marking only |
-| LOW-4 | Low | Client, low urgency | Performance-test realism only |
+### Empty elapsed month → yearly-average treatment
+`requirement-spec.md` marks this ☐ open, and `open-questions-checklist.md`'s copy of the same question is never updated to ✅ despite all 22 of its other questions being closed. The resolution is in `client-requirements-validation.md` **RQ-16** (3 August 2026): an empty month produces no snapshot and is excluded from the averaging denominator. **Cite RQ-16, not the stale ☐ markers.**
 
-**No item in this table blocks starting implementation.** All are scoped to specific modules' "done" bar, per [10-definition-of-done.md](10-definition-of-done.md).
+### PIN vs. complex password
+`requirement-spec.md` Rule-29 frames this as a pending either/or choice. `client-requirements-validation.md` M8.5 (4 August 2026) resolves it: **both** may be configured at once, either authenticates. See Rule-29 (corrected) in [03-business-rules.md](03-business-rules.md).
+
+### Slab-table monotonicity validation
+Reads like an obvious gap on first encounter, but the client was offered this safeguard and **explicitly declined it** (V3.4/V7.5/RQ-1, ADR-009). Do not add it unprompted — it is a documented accepted risk (Rule-41).
+
+---
+
+## Summary
+
+| ID | Outcome | Remaining work |
+|---|---|---|
+| HIGH-1 | Confirmed — maps to `redownload_backup` | None |
+| HIGH-2 | Closed — client requires full permanent retention, no removal | None; do not re-raise |
+| MEDIUM-1 | Built (variant C) | None |
+| LOW-1 | Not applicable — already rectified | None |
+| LOW-2 | Built | None |
+| LOW-3 | Built (design D) | None |
+| LOW-4 | Deferred to the performance-testing phase | Sizing figure, when convenient |
+
+**Nothing outstanding gates any module.** The conditions attached to the original "READY WITH CONDITIONS" verdict in [01-implementation-readiness-assessment.md](01-implementation-readiness-assessment.md) have all been met.
