@@ -2,7 +2,9 @@
 
 Consolidated register. Every item below also appears at its point of relevance in deliverables 01–10; this is the single place to check what remains outstanding.
 
-**Status as of 6 August 2026: all seven items raised by the readiness analysis are closed.** Nothing outstanding blocks or gates any module. **7 August 2026:** a new client requirement (whole-console backup and cross-device restore) was raised, designed and closed the same day — see below.
+**Status as of 6 August 2026: all seven items raised by the readiness analysis are closed.** Nothing outstanding blocks or gates any module. **7 August 2026:** a new client requirement (whole-console backup and cross-device restore) was raised, designed and closed the same day — see below. **Also 7 August 2026:** three further client change requests (**CR-1, CR-2, CR-3**) were raised after the `documents/final/` set was approved, designed and specified the same day — see the CR block at the end of this file. None is blocking.
+
+> ⚠️ **This file was flagged stale on 7 August 2026** by [../final/00-master-index.md](../final/00-master-index.md) §3 — it carries figures that were correct on 6 August. Where it disagrees with `documents/final/`, the final set wins. The CR block below is current.
 
 ---
 
@@ -34,8 +36,12 @@ Consolidated register. Every item below also appears at its point of relevance i
 - On a **Royalty** save no member's slab can move, so the list shows members who **start or stop earning royalty** instead, with a "Members earning royalty: before → after" row. Decided 6 Aug 2026.
 - Cancel is a true no-op; the duplicate-threshold guard still refuses bad input *before* the warning is offered.
 
-### LOW-1 — Hierarchy chart's ">60 descendants" gate ✅ CLOSED — not applicable
-Already rectified in the prototype (commit `328c1a8`) as a deliberate design decision. No action, no flag.
+### LOW-1 — Hierarchy chart's ">60 descendants" gate ✅ CLOSED — re-opened and fully resolved 7 Aug 2026
+Originally closed as "not applicable — already rectified in the prototype (commit `328c1a8`) as a deliberate design decision."
+
+**Re-opened 7 Aug 2026 while specifying CR-3, because that closure was wrong in two ways:** the gate had no source rule and no traceability row (it stood as *"Prototype Behavior Not Explicitly Covered By Requirements"*), and it was **not actually present in the current prototype** — the documents described it, the code did not.
+
+**Now genuinely closed.** CR-3 gives it **Rule-45**, **V4.5** and a home: it gates the **full hierarchy window**, which is the only view in the system that draws an unbounded number of nodes. The one-branch-at-a-time Structure chart is bounded by a single generation and needs no gate. The confirmation must name the **exact** member count, and Cancel must open nothing at all.
 
 ### LOW-2 — Removing the last slab row ✅ BUILT 6 Aug 2026
 **Decision:** Reject, as recommended. Built: the row's remove control is `disabled` with an explanatory `aria-label` when one row remains, an explanatory hint appears beneath the table, and `removeSlabRow()` refuses with a named message if reached another way.
@@ -99,10 +105,39 @@ Reads like an obvious gap on first encounter, but the client was offered this sa
 | HIGH-1 | Confirmed — maps to `redownload_backup` | None |
 | HIGH-2 | Closed — client requires full permanent retention, no removal | None; do not re-raise |
 | MEDIUM-1 | Built (variant C) | None |
-| LOW-1 | Not applicable — already rectified | None |
+| LOW-1 | Re-opened and fully resolved 7 Aug 2026 by CR-3 — the gate now belongs to the full hierarchy window, backed by Rule-45/V4.5 | Build it; it is not in the prototype yet |
 | LOW-2 | Built | None |
 | LOW-3 | Built (design D) | None |
 | LOW-4 | Deferred to the performance-testing phase | Sizing figure, when convenient |
 | NEW-1 | Designed and closed — whole-console backup & cross-device restore (Rule-43) | Port prototyped behaviour to the real implementation |
+| NEW-2 | Designed and closed 7 Aug 2026 — **CR-1**, phone number as a search key (Rule-44) | Build it |
+| NEW-3 | Designed and closed 7 Aug 2026 — **CR-2**, entry permitted into an ended-but-unclosed month (Rule-36 amended) | Build it. **Reverses RQ-11** — read the amended rule before touching M2 or M5 |
+| NEW-4 | Designed and closed 7 Aug 2026 — **CR-3**, the full hierarchy window (Rule-45, FR-10) | Build it |
 
 **Nothing outstanding gates any module.** The conditions attached to the original "READY WITH CONDITIONS" verdict in [01-implementation-readiness-assessment.md](01-implementation-readiness-assessment.md) have all been met.
+
+---
+
+## Client change requests — 7 August 2026 (CR-1, CR-2, CR-3)
+
+Raised by the client after the `documents/final/` set was approved. Recorded here for continuity; the authoritative account, with what each one reverses, is [../final/06-decision-log-and-open-items.md](../final/06-decision-log-and-open-items.md) §5.
+
+### NEW-2 / CR-1 — Phone number as a search key ✅ DESIGNED AND CLOSED 7 Aug 2026
+**Asked:** search by phone number as well as member ID and name, since a phone number is unique to a member.
+**Decided:** every search box in the console matches on phone. Digits-only comparison so formatting is irrelevant; the phone clause engages only at **four digits or more** so short queries do not sweep in unrelated members; results gain a **phone column**. One shared search function — behaviour must not differ between screens.
+**Lands as:** Rule-44, FR-1 (amended), M2.1/M4.6, V4.4, AC-40/AC-41, UN-29, US-M1.4 (amended), API-06 (amended). No schema change, no new command.
+
+### NEW-3 / CR-2 — Entry into an ended-but-unclosed month ✅ DESIGNED AND CLOSED 7 Aug 2026
+**Asked:** remove the hard entry lock when the previous month is not closed, because a purchase made on the last day of a month is often reported two or three days later. The client's condition: entries **for the previous month** stay possible while it is unclosed; **current-month** entries require it to be closed first.
+**Decided:** Rule-36 is **narrowed, not removed**, exactly as stated. No time limit, no configurable grace window, no countdown — the grace lasts as long as the month stays unclosed. A configurable "grace days" setting was offered and declined.
+**⚠️ Reverses RQ-11's answer of 3 Aug 2026** ("hard stop kept, no grace period"), and with it OC-2, OC-6's severity, R-4's position, AC-19, V2.3 and V2.5.
+**Lands as:** Rule-36 (amended), M2.3/M2.6/M2.7, M5.2, V2.3/V2.5/V2.6/V2.7, AC-19/AC-42/AC-43, UN-30, US-M2.3/M2.4/M2.5 (new), US-M2.1/US-M5.3 (amended), API-07/API-08 (amended).
+**Documentation-only schema consequences:** `periods.status` `ended_locked` → `awaiting_close`; `member_period_totals` widened to any not-yet-closed period (composite PK already supports it). The `PeriodLocked` error variant is **retired**, replaced by `PeriodNotAcceptingEntries { month, blocking_month }` and `PeriodClosed { month }`.
+**Multiple outstanding months:** any outstanding month accepts entries, not merely the oldest. The client noted this will not arise in practice and chose the permissive behaviour for the hypothetical case. Figure screens show the **oldest**; a month switcher renders **only** when more than one month is outstanding.
+
+### NEW-4 / CR-3 — Full hierarchy window ✅ DESIGNED AND CLOSED 7 Aug 2026
+**Asked:** a "View Full Hierarchy" button on the Structure screen opening a new window with the full hierarchy expanded — with the binding constraint that the main console must not be slowed down: *"it just opens new window with expanded full hierarchy with all data and forgets."*
+**Decided:** a separate read-only window, rooted always at the **top member**, drawing once and never updating, carrying an "as at" timestamp. Zoom to 10%, fit-width, in-window search-and-highlight, print. Gated above **60 descendants** by a confirmation naming the exact count.
+**Layout:** top-down chart, fully expanded — chosen by the client over a width-stable indented outline after being shown the width behaviour. Recorded as **TR-7**, accepted, with the zoom floor, fit-width, in-window search and the size gate as the agreed mitigations. The outline is the named fallback.
+**Lands as:** Rule-45, FR-10, M4.7, V4.5, AC-44/AC-45, UN-31, US-M4.3 (new), API-11 (amended — the pre-existing `full_tree` parameter, no new command).
+**Closes LOW-1**, which had stood since 6 Aug 2026 as untraced prototype behaviour that was not in fact present in the prototype.

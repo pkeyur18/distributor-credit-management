@@ -30,9 +30,13 @@ These five scenarios, plus `client-requirements-validation.md`'s AC-1–AC-36 (�
 - Phone uniqueness + reactivation offer (Rule-34): duplicate against active → error; duplicate against inactive → reactivation payload, not an error.
 - Inactive-member calculation neutrality (Rule-28, the corrected rule): deactivating a mid-tree member with active descendants must **not** change any ancestor's TBV/Rewards — this is the single highest-value regression test in the whole suite, since implementing the original (superseded) spec wording here would silently corrupt the ledger.
 - Zero/negative Business Volume refusal (Rule-16a).
-- Empty-month exclusion from yearly averaging (RQ-16).
+- Empty-month exclusion from yearly averaging (RQ-16) — still required after CR-2, which makes an empty month less likely but not impossible.
+- **Period isolation on recalculation (CR-2):** with two periods holding live figures, record into the older one and assert every ancestor chain in **that** period recalculates while the other period's `member_period_totals` rows are byte-identical to before.
 - **TEST-R42 — members are never removed, and never omitted.** Two assertions: no code path deletes a `members` row (there is no delete command to call), and every export includes deactivated members. This is a client requirement, so the test exists to stop a future change quietly introducing an erasure path or an "active only" export filter.
 - Last slab row cannot be removed (LOW-2): with one row remaining, the remove handler refuses and the row count is unchanged.
+- **TEST-R44 — phone matching (Rule-44).** A member stored as `+91 98765 43210` is found by `9876543210`, by `98765 43210`, by `+919876543210`, by `09876543210` and by the mid-number fragment `4321`. **The reverse direction is the case that actually catches a bare digit-strip implementation:** a member stored as plain `9876543210` must be found by `+91 98765 43210`. A 3-digit query matches on phone not at all; a query matching one member's name and another's phone returns both. The same function is asserted to back every search box, so behaviour cannot drift between screens. The Rule-34 duplicate check is asserted against the same canonical key, so one person cannot be added twice under two spellings of one number.
+- **TEST-R36 — entry eligibility by period (Rule-36 as amended).** Given June `awaiting_close` and today in August: a June-dated entry is accepted; an August-dated entry is refused naming June; a May-dated entry (closed) is refused and directed to the correction path; a future-dated entry is refused. After June closes, the August-dated entry is accepted. This is the test that fails loudly if the superseded "lock everything" wording is implemented.
+- **TEST-R45 — full-tree layout (Rule-45).** The single post-order pass places every node without overlap and produces identical geometry for identical input across two runs; a single-node structure and a single-chain structure both lay out correctly; the emitted connector path matches the node positions it was computed alongside.
 - `preview_settings_impact` (API-33) leaves nothing behind: call it with candidate settings, then confirm the live settings and all live figures are byte-identical to before. The temporarily-swapped settings must be restored even when the computation throws — test that path deliberately by feeding it a candidate that panics the engine.
 
 ### Integration tests — Transactional correctness
@@ -51,7 +55,11 @@ One test per command in [04-api-specification.md](04-api-specification.md) verif
 ### E2E tests — Full user workflows, driven through the actual UI
 - First-run setup → root member creation → first Business Volume entry → visible Rewards on screen, no manual recalculation step anywhere (Rule-26).
 - Full monthly-close wizard: backup confirm → commit → figures zeroed → alert clears → (if applicable) next outstanding month's alert appears.
-- Entry-lock enforcement: let a month elapse without closing, confirm the BV Entry screen shows the locked empty state and the persistent banner appears with no dismiss control.
+- **Late-entry flow (CR-2):** let a month elapse without closing; confirm the BV Entry screen still renders its form, names the outstanding month it is recording into, accepts a figure dated in that month, and shows the recalculated figures immediately. Confirm the persistent banner appears with no dismiss control and states that entries dated in the outstanding month are still accepted.
+- **Current-month refusal (CR-2):** in the same state, attempt a figure dated in the current month; confirm it is refused naming the blocking month, that nothing else on the form is disabled, and that after completing the close the same figure saves.
+- **Multiple outstanding months (CR-2):** with two months outstanding, confirm the month selector appears on the entry screen and the figure screens and that switching changes the figures shown; with one month in play, confirm no selector is rendered anywhere.
+- **Phone search (CR-1):** find a member by phone from Home, confirm the phone column renders in the results, then repeat from the Structure, Volume Entry and Correction search boxes and confirm identical behaviour.
+- **Full hierarchy (CR-3):** from Structure, activate "View full hierarchy" on a network above 60 members; confirm the confirmation names the real count and Cancel opens nothing; confirm the window opens with every branch expanded and three fields per node; confirm zoom, fit-width, in-window search and print all work; confirm the main console stays usable throughout; record an entry in the console afterwards and confirm the open window is unchanged.
 - Closed-month correction end-to-end: correct an entry in a closed month via the "Correct a closed month" panel, confirm the warning copy is shown, confirm the toast, confirm the exported closed-month snapshot reflects the correction.
 - Settings warning end-to-end (MEDIUM-1): save the slab table → warning names the open month, shows Rewards before → after and the affected members → Cancel leaves both the settings and the admin's typed values untouched → re-save and confirm applies. Repeat for royalty, where the list shows members starting/stopping royalty instead. Confirm a duplicate threshold is refused outright, with no warning offered.
 - Data-recovery screen (LOW-3): launch against an unreadable database, confirm the recovery screen appears in place of sign-in, restore points are listed newest-first by the month each holds, and the screen states that anything recorded after the chosen backup will need entering again.
@@ -68,8 +76,9 @@ One test per command in [04-api-specification.md](04-api-specification.md) verif
 ### Performance tests
 Targets per NFR-1: screens <2s, recalculation <2s, extracts <30s, at the 25,000-member/200,000-entries-per-year design ceiling (client's actual scale is 500–5,000 members — test at both the realistic scale and the design ceiling).
 - Chain-upward recalculation time vs. tree depth/width, confirming the claimed O(depth × average width) complexity — independent of total member count (`architecture.md` §9.4).
-- Search response time at 25,000 members.
+- Search response time at 25,000 members — including a **phone** query, whose canonical-key substring match is a scan rather than an index seek (Rule-44).
 - Monthly export generation time at 25,000 members / a full year of entries.
+- **Full hierarchy draw time at 25,000 members**, measured in the separate window — **with the main console's responsiveness measured at the same time.** The second measurement is the one that gates: the draw itself is a known, accepted cost (TR-7), while any slowdown of the main console is a defect against the client's binding constraint on CR-3.
 
 ### UAT — the five worked scenarios, reconciled by the client
 Per SC-1–SC-8/AC-1–AC-36 (`client-requirements-validation.md` §12–13): re-run all five scenarios through the actual built UI (not just the calculation engine in isolation) and have the client confirm the on-screen figures match their own hand-worked numbers. This is the single most important acceptance gate in the entire test strategy — it is the client's own stated bar for trusting the system ("recalculating the client's five worked examples reproduces their stated totals exactly").
@@ -82,6 +91,9 @@ Per SC-1–SC-8/AC-1–AC-36 (`client-requirements-validation.md` §12–13): re
 | Recalculation trigger/scope (Rule-26) | Integration tests (chain-upward, transactional) |
 | Entry/correction rules (Rules 16, 16a, 39) | Unit + E2E |
 | Monthly close/backup gate (Rules 17–20, 31, 38) | Integration (atomicity) + E2E (wizard) |
+| Entry eligibility by period (Rule-36 as amended) | TEST-R36 — unit (the state matrix) + integration (recalculation confined to one period) + E2E (late entry, current-month refusal, month switcher) |
+| Phone as a search key (Rule-44) | TEST-R44 — unit (digit normalisation, four-digit floor) + E2E (every search box) + performance (scan at 25,000) |
+| Full hierarchy view (Rule-45) | TEST-R45 — unit (layout pass) + E2E (size gate, draw, print, read-only) + performance (draw time **and** main-console responsiveness) |
 | Member lifecycle/hierarchy integrity (Rules 28, 30, 34, 35, 37, 40) | Unit + E2E |
 | Members never removed, never omitted (Rule-42) | TEST-R42 — unit (no delete path) + integration (exports include deactivated members) |
 | Exports/reporting (Rules 19, 23, 24, 33) | Integration + E2E |

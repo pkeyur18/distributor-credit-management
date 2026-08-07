@@ -55,6 +55,8 @@ This list must stay identical to the one in [04-api-specification.md](04-api-spe
 | No member data in filenames | Backup/export filenames must never embed a member name/phone/ID in a way that leaks personal data outside the encrypted store | `client-requirements-validation.md` §11.4 |
 | Filesystem isolation | WebView (Presentation container) has zero general filesystem/shell/network capability — only the specific named Tauri commands in [04-api-specification.md](04-api-specification.md) are allowlisted | `architecture.md` §11.3, ADR-002 |
 | Vocabulary/no-financial-language leakage | No user-visible string (including error messages, tooltips, export filenames) may use sale/purchase/order/cash/payment/commission/invoice | `requirement-spec.md` §1.2, `user-needs-document.md` UN-27 |
+| **Phone number displayed on the landing screen** | **Accepted, 7 Aug 2026 (CR-1).** Search results now show each member's phone number so the administrator can confirm they have selected the right person — a name alone cannot do that. Phone is personal data under the DPDP Act 2023, but it is visible only to the **single administrator role**, which already sees it on Member Detail and in every export (Rule-33). No new party gains access, no new surface is created, and nothing leaves the encrypted store. The filename rule above is unaffected — phone still never appears in a filename | Rule-44, [../final/06-decision-log-and-open-items.md](../final/06-decision-log-and-open-items.md) §5 CR-1 |
+| **Phone number as a search key** | Matching is performed **inside the Rust core** against the encrypted store, never by shipping the member list to the WebView to be filtered there. A canonical-key normalisation (digits, then an international prefix or trunk zero dropped) is applied at comparison time only; the stored value is never rewritten, so no second copy of the number is created anywhere | Rule-44, API-06 |
 
 ## 5. Threat Model — What Is, and Is Not, Defended
 
@@ -81,6 +83,7 @@ This list must stay identical to the one in [04-api-specification.md](04-api-spe
 | Data-subject correction request | Handled — `edit_member`/`edit_entry` support correction of any field, fully audited | |
 | Data-subject removal / erasure | **Out of scope by client requirement** (confirmed 6 Aug 2026) | The client has specifically required that no member is ever removed from the application. There is no erasure path and none is to be built. Do not raise this as a gap. |
 | Audit obligation | Covered by `audit_log` (NFR-5/M9) | |
+| Data minimisation on screen | **Reviewed 7 Aug 2026 and accepted.** CR-1 puts phone numbers on the landing screen's search results. Justified by purpose — confirming member identity before recording against them — and bounded by the single-administrator role that already has full access to the same field. The alternative (match on phone but never display it) was offered to the client and declined, because a name alone does not confirm identity | Rule-44 |
 
 ## 7. Summary
 

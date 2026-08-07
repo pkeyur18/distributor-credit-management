@@ -12,13 +12,16 @@ Design components are cited by module (M1–M9 per `architecture.md` §6/§7). A
 
 | ID | Description | User Need | Design Component | UI Screen | API Command | DB Entity | Test Scenario | Status | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| FR-1 | Search by name or 6-digit ID, opens detail with 1-depth children | UN-15 | M1/M4 | Home/Search | `search_members` | members | TEST-FR1 | Fully traced | |
-| FR-2 | Hierarchy chart: name, ID, **own** Business Volume only (not TBV) | UN-16 | M4 | Structure | `get_direct_children_chart` | members, business_volume_entries | TEST-FR2 | Fully traced | Client re-confirmed own-BV over the architect's TBV recommendation (Q-I2). Chart therefore cannot on its own explain a member's slab. |
+| FR-1 | Search by name, 6-digit ID **or phone number**, opens detail with 1-depth children | UN-15, UN-29 | M1/M4 | Home/Search | `search_members` | members | TEST-FR1 | Fully traced | Phone matching added 7 Aug 2026 by CR-1 — see Rule-44 below. |
+| FR-2 | Hierarchy chart: name, ID, **own** Business Volume only (not TBV) | UN-16 | M4 | Structure | `get_direct_children_chart` | members, business_volume_entries | TEST-FR2 | Fully traced | Client re-confirmed own-BV over the architect's TBV recommendation (Q-I2). Chart therefore cannot on its own explain a member's slab. The same three-field constraint binds FR-10's full hierarchy window. |
+| FR-10 | Full hierarchy view: whole structure from the top member, every branch expanded, in a separate read-only window that draws once and never updates | UN-31 | M4 | Full Hierarchy window (opened from Structure) | `get_direct_children_chart` (`full_tree: true`) | members, member_period_totals | TEST-FR10 | Fully traced | New 7 Aug 2026, CR-3. No new command — the pre-existing `full_tree` parameter. Accepted scale limit recorded as TR-7. |
+| Rule-44 | Phone number is a search key: name substring, ID digits, or phone digits with a four-digit floor; results display the phone | UN-29 | M1/M2/M4 | every search box (Home, Structure, BV Entry, Correction, Add Member reference lookup) | `search_members` | members.phone (UNIQUE, indexed) | TEST-R44 | Fully traced | New 7 Aug 2026, CR-1. One shared search function — behaviour must not differ between screens. Digits-only comparison; stored value never rewritten. |
+| Rule-45 | Full hierarchy view is a point-in-time, read-only draw, gated above 60 descendants by a confirmation naming the exact count | UN-31 | M4 | Full Hierarchy window | `get_direct_children_chart` (`full_tree: true`) | members, member_period_totals | TEST-R45 | Fully traced | New 7 Aug 2026, CR-3. Read-only, no live refresh — that is the rule, not an omission. |
 | FR-3 | Member detail: name, phone, address, full Rewards breakdown, direct children (1 depth), TBV, leg count | UN-17 | M4 | Member Detail | `get_member_detail` | members, member_period_totals | TEST-FR3 | Fully traced | |
 | Rule-2 | Unique 6-digit member ID, primary lookup key | UN-01 | M1 | all screens showing an ID | `add_member` | members.id | TEST-R2 | Fully traced | |
 | Rule-1 | Level-width defaults (L2=9, L3=6, L4=3) are advisory, never block onboarding | UN-05 | M1 | Add Member, Structure (warning banner) | `add_member`, `update_settings` | settings | TEST-R1 | Fully traced | |
 | Rule-32 | Depth overflow warns but allows | UN-05 | M1 | Add Member | `add_member` | settings.hierarchy_depth | TEST-R32 | Fully traced | Same advisory pattern as Rule-1. |
-| — | Hierarchy-chart ">60 descendants" confirm-before-render gate | — | (prototype only) | Structure | — | — | — | Prototype Behavior Not Explicitly Covered By Requirements | No source rule. Recommend keeping (UX polish, no conflict) — see [11](11-open-questions-and-decisions.md). |
+| V4.5 | ">60 descendants" confirm-before-open gate, naming the exact member count | UN-31 | M4 | Full Hierarchy window (the action that opens it) | `get_direct_children_chart` (`full_tree: true`, for the count) | members | TEST-V45 | Fully traced | **Was previously untraced prototype behaviour with no source rule.** CR-3 (7 Aug 2026) gave it a rule (Rule-45), a validation row and a home: it now gates the full hierarchy window, which is the only view that draws an unbounded number of nodes. The one-branch-at-a-time Structure chart is bounded by a single generation and needs no gate. LOW-1 is closed by this. |
 
 ## FR-4 — Add/Edit/Deactivate Member (Module M1)
 
@@ -41,7 +44,9 @@ Design components are cited by module (M1–M9 per `architecture.md` §6/§7). A
 | Rule-16 | Business Volume entered directly, up to 2 decimals, no currency mode | UN-07, UN-08 | M2 | BV Entry | `record_entry` | business_volume_entries.amount | TEST-R16 | Fully traced | Supersedes the original "two entry modes" decision (rupee mode dropped entirely). |
 | Rule-22 | 2 decimal places throughout storage/calc; rounding only at display | UN-08 | M3 | (all figure displays) | — (internal) | fixed-point ×100 integer columns throughout | TEST-R22 | Fully traced | No per-child-term rounding before summing. |
 | — | Zero **and** negative Business Volume both refused | UN-08 | M2 | BV Entry (inline validation) | `record_entry` | business_volume_entries (CHECK amount > 0) | TEST-VOL-ZERO | Fully traced | `client-requirements-validation.md` V2.4 — stricter than the architect's own original recommendation ("accept zero, refuse negative"), client explicitly overrode it. |
-| Rule-36 | Entry locked entirely once a calendar month ends, until that month's reset completes | UN-14 | M2 | BV Entry (locked empty state) | `get_period_lock_status` | periods.status | TEST-R36 | Fully traced | Reverses an earlier non-blocking-alert-only decision; added on top of Rule-20's alert. |
+| Rule-36 | An ended-but-unclosed month keeps accepting entries; the **current** month is refused while any earlier month is outstanding, naming it | UN-14, UN-30 | M2, M5 | BV Entry (form with recording-month note, no locked state) | `record_entry`, `get_period_lock_status` | periods.status (`awaiting_close`), business_volume_entries.period_month, member_period_totals | TEST-R36 | Fully traced | **Amended 7 Aug 2026 by CR-2**, reversing RQ-11's answer of 3 Aug 2026. Previously: "entry locked entirely once a calendar month ends, until that month's reset completes." The lock is narrowed, not removed. `periods.status` value renamed `ended_locked` → `awaiting_close`. |
+| — | Recalculation of an entry into a not-yet-closed month is confined to **that** period; no other live period's figures change | UN-09, UN-30 | M2/M3 | (implicit) | `record_entry` | member_period_totals (one row set per not-yet-closed period) | TEST-PERIOD-ISOLATION | Fully traced | New 7 Aug 2026, CR-2. `member_period_totals` may now hold rows for more than one not-yet-closed period; the composite PK already supports it, no schema change. |
+| — | Month selector on the entry screen and figure screens, rendered **only** when more than one month is outstanding | — | M2/M4 | BV Entry, Home, Member Detail, Structure | `get_period_lock_status` | periods | TEST-MONTH-SWITCHER | Fully traced | New 7 Aug 2026, CR-2. Client's explicit preference: nothing new appears on screen in the ordinary single-month case. Figures default to the **oldest** outstanding month. |
 | Rule-26 | Recalculation is immediate on every entry, chain-upward only (no full-tree rebuild) | UN-09, UN-14 | M3 (ADR-005) | (implicit — no "recalculate" button anywhere) | (triggered internally by `record_entry`/`edit_entry`) | member_period_totals | TEST-R26 | Fully traced | Internal design note; no visible difference to the admin. |
 | — | Entries editable/reversible at any time, **including in closed months**; correction writes a new backup **version**, never overwrites the original | UN-21 | M2/M5 | BV Entry → "Correct a closed month" panel | `edit_entry` | business_volume_entries, monthly_snapshots (versioned), backups (versioned), audit_log | TEST-CORRECTION | **Partially traced (extended)** | `client-requirements-validation.md` RQ-7 — a deliberate reversal of the "permanent, uncorrectable once closed" framing, which the validation document states was the architect's own gloss on Rule-38, not the client's actual requirement. `reverse_entry` as a *distinct* IPC command is dropped (see [04](04-api-specification.md)) — `edit_entry` alone, always audited, is the mechanism. |
 
@@ -103,9 +108,9 @@ Design components are cited by module (M1–M9 per `architecture.md` §6/§7). A
 | NFR-15 Browser/device support | None — no browser, phone, or tablet use | (N/A by design) | Fully traced | |
 | NFR-16 Data migration | None — system starts empty, no import tooling | (out of scope, OC-11) | Fully traced | Closed box by design, not deferred. |
 
-## User Needs Coverage Checklist (UN-01 – UN-28)
+## User Needs Coverage Checklist (UN-01 – UN-31)
 
-All 28 user needs from `user-needs-document.md` trace to at least one Rule/FR/NFR row above (UN-28 added 7 August 2026). Full detail is not repeated per-need here to avoid duplicating the table above; this section exists to make the coverage check explicit and auditable.
+All 31 user needs from `user-needs-document.md` trace to at least one Rule/FR/NFR row above (UN-28 added 7 August 2026; UN-29/30/31 added the same day by CR-1/CR-2/CR-3). Full detail is not repeated per-need here to avoid duplicating the table above; this section exists to make the coverage check explicit and auditable.
 
 | UN | Topic | Traced via |
 |---|---|---|
@@ -120,7 +125,7 @@ All 28 user needs from `user-needs-document.md` trace to at least one Rule/FR/NF
 | UN-09 | Slab/differential correctness | Rule-3, Rule-4, Rule-26 |
 | UN-10 – UN-13 | (calculation/recording, general) | Rule-6 – Rule-14 |
 | UN-14 | No manual recalculate button | Rule-26, Rule-36 |
-| UN-15 | Search by name/ID | FR-1 |
+| UN-15 | Search by name/ID/phone | FR-1, Rule-44 |
 | UN-16 | Chart shows name/ID/own-BV only | FR-2 |
 | UN-17 | One screen fully explains a member's Rewards | FR-3 |
 | UN-18 | Manual, safely-gated monthly close | FR-7, Rule-17, Rule-18, Rule-20 |
@@ -134,22 +139,32 @@ All 28 user needs from `user-needs-document.md` trace to at least one Rule/FR/NF
 | UN-26 | Single-admin access, credential + lockout | FR-9, Rule-29, lockout row, recovery-codes row |
 | UN-27 | Vocabulary constraint enforced everywhere | (see §1.2 in `requirement-spec.md`; enforced across all UI/export rows above by convention, not a separate technical component) |
 | UN-28 | Whole console, safe and movable — scheduled/on-demand backup, cross-device restore | Rule-43, NFR-13 (extended) |
+| UN-29 | Finding a member by the number they are calling from | Rule-34, Rule-44, FR-1 |
+| UN-30 | Recording a purchase reported after the month has turned | Rule-36 (amended) |
+| UN-31 | Seeing the whole structure at once, without slowing the console down | Rule-45, FR-10 |
 
 ## Traceability Summary
 
 | Metric | Count |
 |---|---|
-| Total requirement-level items (Rules + FR + new items) | 48 |
+| Total requirement-level items (Rules + FR + new items) | 55 |
 | Non-functional requirements | 16 |
-| User needs | 28 |
-| **Fully traced** | 42 Rules/FR items, all 16 NFRs, all 28 UNs |
+| User needs | 31 |
+| **Fully traced** | 49 Rules/FR items, all 16 NFRs, all 31 UNs |
 | **Partially traced** (superseded wording retained for record) | 3 (Rule-21, Rule-31, Rule-38) |
 | **Conflicting (resolved)** (tier-1 document overrides tier-2 wording) | 4 (Rule-28, Rule-29, Rule-35, closed-month-snapshot export) |
 | **Missing** | 0 |
 | **Needs clarification** | 0 — all cleared 6 Aug 2026 |
+| **Untraced prototype behaviour** | 0 — the last one (the >60 gate) was given a rule by CR-3 on 7 Aug 2026 |
 
 Changes on 6 August 2026: **NFR-7** moved to Fully traced (retention/erasure settled as an explicit client requirement, now Rule-42) and so did the **settings mid-period warning** (built, variant C). Two rows were added — **Rule-42** and the **data-recovery screen** — taking the total from 45 to 47. The closed-month-snapshot export conflict is resolved in favour of `redownload_backup`.
 
 Changes on 7 August 2026: **Rule-43** (whole-console backup and cross-device restore) and **UN-28** added, taking the total from 47 to 48 requirement-level items and user needs from 27 to 28. **NFR-13** extended to cover the new mechanism.
 
-No orphan rows: every Rule 1–43, every FR-1–9, every UN-01–28, and every NFR has at least one entry above.
+Further changes on 7 August 2026 — client change requests **CR-1, CR-2, CR-3** (see [../final/06-decision-log-and-open-items.md](../final/06-decision-log-and-open-items.md) §5):
+- **Added:** Rule-44 (phone as a search key), Rule-45 (full hierarchy point-in-time draw), FR-10 (full hierarchy view), UN-29/30/31, V4.5's own row, plus rows for period-isolated recalculation and the conditional month switcher — taking requirement-level items from 48 to 55 and user needs from 28 to 31.
+- **Amended:** FR-1 (phone), FR-2's note (the constraint binds FR-10 too), **Rule-36** (the lock narrowed, its row rewritten and TEST-R36's scenario replaced), UN-15's need line.
+- **Closed:** the ">60 descendants" row, which had stood as *"Prototype Behavior Not Explicitly Covered By Requirements"* since 6 Aug 2026. CR-3 gave it Rule-45, V4.5 and a home. **There are now no untraced prototype behaviours.**
+- **No new API command.** API-06, API-07, API-08 and API-11 were amended; the surface stays at 40.
+
+No orphan rows: every Rule 1–45, every FR-1–10, every UN-01–31, and every NFR has at least one entry above.

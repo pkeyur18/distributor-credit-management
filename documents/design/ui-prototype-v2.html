@@ -582,7 +582,18 @@ const usedIds = new Set();
 const usedPhones = new Set();
 
 function newId() { let id; do { id = randInt(100001, 999999); } while (usedIds.has(id)); usedIds.add(id); return id; }
-function newPhone() { let p; do { p = String(pick([6,7,8,9])) + String(randInt(100000000, 999999999)); } while (usedPhones.has(p)); usedPhones.add(p); return p; }
+// Formats deliberately vary — the admin types a number however they were given it, so Rule-44's matching
+// normalises both sides to digits rather than assuming one stored shape.
+const PHONE_FORMATS = [
+  function (d) { return d; },
+  function (d) { return d.slice(0, 5) + ' ' + d.slice(5); },
+  function (d) { return '+91 ' + d.slice(0, 5) + ' ' + d.slice(5); },
+  function (d) { return '0' + d; }
+];
+function newPhone() {
+  let d; do { d = String(pick([6,7,8,9])) + String(randInt(100000000, 999999999)); } while (usedPhones.has(d));
+  usedPhones.add(d); return pick(PHONE_FORMATS)(d);
+}
 function randomName() { return pick(FIRST_NAMES) + ' ' + pick(LAST_NAMES); }
 function emailFor(name) { return name.toLowerCase().replace(/[^a-z ]/g, '').trim().replace(/\s+/g, '.') + randInt(10, 98) + '@mailbox.in'; }
 function randomJoinDate(level) {
@@ -765,7 +776,7 @@ function computeRewards(bvMap, tbvMap) {
    directly, so the candidate values are swapped in and restored in a finally block:
    a throw must never leave the live settings holding uncommitted values. */
 function previewRecalcImpact(nextPartial) {
-  const beforeRewards = LIVE_REWARDS;
+  const beforeRewards = liveRewards();
   let beforeTotal = 0, beforeRoyaltyCount = 0;
   const beforeSlab = new Map();
   MEMBERS.forEach(function (m) {
@@ -781,7 +792,7 @@ function previewRecalcImpact(nextPartial) {
     if (nextPartial.slabTable) SETTINGS.slabTable = nextPartial.slabTable;
     if (nextPartial.royaltyMinChildren != null) SETTINGS.royaltyMinChildren = nextPartial.royaltyMinChildren;
     if (nextPartial.royaltyRatePct != null) SETTINGS.royaltyRatePct = nextPartial.royaltyRatePct;
-    after = computeRewards(LIVE_BV, LIVE_TBV);
+    after = computeRewards(liveBV(), liveTBV());
   } finally {
     SETTINGS.slabTable = saved.slabTable;
     SETTINGS.royaltyMinChildren = saved.royaltyMinChildren;
@@ -832,20 +843,48 @@ function crc32(str) {
 // Live (current, uncommitted) state — a real per-entry ledger, not a single overwritable figure
 let entrySeq = 1;
 function newEntryId() { return entrySeq++; }
-let LIVE_ENTRIES = new Map(); // memberId -> [{id, date (ISO), amount}] — seeded further down, once the active period is known
-let LIVE_BV, LIVE_TBV, LIVE_REWARDS;
-function recalcLive() {
-  LIVE_BV = new Map(MEMBERS.map(function (m) {
-    const entries = LIVE_ENTRIES.get(m.id) || [];
+// Rule-36 (amended) — a month that has ended but is not closed still holds live figures and still accepts
+// entries, so more than one period can be live at once. Everything below is keyed by ym for that reason.
+// APP.viewYm decides which one the screens are showing; it defaults to the oldest still open for entry.
+const LIVE_BY_YM = {}; // ym -> { entries: Map(memberId -> [{id, date, amount}]), bv, tbv, rewards }
+function liveFor(ym) {
+  if (!LIVE_BY_YM[ym]) { LIVE_BY_YM[ym] = { entries: new Map(), bv: new Map(), tbv: new Map(), rewards: new Map() }; recalcLive(ym); }
+  return LIVE_BY_YM[ym];
+}
+function viewYm() {
+  const yms = entryYms();
+  return (APP && APP.viewYm && yms.indexOf(APP.viewYm) !== -1) ? APP.viewYm : yms[0];
+}
+// Rendered only when there is genuinely a choice to make — in the ordinary single-month case no control
+// appears at all, which is the client's explicit preference (CR-2).
+function monthSwitcherHtml() {
+  const yms = entryYms();
+  if (yms.length < 2) return '';
+  return '<div class="card mt-3" style="display:flex;align-items:center;gap:10px;padding:12px 14px">' +
+    '<span class="muted" style="font-size:12.5px">Showing figures for</span>' +
+    '<select style="width:auto;height:30px" onchange="P.setViewYm(this.value)">' +
+    yms.map(function (y) { return '<option value="' + y + '"' + (y === viewYm() ? ' selected' : '') + '>' + esc(ymLabel(y)) + '</option>'; }).join('') +
+    '</select>' +
+    '<span class="muted" style="font-size:12px">' + yms.length + ' months are open for entry until the oldest is closed.</span></div>';
+}
+function setViewYm(ym) { APP.viewYm = ym; render(); }
+function liveEntries(ym) { return liveFor(ym || viewYm()).entries; }
+function liveBV(ym) { return liveFor(ym || viewYm()).bv; }
+function liveTBV(ym) { return liveFor(ym || viewYm()).tbv; }
+function liveRewards(ym) { return liveFor(ym || viewYm()).rewards; }
+function recalcLive(ym) {
+  const L = LIVE_BY_YM[ym || viewYm()];
+  L.bv = new Map(MEMBERS.map(function (m) {
+    const entries = L.entries.get(m.id) || [];
     const sum = entries.reduce(function (s, e) { return s + e.amount; }, 0);
     return [m.id, Math.round(sum * 100) / 100];
   }));
-  LIVE_TBV = rollupTBV(LIVE_BV);
-  LIVE_REWARDS = computeRewards(LIVE_BV, LIVE_TBV);
+  L.tbv = rollupTBV(L.bv);
+  L.rewards = computeRewards(L.bv, L.tbv);
 }
-function allLiveEntriesFlat() {
+function allLiveEntriesFlat(ym) {
   const out = [];
-  LIVE_ENTRIES.forEach(function (list, memberId) { list.forEach(function (e) { out.push({ memberId: memberId, id: e.id, date: e.date, amount: e.amount }); }); });
+  liveEntries(ym).forEach(function (list, memberId) { list.forEach(function (e) { out.push({ memberId: memberId, id: e.id, date: e.date, amount: e.amount }); }); });
   out.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id; });
   return out;
 }
@@ -920,17 +959,38 @@ function outstandingYms() {
   while (ym < CURRENT_YM) { out.push(ym); ym = ymAdd(ym, 1); }
   return out;
 }
-function isRecordingLocked() { return outstandingYms().length > 0; }
 function oldestOutstandingYm() { const o = outstandingYms(); return o.length ? o[0] : null; }
+// Rule-36 (amended) — every month that has ended but is not closed accepts entries. The current month
+// joins them only once nothing older is outstanding. There is no state in which nothing can be recorded.
+function entryYms() { const o = outstandingYms(); return o.length ? o : [CURRENT_YM]; }
+function activeYm() { return entryYms()[0]; }
+function currentMonthBlockedBy() { const o = outstandingYms(); return o.length ? o[0] : null; }
 function latestSnapshot(ym) { const v = SNAPSHOTS[ym]; return v ? v[v.length - 1] : null; }
 function closedYms() { return Object.keys(SNAPSHOTS).sort(); }
 
 // Seed live entries now that the active period (oldest outstanding, or current if caught up) is known
-const SEED_YM = isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM;
+const SEED_YM = activeYm();
 MEMBERS.forEach(function (m) {
-  if (m.bv > 0) LIVE_ENTRIES.set(m.id, [{ id: newEntryId(), date: SEED_YM + '-0' + randInt(1, 5), amount: m.bv }]);
+  if (m.bv > 0) liveEntries(SEED_YM).set(m.id, [{ id: newEntryId(), date: SEED_YM + '-0' + randInt(1, 5), amount: m.bv }]);
 });
-recalcLive();
+recalcLive(SEED_YM);
+
+// self-check: Rule-36's entry matrix, and Rule-44's matching. These fail loudly if the superseded
+// "lock everything once a month ends" behaviour is ever reintroduced.
+(function periodSelfCheck() {
+  const out = outstandingYms();
+  const recordable = entryYms();
+  console.assert(recordable.length > 0, 'self-check: some month is always recordable (Rule-36 amended)');
+  out.forEach(function (ym) { console.assert(recordable.indexOf(ym) !== -1, 'self-check: outstanding month ' + ym + ' accepts entries'); });
+  console.assert(out.length === 0 ? recordable.indexOf(CURRENT_YM) !== -1 : recordable.indexOf(CURRENT_YM) === -1,
+    'self-check: current month is recordable only when nothing older is outstanding');
+  closedYms().forEach(function (ym) { console.assert(recordable.indexOf(ym) === -1, 'self-check: closed month ' + ym + ' is not recordable'); });
+  const b = entryDateBounds(activeYm());
+  console.assert(b.min.slice(0, 7) === activeYm() && b.max.slice(0, 7) === activeYm(), 'self-check: entry dates are bounded to the recording month');
+  console.assert(phoneKey('+91 98765 43210') === '9876543210' && phoneKey('098765 43210') === '9876543210' &&
+    phoneKey('9876543210') === '9876543210', 'self-check: phone normalisation (Rule-44)');
+  console.log('[prototype] recording into ' + ymLabel(activeYm()) + '; ' + recordable.length + ' month(s) open for entry');
+})();
 
 /* ============================================================
    XLSX WRITER — minimal, real, uncompressed-ZIP OOXML (no deps)
@@ -1083,6 +1143,8 @@ let APP = {
   correctionEntriesForKey: null, correctionEntriesPage: 0, correctionEntriesPageSize: 10,
   structureOpenPath: [],         // member ids from the chart's root member down to the deepest open one — the whole state of the structure chart
   structureZoom: 1,              // chart scale, clamped to ZOOM_MIN..ZOOM_MAX
+  viewYm: null,                  // which not-yet-closed month the figure screens show; null = the oldest open for entry
+  entryYm: null,                 // which month the entry form writes into; null = the same
 };
 let toastSeq = 0;
 
@@ -1148,7 +1210,7 @@ function confirmAction(opts) {
    Shows what actually moves before anything is committed; cancelling changes nothing. */
 const IMPACT_ROWS_SHOWN = 4;
 function confirmSettingsRecalc(opts) {
-  const ym = isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM;
+  const ym = viewYm();
   const monthName = ymLabel(ym);
   const im = opts.impact;
   const movers = opts.kind === 'royalty' ? im.royaltyMoves : im.slabMoves;
@@ -1279,13 +1341,14 @@ function buildSidebar() {
   return html;
 }
 function buildBanner() {
-  if (!isRecordingLocked()) return '';
   const oldest = oldestOutstandingYm();
+  if (!oldest) return '';
   const count = outstandingYms().length;
   return '<div class="banner"><div class="banner-text">' + ICON.alert.replace('<svg ', '<svg class="banner-icon" ') +
     '<span><strong>' + esc(ymLabel(oldest)) + '</strong> has ended and is awaiting close.' +
     (count > 1 ? ' ' + (count - 1) + ' more month' + (count > 2 ? 's are' : ' is') + ' outstanding after that.' : '') +
-    ' Volume entry is locked until it closes.</span></div>' +
+    ' You can still record entries dated in ' + esc(ymLabel(oldest)) + '. ' +
+    esc(ymLabel(CURRENT_YM)) + ' entries unlock once it closes.</span></div>' +
     '<button class="btn btn-primary btn-sm" onclick="P.startClose(\'' + oldest + '\')">Close ' + esc(ymLabel(oldest)) + '</button></div>';
 }
 function shell(contentHtml, head) {
@@ -1610,30 +1673,53 @@ function leaveDbRecovery() {
 /* ============================================================
    VIEW — Home / Search
    ============================================================ */
-function searchMembers(q) {
+// Rule-44 — one match function for every search box in the console. Name substring, member-number digits,
+// or phone digits with a four-digit floor so a short query can't sweep in half the network. Both sides are
+// reduced to digits before the phone compare, so formatting the admin typed is irrelevant; the stored value
+// is never rewritten.
+const PHONE_MIN_DIGITS = 4;
+function digitsOf(s) { return String(s == null ? '' : s).replace(/\D/g, ''); }
+// A number is the same number however it was written down: drop an international prefix or a trunk zero so
+// "+91 98765 43210", "098765 43210" and "9876543210" all reduce to the same key. Both the stored value and
+// the query go through this; the stored value itself is never rewritten.
+function phoneKey(s) {
+  const d = digitsOf(s);
+  return d.length > 10 ? d.slice(-10) : d.replace(/^0+/, '');
+}
+function memberMatches(m, q, qDigits, qPhone) {
+  if (m.name.toLowerCase().indexOf(q) !== -1) return true;
+  if (qDigits && String(m.id).indexOf(qDigits) !== -1) return true;
+  return qPhone.length >= PHONE_MIN_DIGITS && phoneKey(m.phone).indexOf(qPhone) !== -1;
+}
+function searchMembers(q, opts) {
   q = (q || '').trim().toLowerCase();
   if (!q) return null;
-  return MEMBERS.filter(function (m) { return m.name.toLowerCase().indexOf(q) !== -1 || String(m.id).indexOf(q) !== -1; }).slice(0, 25);
+  const qDigits = digitsOf(q);
+  const qPhone = phoneKey(q);
+  const activeOnly = opts && opts.activeOnly;
+  return MEMBERS.filter(function (m) {
+    return (!activeOnly || m.active) && memberMatches(m, q, qDigits, qPhone);
+  }).slice(0, (opts && opts.limit) || 25);
 }
 function homeResultsHtml(q) {
   const results = searchMembers(q);
   if (!results) {
-    return '<div class="empty-state">' + ICON.search.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:10px;opacity:.5" ') + '<div class="empty-state-title">Search for a member to see their details</div><div class="empty-state-sub">Type a name or 6-digit member number above — nothing is shown until you search.</div></div>';
+    return '<div class="empty-state">' + ICON.search.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:10px;opacity:.5" ') + '<div class="empty-state-title">Search for a member to see their details</div><div class="empty-state-sub">Type a name, 6-digit member number or phone number above — nothing is shown until you search.</div></div>';
   }
   const rows = results.map(function (m) {
-    return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + m.id + '})"><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td class="num">' + fmtInt(LIVE_TBV.get(m.id) || 0) + '</td><td>' + pillSlab(LIVE_REWARDS.get(m.id).ownSlab) + '</td><td>' + pillActive(m.active) + '</td></tr>';
+    return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + m.id + '})"><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td class="mono">' + esc(m.phone) + '</td><td class="num">' + fmtInt(liveTBV().get(m.id) || 0) + '</td><td>' + pillSlab(liveRewards().get(m.id).ownSlab) + '</td><td>' + pillActive(m.active) + '</td></tr>';
   }).join('');
   return '<div class="card-head"><div><div class="card-title">' + results.length + ' result' + (results.length === 1 ? '' : 's') + '</div>' +
     '<div class="card-sub">Matching "' + esc(q) + '"</div></div></div>' +
     (results.length === 0
-      ? '<div class="empty-state">' + ICON.inbox.replace('<svg ', '<svg style="width:32px;height:32px;margin-bottom:10px;opacity:.5" ') + '<div class="empty-state-title">No members match "' + esc(q) + '"</div><div class="empty-state-sub">Try a different name or member number.</div></div>'
-      : '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Member #</th><th class="num">Total Business Volume</th><th>Slab</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>');
+      ? '<div class="empty-state">' + ICON.inbox.replace('<svg ', '<svg style="width:32px;height:32px;margin-bottom:10px;opacity:.5" ') + '<div class="empty-state-title">No members match "' + esc(q) + '"</div><div class="empty-state-sub">Try a different name, member number or phone.</div></div>'
+      : '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Member #</th><th>Phone</th><th class="num">Total Business Volume</th><th>Slab</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>');
 }
 VIEWS.home = function () {
   const inactiveCount = MEMBERS.filter(function (m) { return !m.active; }).length;
-  const entriesThisPeriod = MEMBERS.filter(function (m) { return (LIVE_BV.get(m.id) || 0) > 0; }).length;
-  const topSlabCount = MEMBERS.filter(function (m) { return LIVE_REWARDS.get(m.id).ownSlab === topSlabPct(); }).length;
-  const buckets = sortedSlabTable().map(function (row) { return { pct: row.pct, count: MEMBERS.filter(function (m) { return LIVE_REWARDS.get(m.id).ownSlab === row.pct; }).length }; });
+  const entriesThisPeriod = MEMBERS.filter(function (m) { return (liveBV().get(m.id) || 0) > 0; }).length;
+  const topSlabCount = MEMBERS.filter(function (m) { return liveRewards().get(m.id).ownSlab === topSlabPct(); }).length;
+  const buckets = sortedSlabTable().map(function (row) { return { pct: row.pct, count: MEMBERS.filter(function (m) { return liveRewards().get(m.id).ownSlab === row.pct; }).length }; });
   const maxCount = Math.max.apply(null, buckets.map(function (b) { return b.count; }).concat([1]));
   const totalMembers = MEMBERS.length;
   const barsHtml = buckets.map(function (b) {
@@ -1642,10 +1728,10 @@ VIEWS.home = function () {
   const content =
     '<div class="stat-row n3">' +
     '<div class="stat-card"><div class="stat-label">Members</div><div class="stat-value">' + fmtInt(MEMBERS.length) + '</div><div class="stat-foot">' + inactiveCount + ' inactive</div></div>' +
-    '<div class="stat-card"><div class="stat-label">Entries this period</div><div class="stat-value">' + fmtInt(entriesThisPeriod) + '</div><div class="stat-foot">' + (isRecordingLocked() ? 'Recording locked' : ymLabel(CURRENT_YM)) + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">Entries this period</div><div class="stat-value">' + fmtInt(entriesThisPeriod) + '</div><div class="stat-foot">' + esc(ymLabel(viewYm())) + '</div></div>' +
     '<div class="stat-card"><div class="stat-label">On top slab</div><div class="stat-value">' + fmtInt(topSlabCount) + '</div><div class="stat-foot">' + pct(topSlabPct()) + ' and above</div></div>' +
-    '</div>' +
-    '<div class="card"><div class="field" style="margin-bottom:0"><div class="search-input-wrap">' + ICON.search + '<input id="home-search" type="text" placeholder="Search by name or 6-digit member number" oninput="P.homeSearchInput(this.value)"></div></div>' +
+    '</div>' + monthSwitcherHtml() +
+    '<div class="card"><div class="field" style="margin-bottom:0"><div class="search-input-wrap">' + ICON.search + '<input id="home-search" type="text" placeholder="Search by name, 6-digit member number or phone" oninput="P.homeSearchInput(this.value)"></div></div>' +
     '<div id="home-results" class="mt-3">' + homeResultsHtml('') + '</div></div>' +
     '<div class="card mt-3"><div class="card-title">Members by slab</div><div class="card-sub" style="margin-bottom:20px">Current live figures across all ' + totalMembers + ' members</div><div class="bar-list bar-list-lg">' + barsHtml + '</div></div>';
   return shell(content, { title: 'Home', sub: 'Search any member, or scan today’s standing', actions: '<button class="btn btn-primary" onclick="P.openAddMember()">' + ICON.plus + ' Add member</button>' });
@@ -1658,9 +1744,9 @@ VIEWS.member = function (params) {
   const m = membersById.get(params.id);
   if (!m) return shell('<div class="empty-state"><div class="empty-state-title">Member not found</div></div>', { title: 'Member' });
   if (APP.memberEntriesForId !== m.id) { APP.memberEntriesForId = m.id; APP.memberEntriesPage = 0; }
-  const tbv = LIVE_TBV.get(m.id) || 0;
-  const bv = LIVE_BV.get(m.id) || 0;
-  const rew = LIVE_REWARDS.get(m.id);
+  const tbv = liveTBV().get(m.id) || 0;
+  const bv = liveBV().get(m.id) || 0;
+  const rew = liveRewards().get(m.id);
   const kids = directChildren(m.id);
   const parent = m.refId ? membersById.get(m.refId) : null;
 
@@ -1674,7 +1760,7 @@ VIEWS.member = function (params) {
     : (rew.childCount > 0 ? '<tr><td colspan="3" class="muted">Royalty <span style="font-weight:400">— ' + rew.qualifyingCount + ' of ' + rew.childCount + ' legs on top slab (needs ' + SETTINGS.royaltyMinChildren + ')</span></td><td></td><td class="num muted">0.00</td></tr>' : '');
 
   const childRows = kids.map(function (c) {
-    return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + c.id + '})"><td class="cell-primary">' + esc(c.name) + '</td><td class="mono">' + c.id + '</td><td class="num">' + fmtInt(LIVE_TBV.get(c.id) || 0) + '</td><td>' + pillSlab(LIVE_REWARDS.get(c.id).ownSlab) + '</td><td>' + pillActive(c.active) + '</td></tr>';
+    return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + c.id + '})"><td class="cell-primary">' + esc(c.name) + '</td><td class="mono">' + c.id + '</td><td class="num">' + fmtInt(liveTBV().get(c.id) || 0) + '</td><td>' + pillSlab(liveRewards().get(c.id).ownSlab) + '</td><td>' + pillActive(c.active) + '</td></tr>';
   }).join('');
 
   const content =
@@ -1685,9 +1771,7 @@ VIEWS.member = function (params) {
     '<div class="flex gap-2">' +
     '<button class="btn btn-secondary" onclick="P.openEditMember(' + m.id + ')">Edit member</button>' +
     (m.id === ROOT_ID ? '' : (m.active ? '<button class="btn btn-danger" onclick="P.confirmDeactivate(' + m.id + ')">Deactivate</button>' : '<button class="btn btn-secondary" onclick="P.reactivateMember(' + m.id + ')">Reactivate</button>')) +
-    (isRecordingLocked()
-      ? '<button class="btn btn-primary" disabled title="Locked until ' + esc(ymLabel(oldestOutstandingYm())) + ' closes">Record volume</button>'
-      : '<button class="btn btn-primary" onclick="P.nav(\'entry\',{prefill:' + m.id + '})">Record volume</button>') +
+    '<button class="btn btn-primary" onclick="P.nav(\'entry\',{prefill:' + m.id + '})">Record volume</button>' +
     '</div></div></div>' +
     '<div class="stat-row">' +
     '<div class="stat-card"><div class="stat-label">Business Volume</div><div class="stat-value num">' + fmt2(bv) + '</div></div>' +
@@ -1723,10 +1807,10 @@ VIEWS.member = function (params) {
 
 /* ---- Member Detail: this period's entries (paginated, editable) ---- */
 function memberEntriesSorted(memberId) {
-  return (LIVE_ENTRIES.get(memberId) || []).slice().sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id; });
+  return (liveEntries().get(memberId) || []).slice().sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id; });
 }
 function memberEntriesCardHtml(memberId) {
-  const ym = isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM;
+  const ym = viewYm();
   const all = memberEntriesSorted(memberId);
   const pageSize = APP.memberEntriesPageSize || 10;
   const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
@@ -1754,18 +1838,18 @@ function memberEntriesNextPage() { APP.memberEntriesPage++; render(); }
 /* ---- Edit a single entry (date + amount, clamped to the active period's month) ---- */
 let EDIT_ENTRY_STATE = null;
 function periodMonthBounds(ym) {
-  ym = ym || (isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM);
+  ym = ym || (viewYm());
   return { min: ym + '-01', max: ym + '-' + pad2(lastDayOf(ym)) };
 }
 function openEditEntry(memberId, entryId) {
-  const entry = (LIVE_ENTRIES.get(memberId) || []).find(function (e) { return e.id === entryId; });
+  const entry = (liveEntries().get(memberId) || []).find(function (e) { return e.id === entryId; });
   if (!entry) return;
   EDIT_ENTRY_STATE = { memberId: memberId, entryId: entryId };
   const bounds = periodMonthBounds();
   openModal(
     '<div class="modal-header"><h2>Edit entry</h2><button class="modal-close" onclick="P.closeModal()">✕</button></div>' +
     '<div class="modal-body"><div id="edit-entry-errors"></div>' +
-    '<div class="field"><label for="edit-entry-date">Date</label><input id="edit-entry-date" type="date" min="' + bounds.min + '" max="' + bounds.max + '" value="' + entry.date + '" oninput="P.validateEditEntry()"><span class="hint">Must stay within ' + esc(ymLabel(isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM)) + '.</span></div>' +
+    '<div class="field"><label for="edit-entry-date">Date</label><input id="edit-entry-date" type="date" min="' + bounds.min + '" max="' + bounds.max + '" value="' + entry.date + '" oninput="P.validateEditEntry()"><span class="hint">Must stay within ' + esc(ymLabel(viewYm())) + '.</span></div>' +
     '<div class="field"><label for="edit-entry-amount">Business Volume</label><input id="edit-entry-amount" type="number" step="0.01" min="0.01" value="' + entry.amount + '" oninput="P.validateEditEntry()"></div>' +
     '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button><button class="btn btn-primary" id="edit-entry-save-btn" onclick="P.saveEditEntry()">Save</button></div>',
     { dismissable: true }
@@ -1784,7 +1868,7 @@ function validateEditEntry() {
 function saveEditEntry() {
   if (!validateEditEntry()) return;
   const s = EDIT_ENTRY_STATE;
-  const entry = (LIVE_ENTRIES.get(s.memberId) || []).find(function (e) { return e.id === s.entryId; });
+  const entry = (liveEntries().get(s.memberId) || []).find(function (e) { return e.id === s.entryId; });
   if (!entry) return;
   const m = membersById.get(s.memberId);
   const beforeDate = entry.date, beforeAmount = entry.amount;
@@ -1819,7 +1903,7 @@ VIEWS.structure = function (params) {
       (legs ? ' role="button" tabindex="0" aria-expanded="' + (isOpen ? 'true' : 'false') + '" onclick="P.structureToggle(' + n.id + ')" onkeydown="P.structureNodeKey(event,' + n.id + ')"' : '') + '>' +
       '<div class="flex" style="justify-content:space-between;align-items:flex-start"><div><div class="tree-node-name">' + esc(n.name) + (n.active ? '' : ' <span class="pill pill-inactive" style="margin-left:4px">Inactive</span>') + '</div><div class="tree-node-id">#' + n.id + '</div></div>' +
       '<button class="icon-btn" style="width:24px;height:24px;flex-shrink:0" title="View member detail" onclick="event.stopPropagation();P.nav(\'member\',{id:' + n.id + '})">' + ICON.search.replace('<svg ', '<svg style="width:12px;height:12px" ') + '</button></div>' +
-      '<div class="tree-node-bv"><span class="tree-node-bv-label">Business Volume</span><span class="tree-node-bv-val num">' + fmtInt(LIVE_BV.get(n.id) || 0) + '</span></div>' +
+      '<div class="tree-node-bv"><span class="tree-node-bv-label">Business Volume</span><span class="tree-node-bv-val num">' + fmtInt(liveBV().get(n.id) || 0) + '</span></div>' +
       '<div class="tree-node-foot"><span class="tree-node-legs">' +
       (legs ? ICON.chevron + legs + ' direct leg' + (legs === 1 ? '' : 's') : 'No legs beneath') +
       '</span></div></div>';
@@ -1852,7 +1936,7 @@ VIEWS.structure = function (params) {
 
   const toolbar = '<div class="tree-toolbar">' +
     '<div class="search-box"><div class="search-input-wrap">' + ICON.search +
-    '<input id="structure-search" type="text" placeholder="Search any member by name or 6-digit member number" oninput="P.structureSearchInput(this.value)" autocomplete="off"></div>' +
+    '<input id="structure-search" type="text" placeholder="Search any member by name, 6-digit member number or phone" oninput="P.structureSearchInput(this.value)" autocomplete="off"></div>' +
     '<div id="structure-search-results"></div></div>' +
     '<div class="tree-zoom" style="margin-left:auto">' +
     '<button' + (zoom <= ZOOM_MIN + 1e-6 ? ' disabled' : '') + ' title="Zoom out" aria-label="Zoom out" onclick="P.structureZoomBy(-1)">−</button>' +
@@ -1861,16 +1945,149 @@ VIEWS.structure = function (params) {
     '<button onclick="P.structureZoomFit()">Fit width</button>' +
     '</div>' +
     '<button class="btn btn-secondary"' + (openPath.length > 1 ? '' : ' disabled') + ' onclick="P.structureCollapseAll()">Collapse all</button>' +
+    '<button class="btn btn-secondary" onclick="P.openFullHierarchy()">View full hierarchy</button>' +
     '</div>';
 
   const content = toolbar + treeWrapHtml +
     '<div class="muted" style="font-size:12px;margin-top:12px;text-align:center">' +
     'Click a member to open the legs beneath them; opening one closes the branch already open at that level. ' +
     'A wide level scrolls sideways — use the zoom to take more of it in. ' +
-    'Each card shows name, member number and own Business Volume only.</div>';
+    'Each card shows name, member number and own Business Volume only. ' +
+    '<strong>View full hierarchy</strong> opens the whole structure, every branch expanded, in a separate window.</div>';
 
   return shell(content, { title: 'Structure', sub: 'Open one branch at a time', breadcrumb: breadcrumb });
 };
+
+/* ============================================================
+   FULL HIERARCHY WINDOW (FR-10 / Rule-45)
+   A separate window that draws the whole structure once and then forgets it. The main console does no work
+   beyond counting and opening — no shared state, no refresh, no handle back into here.
+   ============================================================ */
+const FULL_TREE_GATE = 60;          // V4.5 — above this, name the count and ask first
+const FT = { NODE_W: 172, NODE_H: 96, GAP_X: 18, GAP_Y: 46 };
+function descendantCount(id) {
+  let n = 0;
+  (function walk(mid) { directChildren(mid).forEach(function (c) { n++; walk(c.id); }); })(id);
+  return n;
+}
+function openFullHierarchy() {
+  const count = descendantCount(ROOT_ID);
+  if (count > FULL_TREE_GATE) {
+    openModal(
+      '<div class="modal-header"><h2>Open the full hierarchy?</h2><button class="modal-close" onclick="P.closeModal()">✕</button></div>' +
+      '<div class="modal-body"><p style="font-size:13px;line-height:1.55">This will draw <strong>' + fmtInt(count + 1) + ' members</strong> in a new window. It may take a moment, and a structure this size is very wide — use the zoom to take it in.</p>' +
+      '<p class="muted" style="font-size:12.5px;margin-top:10px">The console stays usable while it draws. The new window is a picture of this moment and does not update.</p></div>' +
+      '<div class="modal-footer"><button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button><button class="btn btn-primary" onclick="P.closeModal();P.drawFullHierarchy()">Open</button></div>',
+      { dismissable: true }
+    );
+    return;
+  }
+  drawFullHierarchy();
+}
+// One post-order pass: work out each subtree's width, place the node over its children, and collect the
+// connector segments as we go. No DOM measurement anywhere, so cost is linear in the node count.
+function layoutFullTree(rootId) {
+  const nodes = [], segs = [];
+  let cursor = 0, maxDepth = 0;
+  (function place(id, depth) {
+    if (depth > maxDepth) maxDepth = depth;
+    const kids = directChildren(id);
+    let x;
+    if (!kids.length) { x = cursor; cursor += FT.NODE_W + FT.GAP_X; }
+    else {
+      const xs = kids.map(function (c) { return place(c.id, depth + 1); });
+      x = (xs[0] + xs[xs.length - 1]) / 2;
+    }
+    const y = depth * (FT.NODE_H + FT.GAP_Y);
+    nodes.push({ m: membersById.get(id), x: x, y: y, depth: depth, legs: kids.length });
+    kids.forEach(function (c) {
+      const cx = nodes.find(function (n) { return n.m.id === c.id; }).x + FT.NODE_W / 2;
+      const px = x + FT.NODE_W / 2, py = y + FT.NODE_H, cy = y + FT.NODE_H + FT.GAP_Y;
+      const mid = py + FT.GAP_Y / 2;
+      segs.push('M' + px + ' ' + py + 'V' + mid + 'H' + cx + 'V' + cy);
+    });
+    return x;
+  })(rootId, 0);
+  return { nodes: nodes, path: segs.join(' '), width: Math.max(cursor, FT.NODE_W), height: (maxDepth + 1) * (FT.NODE_H + FT.GAP_Y) };
+}
+function drawFullHierarchy() {
+  const root = membersById.get(ROOT_ID);
+  const L = layoutFullTree(ROOT_ID);
+  const ym = viewYm();
+  const bv = liveBV(ym);
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const stamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const nodesHtml = L.nodes.map(function (n) {
+    const m = n.m;
+    return '<div class="ft-node' + (n.depth === 0 ? ' ft-root' : '') + (m.active ? '' : ' ft-inactive') + '"' +
+      ' id="ft-' + m.id + '" data-name="' + esc(m.name.toLowerCase()) + '" data-id="' + m.id + '" data-phone="' + esc(phoneKey(m.phone)) + '"' +
+      ' style="left:' + n.x + 'px;top:' + n.y + 'px">' +
+      '<div class="ft-name">' + esc(m.name) + (m.active ? '' : ' <span class="ft-pill">Inactive</span>') + '</div>' +
+      '<div class="ft-id">#' + m.id + '</div>' +
+      '<div class="ft-bv"><span class="ft-bv-label">Business Volume</span><span class="ft-bv-val">' + fmtInt(bv.get(m.id) || 0) + '</span></div>' +
+      '</div>';
+  }).join('');
+
+  const doc = '<!doctype html><html lang="en"' + (isDark ? ' data-theme="dark"' : '') + '><head><meta charset="utf-8">' +
+    '<title>Full hierarchy — ' + esc(root.name) + '</title>' +
+    '<style>' +
+    ':root{--accent:#4f46e5;--accent-weak:#eef2ff;--bg:#f8fafc;--surface:#fff;--border:#e2e8f0;--text:#0f172a;--text-muted:#64748b;--warning:#d97706;--warning-weak:#fffbeb;color-scheme:light}' +
+    'html[data-theme="dark"]{--accent:#6366f1;--accent-weak:#1e1b4b;--bg:#0f172a;--surface:#1e293b;--border:#334155;--text:#f1f5f9;--text-muted:#94a3b8;--warning:#f59e0b;--warning-weak:#3a2a06;color-scheme:dark}' +
+    '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}' +
+    '.ft-bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--border)}' +
+    '.ft-title{font-size:15px;font-weight:650}.ft-sub{font-size:12px;color:var(--text-muted)}' +
+    '.ft-tools{margin-left:auto;display:flex;align-items:center;gap:8px}' +
+    '.ft-zoom{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--border);border-radius:6px;padding:2px;background:var(--bg)}' +
+    '.ft-zoom button,.ft-btn{border:1px solid transparent;background:none;height:28px;min-width:30px;padding:0 10px;border-radius:5px;cursor:pointer;color:var(--text-muted);font:inherit;font-size:12.5px;font-weight:550}' +
+    '.ft-btn{border-color:var(--border);background:var(--surface);color:var(--text)}.ft-btn:hover{border-color:var(--accent);color:var(--accent)}' +
+    '.ft-zoom button:hover{background:var(--surface);color:var(--text)}.ft-level{min-width:48px;text-align:center;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text-muted)}' +
+    '.ft-search{height:28px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font:inherit;font-size:12.5px;width:210px}' +
+    '.ft-wrap{overflow:auto;padding:28px}.ft-canvas{position:relative;transform-origin:0 0}' +
+    '.ft-node{position:absolute;width:172px;height:96px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:11px 12px}' +
+    '.ft-root{border-color:var(--accent);background:var(--accent-weak)}' +
+    '.ft-inactive{background:var(--warning-weak);border-color:var(--warning)}' +
+    '.ft-hit{outline:2px solid var(--accent);outline-offset:2px}' +
+    '.ft-name{font-size:13px;font-weight:650;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.ft-pill{font-size:9.5px;font-weight:650;color:var(--warning);border:1px solid var(--warning);border-radius:999px;padding:0 5px;vertical-align:1px}' +
+    '.ft-id{font-size:11px;color:var(--text-muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}' +
+    '.ft-bv{display:flex;justify-content:space-between;align-items:baseline;margin-top:9px;padding-top:8px;border-top:1px solid var(--border)}' +
+    '.ft-bv-label{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}' +
+    '.ft-bv-val{font-size:14px;font-weight:650;font-variant-numeric:tabular-nums}' +
+    '.ft-links{position:absolute;inset:0;pointer-events:none;overflow:visible}' +
+    '.ft-links path{fill:none;stroke:var(--border);stroke-width:1.5}' +
+    '@media print{.ft-bar .ft-tools{display:none}.ft-wrap{overflow:visible;padding:0}body{background:#fff}}' +
+    '</style></head><body>' +
+    '<div class="ft-bar"><div><div class="ft-title">Full hierarchy — ' + esc(root.name) + '</div>' +
+    '<div class="ft-sub">' + fmtInt(L.nodes.length) + ' members · figures for ' + esc(ymLabel(ym)) + ' · as at ' + esc(stamp) + '</div></div>' +
+    '<div class="ft-tools">' +
+    '<input class="ft-search" type="text" placeholder="Find a member by name, number or phone" oninput="ftFind(this.value)">' +
+    '<div class="ft-zoom"><button onclick="ftZoom(-1)" title="Zoom out">−</button><span class="ft-level" id="ft-level">100%</span>' +
+    '<button onclick="ftZoom(1)" title="Zoom in">+</button><button onclick="ftFit()">Fit width</button></div>' +
+    '<button class="ft-btn" onclick="window.print()">Print</button></div></div>' +
+    '<div class="ft-wrap" id="ft-wrap"><div class="ft-canvas" id="ft-canvas" style="width:' + L.width + 'px;height:' + L.height + 'px">' +
+    '<svg class="ft-links" width="' + L.width + '" height="' + L.height + '"><path d="' + L.path + '"/></svg>' +
+    nodesHtml + '</div></div>' +
+    '<script>' +
+    'var z=1,MIN=0.1,MAX=1.5,hit=null;' +
+    'function ftApply(){document.getElementById("ft-canvas").style.transform="scale("+z+")";document.getElementById("ft-level").textContent=Math.round(z*100)+"%";}' +
+    'function ftZoom(d){z=Math.min(MAX,Math.max(MIN,Math.round((z+d*0.1)*100)/100));ftApply();}' +
+    'function ftFit(){var w=document.getElementById("ft-wrap"),c=document.getElementById("ft-canvas");z=Math.min(MAX,Math.max(MIN,(w.clientWidth-56)/c.offsetWidth));ftApply();}' +
+    'function ftFind(q){q=(q||"").trim().toLowerCase();if(hit){hit.classList.remove("ft-hit");hit=null;}if(!q)return;' +
+    'var d=q.replace(/\\D/g,"");if(d.length>10)d=d.slice(-10);else d=d.replace(/^0+/,"");' +
+    'var all=document.querySelectorAll(".ft-node");' +
+    'for(var i=0;i<all.length;i++){var n=all[i];' +
+    'if(n.dataset.name.indexOf(q)!==-1||(d&&n.dataset.id.indexOf(d)!==-1)||(d.length>=4&&n.dataset.phone.indexOf(d)!==-1)){' +
+    'hit=n;n.classList.add("ft-hit");n.scrollIntoView({block:"center",inline:"center"});return;}}}' +
+    '<\/script></body></html>';
+
+  const w = window.open('', 'full-hierarchy-' + Date.now());
+  if (!w) { toast('Allow pop-ups to open the full hierarchy', 'danger'); return; }
+  w.document.write(doc);
+  w.document.close();
+  w.focus();
+}
 
 function structureToggle(id) {
   if (!directChildren(id).length) return;
@@ -1899,9 +2116,9 @@ function structureZoomFit() {
   render();
 }
 function structureSearchInput(q) {
-  const results = searchMembers(q);
+  const results = searchMembers(q, { limit: 8 });
   if (!results) { setHtml('structure-search-results', ''); return; }
-  setHtml('structure-search-results', '<div class="search-results">' + (results.length ? results.slice(0, 8).map(function (m) {
+  setHtml('structure-search-results', '<div class="search-results">' + (results.length ? results.map(function (m) {
     return '<div class="search-result-row" onclick="P.structureSearchSelect(' + m.id + ')">' + avatar(m.name, true) + '<div><div class="search-result-name">' + esc(m.name) + '</div><div class="search-result-meta">#' + m.id + ' · level ' + m.level + (m.active ? '' : ' · Inactive') + '</div></div></div>';
   }).join('') : '<div class="search-empty">No members match</div>') + '</div>');
 }
@@ -1953,7 +2170,7 @@ function refFieldInner() {
   }
   return '<label for="ref-search">Introducer (Reference ID) *</label>' +
     (s.refId ? refChip(s.refId) :
-      '<div class="search-box"><div class="search-input-wrap">' + ICON.search + '<input id="ref-search" type="text" placeholder="Search an existing active member" oninput="P.refSearchInput(this.value)" autocomplete="off"></div><div id="ref-search-results"></div></div>') +
+      '<div class="search-box"><div class="search-input-wrap">' + ICON.search + '<input id="ref-search" type="text" placeholder="Search an active member by name, number or phone" oninput="P.refSearchInput(this.value)" autocomplete="off"></div><div id="ref-search-results"></div></div>') +
     '<span class="hint">Must resolve to an existing, active member. Locked once saved.</span>';
 }
 function memberModalHtml() {
@@ -1993,9 +2210,9 @@ function switchToReactivate(inactiveId) {
   openModal(memberModalHtml(), { dismissable: false });
 }
 function refSearchInput(q) {
-  q = q.trim().toLowerCase();
-  if (!q) { setHtml('ref-search-results', ''); return; }
-  const results = MEMBERS.filter(function (m) { return m.active && (m.name.toLowerCase().indexOf(q) !== -1 || String(m.id).indexOf(q) !== -1); }).slice(0, 8);
+  // Rule-30 — a reference must resolve to an existing *active* member, so this one filters on top of the shared match
+  const results = searchMembers(q, { limit: 8, activeOnly: true });
+  if (!results) { setHtml('ref-search-results', ''); return; }
   setHtml('ref-search-results', '<div class="search-results" style="position:static;margin-top:6px;box-shadow:none">' +
     (results.length ? results.map(function (m) { return '<div class="search-result-row" onclick="P.selectRef(' + m.id + ')">' + avatar(m.name, true) + '<div><div class="search-result-name">' + esc(m.name) + '</div><div class="search-result-meta">#' + m.id + '</div></div></div>'; }).join('')
       : '<div class="search-empty">No active member matches</div>') + '</div>');
@@ -2007,7 +2224,8 @@ function checkPhone() {
   const phone = val('member-phone').trim();
   const s = MODAL_STATE;
   if (!phone) { setHtml('phone-banner', ''); return; }
-  const dup = MEMBERS.find(function (m) { return m.phone === phone && m.id !== s.id; });
+  // Rule-34 — uniqueness is a property of the number, not of how it was typed, so compare digits
+  const dup = MEMBERS.find(function (m) { return phoneKey(m.phone) === phoneKey(phone) && m.id !== s.id; });
   if (!dup) { setHtml('phone-banner', ''); return; }
   if (dup.active) setHtml('phone-banner', '<div class="modal-danger-note">This number is already in use by <strong>' + esc(dup.name) + '</strong> (#' + dup.id + ').</div>');
   else setHtml('phone-banner', '<div class="modal-warn">This number matches an inactive member — <strong>' + esc(dup.name) + '</strong> (#' + dup.id + '). <a href="javascript:void(0)" onclick="P.switchToReactivate(' + dup.id + ')">Reactivate them instead</a></div>');
@@ -2024,7 +2242,7 @@ function saveMember() {
     if (!s.refId) errors.push('Choose an introducer.');
     const consented = document.getElementById('member-consent') && document.getElementById('member-consent').checked;
     if (!consented) errors.push('Consent is required before this member can be saved.');
-    const dup = MEMBERS.find(function (x) { return x.phone === phone; });
+    const dup = MEMBERS.find(function (x) { return phoneKey(x.phone) === phoneKey(phone); });
     if (dup && dup.active) errors.push('This phone number is already in use by an active member.');
   }
   if (errors.length) { showModalErrors(errors); return; }
@@ -2069,23 +2287,26 @@ function reactivateMember(id) {
 /* ============================================================
    VIEW — Business Volume entry
    ============================================================ */
-function recordEntry(memberId, amount, date) {
-  const list = LIVE_ENTRIES.get(memberId) || [];
-  list.push({ id: newEntryId(), date: date || isoToday(0), amount: amount });
-  LIVE_ENTRIES.set(memberId, list);
-  recalcLive();
+function recordEntry(memberId, amount, date, ym) {
+  date = date || isoToday(0);
+  ym = ym || date.slice(0, 7); // the entry's own date decides its period, nothing else
+  const list = liveEntries(ym).get(memberId) || [];
+  list.push({ id: newEntryId(), date: date, amount: amount });
+  liveEntries(ym).set(memberId, list);
+  recalcLive(ym); // confined to this period — no other live month is touched
 }
 function entrySelectedCardHtml(id, slabPctOverride, clearFn) {
   const m = membersById.get(id);
   if (!m) return '';
-  const slabPct = slabPctOverride != null ? slabPctOverride : LIVE_REWARDS.get(m.id).ownSlab;
+  const slabPct = slabPctOverride != null ? slabPctOverride : liveRewards().get(m.id).ownSlab;
   return '<div class="card" style="margin-bottom:14px"><div class="flex gap-3" style="align-items:center;justify-content:space-between">' +
     '<div class="flex gap-3" style="align-items:center">' + avatar(m.name) + '<div><div style="font-weight:650;font-size:13.5px">' + esc(m.name) + '</div><div class="muted" style="font-size:12px">#' + m.id + ' · ' + pct(slabPct) + ' slab</div></div></div>' +
     '<button class="btn btn-ghost btn-sm" onclick="P.' + (clearFn || 'entryClearSelection') + '()">Change</button></div></div>';
 }
 function entryEntriesListHtml() {
-  const feed = allLiveEntriesFlat();
-  if (!feed.length) return '<div class="empty-state" style="padding:26px 12px">' + ICON.entry.replace('<svg ', '<svg style="width:24px;height:24px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No entries yet this period</div></div>';
+  const ym = entryYm();
+  const feed = allLiveEntriesFlat(ym);
+  if (!feed.length) return '<div class="empty-state" style="padding:26px 12px">' + ICON.entry.replace('<svg ', '<svg style="width:24px;height:24px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No entries yet in ' + esc(ymLabel(ym)) + '</div></div>';
   const rows = feed.map(function (e) {
     const m = membersById.get(e.memberId);
     return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + m.id + '})"><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td>' + ddmmyyyy(e.date) + '</td><td class="num">' + fmt2(e.amount) + '</td></tr>';
@@ -2093,38 +2314,60 @@ function entryEntriesListHtml() {
   return '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Member #</th><th>Recorded</th><th class="num">Business Volume</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 function entryStatRowHtml() {
-  const entriesCount = MEMBERS.filter(function (m) { return (LIVE_BV.get(m.id) || 0) > 0; }).length;
+  const ym = entryYm();
+  const entriesCount = MEMBERS.filter(function (m) { return (liveBV(ym).get(m.id) || 0) > 0; }).length;
   const today = isoToday(0);
-  const todayCount = allLiveEntriesFlat().filter(function (e) { return e.date === today; }).length;
+  const todayCount = allLiveEntriesFlat(ym).filter(function (e) { return e.date === today; }).length;
   const remaining = MEMBERS.length - entriesCount;
   return '<div class="stat-row n3">' +
-    '<div class="stat-card"><div class="stat-label">Entries this period</div><div class="stat-value">' + fmtInt(entriesCount) + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">Entries in ' + esc(ymLabel(ym)) + '</div><div class="stat-value">' + fmtInt(entriesCount) + '</div></div>' +
     '<div class="stat-card"><div class="stat-label">Recorded today</div><div class="stat-value">' + fmtInt(todayCount) + '</div></div>' +
     '<div class="stat-card"><div class="stat-label">Not yet recorded</div><div class="stat-value">' + fmtInt(remaining) + '</div></div>' +
     '</div>';
 }
+// Rule-36 (amended) — the entry form is always available. What varies is which month it writes into.
+function entryYm() {
+  const yms = entryYms();
+  return (APP.entryYm && yms.indexOf(APP.entryYm) !== -1) ? APP.entryYm : yms[0];
+}
+function setEntryYm(ym) { APP.entryYm = ym; APP.viewYm = ym; render(); }
+function entryDateBounds(ym) {
+  const b = periodMonthBounds(ym);
+  // the current month can't be recorded ahead of itself; a past month is bounded by its own last day
+  return { min: b.min, max: ym === CURRENT_YM ? isoToday(0) : b.max };
+}
+function entryMonthNoteHtml() {
+  const ym = entryYm();
+  const blocking = currentMonthBlockedBy();
+  return '<div class="modal-warn mb-3" style="margin-bottom:14px">Recording into <strong>' + esc(ymLabel(ym)) + '</strong>.' +
+    (blocking
+      ? ' ' + esc(ymLabel(CURRENT_YM)) + ' entries can be recorded once ' + esc(ymLabel(blocking)) + ' is closed.'
+      : ' Dates are limited to this month.') + '</div>';
+}
+function entryMonthSelectHtml() {
+  const yms = entryYms();
+  if (yms.length < 2) return ''; // no choice to make, so no control
+  return '<div class="field"><label for="entry-ym">Month</label><select id="entry-ym" onchange="P.setEntryYm(this.value)">' +
+    yms.map(function (y) { return '<option value="' + y + '"' + (y === entryYm() ? ' selected' : '') + '>' + esc(ymLabel(y)) + '</option>'; }).join('') +
+    '</select><span class="hint">' + yms.length + ' months are awaiting close; each accepts entries dated within it.</span></div>';
+}
 VIEWS.entry = function (params) {
   if (params && params.prefill) { APP.entrySelectedId = params.prefill; }
-  const locked = isRecordingLocked();
-  if (locked) {
-    const content = '<div class="entry-wrap">' + entryStatRowHtml() + '<div class="card"><div class="empty-state">' + ICON.lock.replace('<svg ', '<svg style="width:30px;height:30px;margin-bottom:10px;opacity:.6;color:var(--warning)" ') +
-      '<div class="empty-state-title">Volume entry is locked</div>' +
-      '<div class="empty-state-sub" style="max-width:420px;margin:0 auto">' + esc(ymLabel(oldestOutstandingYm())) + ' has ended and is waiting to close. Entry stays locked until every outstanding month is closed, oldest first.</div>' +
-      '<button class="btn btn-primary mt-3" onclick="P.startClose(\'' + oldestOutstandingYm() + '\')">Close ' + esc(ymLabel(oldestOutstandingYm())) + '</button></div></div></div>';
-    return shell(content, { title: 'Volume entry', sub: 'Record this period’s Business Volume', noBanner: false, breadcrumb: '<div class="breadcrumb">' + backLink() + '</div>' });
-  }
   const correction = APP.correctionMode;
-  const addBounds = { min: CURRENT_YM + '-01', max: isoToday(0) };
+  const ym = entryYm();
+  const bounds = entryDateBounds(ym);
   const content = '<div class="entry-wrap">' + entryStatRowHtml() + (correction ? renderCorrectionPanel() :
+    entryMonthNoteHtml() +
     '<div class="card">' +
     (APP.entrySelectedId ? entrySelectedCardHtml(APP.entrySelectedId) :
-      '<div class="search-box mb-3"><div class="search-input-wrap">' + ICON.search + '<input id="entry-search" type="text" placeholder="Search by name or 6-digit member number" oninput="P.entrySearchInput(this.value)" autocomplete="off"></div><div id="entry-search-results"></div></div>') +
-    '<div class="field"><label for="entry-date">Date *</label><input id="entry-date" type="date" min="' + addBounds.min + '" max="' + addBounds.max + '" value="' + addBounds.max + '" ' + (APP.entrySelectedId ? '' : 'disabled') + ' oninput="P.validateEntryForm()"></div>' +
+      '<div class="search-box mb-3"><div class="search-input-wrap">' + ICON.search + '<input id="entry-search" type="text" placeholder="Search by name, 6-digit member number or phone" oninput="P.entrySearchInput(this.value)" autocomplete="off"></div><div id="entry-search-results"></div></div>') +
+    entryMonthSelectHtml() +
+    '<div class="field"><label for="entry-date">Date *</label><input id="entry-date" type="date" min="' + bounds.min + '" max="' + bounds.max + '" value="' + bounds.max + '" ' + (APP.entrySelectedId ? '' : 'disabled') + ' oninput="P.validateEntryForm()"><span class="hint">Must fall within ' + esc(ymLabel(ym)) + '.</span></div>' +
     '<div class="field"><label for="entry-amount">Business Volume *</label><input id="entry-amount" class="entry-amount-input" type="number" step="0.01" min="0.01" placeholder="0.00" ' + (APP.entrySelectedId ? '' : 'disabled') + ' oninput="P.validateEntryForm()"><span class="hint" id="entry-amount-hint">Up to two decimals · no currency field</span></div>' +
     '<button class="btn btn-primary btn-block" id="entry-save-btn" disabled onclick="P.saveEntry()">Save entry</button>' +
     '</div><div class="auth-foot" style="margin-top:14px;text-align:left"><a href="javascript:void(0)" onclick="P.toggleCorrectionMode()">Correct a closed month instead →</a></div>' +
-    '<div class="card mt-3"><div class="card-title mb-3">This period’s entries</div>' + entryEntriesListHtml() + '</div>') + '</div>';
-  return shell(content, { title: 'Volume entry', sub: correction ? 'Correcting a closed month' : 'Record this period’s Business Volume', breadcrumb: '<div class="breadcrumb">' + backLink() + '</div>' });
+    '<div class="card mt-3"><div class="card-title mb-3">' + esc(ymLabel(ym)) + ' entries</div>' + entryEntriesListHtml() + '</div>') + '</div>';
+  return shell(content, { title: 'Volume entry', sub: correction ? 'Correcting a closed month' : 'Recording into ' + ymLabel(ym), breadcrumb: '<div class="breadcrumb">' + backLink() + '</div>' });
 };
 function renderCorrectionPanel() {
   const yms = closedYms();
@@ -2135,7 +2378,7 @@ function renderCorrectionPanel() {
     '<div class="card">' +
     '<div class="field"><label for="correction-ym">Month</label><select id="correction-ym" onchange="P.correctionMonthChange(this.value)">' + yms.map(function (y) { return '<option value="' + y + '"' + (y === ym ? ' selected' : '') + '>' + ymLabel(y) + '</option>'; }).join('') + '</select></div>' +
     (APP.correctionSelectedId ? entrySelectedCardHtml(APP.correctionSelectedId, historicalSlab, 'clearCorrectionSelection') :
-      '<div class="search-box"><div class="search-input-wrap">' + ICON.search + '<input id="correction-search" type="text" placeholder="Search by name or member number" oninput="P.correctionSearchInput(this.value)" autocomplete="off"></div><div id="correction-search-results"></div></div>') +
+      '<div class="search-box"><div class="search-input-wrap">' + ICON.search + '<input id="correction-search" type="text" placeholder="Search by name, member number or phone" oninput="P.correctionSearchInput(this.value)" autocomplete="off"></div><div id="correction-search-results"></div></div>') +
     '</div>' +
     (APP.correctionSelectedId ? correctionEntriesCardHtml(ym, APP.correctionSelectedId) : '') +
     '<div class="auth-foot" style="margin-top:14px;text-align:left"><a href="javascript:void(0)" onclick="P.toggleCorrectionMode()">← Back to volume entry</a></div>';
@@ -2235,9 +2478,8 @@ function saveClosedEntryModal() {
 }
 function clearCorrectionSelection() { APP.correctionSelectedId = null; render(); }
 function entrySearchInput(q) {
-  q = q.trim().toLowerCase();
-  if (!q) { setHtml('entry-search-results', ''); return; }
-  const results = MEMBERS.filter(function (m) { return m.name.toLowerCase().indexOf(q) !== -1 || String(m.id).indexOf(q) !== -1; }).slice(0, 8);
+  const results = searchMembers(q, { limit: 8 });
+  if (!results) { setHtml('entry-search-results', ''); return; }
   setHtml('entry-search-results', '<div class="search-results">' + (results.length ? results.map(function (m) {
     return '<div class="search-result-row" onclick="P.entrySelectMember(' + m.id + ')">' + avatar(m.name, true) + '<div><div class="search-result-name">' + esc(m.name) + '</div><div class="search-result-meta">#' + m.id + (m.active ? '' : ' · Inactive') + '</div></div></div>';
   }).join('') : '<div class="search-empty">No members match</div>') + '</div>');
@@ -2248,28 +2490,35 @@ function validateEntryForm() {
   const btn = document.getElementById('entry-save-btn'); const hint = document.getElementById('entry-amount-hint');
   const n = parseFloat(val('entry-amount'));
   const date = val('entry-date');
-  const minD = CURRENT_YM + '-01', maxD = isoToday(0);
+  const ym = entryYm();
+  const bounds = entryDateBounds(ym);
   const amountOk = val('entry-amount') !== '' && !isNaN(n) && n > 0;
-  const dateOk = date >= minD && date <= maxD;
+  const dateOk = date >= bounds.min && date <= bounds.max;
   const ok = amountOk && dateOk;
   if (btn) btn.disabled = !ok;
-  if (hint) { hint.textContent = !amountOk ? 'Enter an amount greater than zero' : (!dateOk ? 'Pick a date within this month, not in the future' : 'Up to two decimals · no currency field'); hint.className = 'hint' + (ok ? '' : ' warn'); }
+  if (hint) { hint.textContent = !amountOk ? 'Enter an amount greater than zero' : (!dateOk ? 'Pick a date within ' + ymLabel(ym) + ', not in the future' : 'Up to two decimals · no currency field'); hint.className = 'hint' + (ok ? '' : ' warn'); }
 }
 function saveEntry() {
   const id = APP.entrySelectedId; const n = parseFloat(val('entry-amount')); const date = val('entry-date');
   if (!id || isNaN(n) || n <= 0 || !date) return;
-  recordEntry(id, Math.round(n * 100) / 100, date);
+  // an entry belongs to the month its own date falls in, never to "the month being closed" (Rule-21)
+  const ym = date.slice(0, 7);
+  if (entryYms().indexOf(ym) === -1) {
+    const blocking = currentMonthBlockedBy();
+    toast(ymLabel(ym) + ' cannot be recorded into' + (blocking ? ' until ' + ymLabel(blocking) + ' is closed' : ''), 'error');
+    return;
+  }
+  recordEntry(id, Math.round(n * 100) / 100, date, ym);
   const m = membersById.get(id);
-  pushAudit({ member: m.name, field: 'Business Volume', before: '—', after: fmt2(n), cause: 'Volume entry recorded' });
-  toast('Entry saved for ' + m.name, 'success');
+  pushAudit({ member: m.name, field: 'Business Volume (' + ymLabel(ym) + ')', before: '—', after: fmt2(n), cause: 'Volume entry recorded' });
+  toast('Entry saved for ' + m.name + ' — ' + ymLabel(ym), 'success');
   APP.entrySelectedId = null; render();
 }
 function toggleCorrectionMode() { APP.correctionMode = !APP.correctionMode; APP.correctionSelectedId = null; render(); }
 function correctionMonthChange(ym) { APP.correctionYm = ym; render(); }
 function correctionSearchInput(q) {
-  q = q.trim().toLowerCase();
-  if (!q) { setHtml('correction-search-results', ''); return; }
-  const results = MEMBERS.filter(function (m) { return m.name.toLowerCase().indexOf(q) !== -1 || String(m.id).indexOf(q) !== -1; }).slice(0, 8);
+  const results = searchMembers(q, { limit: 8 });
+  if (!results) { setHtml('correction-search-results', ''); return; }
   setHtml('correction-search-results', '<div class="search-results">' + (results.length ? results.map(function (m) {
     return '<div class="search-result-row" onclick="P.selectCorrectionMember(' + m.id + ')">' + avatar(m.name, true) + '<div><div class="search-result-name">' + esc(m.name) + '</div><div class="search-result-meta">#' + m.id + '</div></div></div>';
   }).join('') : '<div class="search-empty">No members match</div>') + '</div>');
@@ -2300,13 +2549,13 @@ function renderCloseWizard() {
   const segs = [0, 1, 2, 3].map(function (i) { return '<div class="seg' + (i < w.step ? ' done' : i === w.step ? ' active' : '') + '"></div>'; }).join('');
   let body;
   if (w.step === 0) {
-    const liveCount = MEMBERS.filter(function (m) { return (LIVE_BV.get(m.id) || 0) > 0; }).length;
+    const liveCount = MEMBERS.filter(function (m) { return (liveBV().get(m.id) || 0) > 0; }).length;
     body = '<div class="wizard-icon-wrap">' + ICON.close + '</div><div class="wizard-title">Close ' + esc(ymLabel(ym)) + '</div>' +
       '<div class="wizard-sub">This writes a permanent record for every member, then clears live Business Volume, Total Business Volume and Rewards to zero for the new period. <strong>This step cannot be undone.</strong></div>' +
       '<div class="wizard-body"><div class="stat-row n3" style="margin-bottom:0">' +
       '<div class="stat-card"><div class="stat-label">Members</div><div class="stat-value">' + fmtInt(MEMBERS.length) + '</div></div>' +
       '<div class="stat-card"><div class="stat-label">With an entry</div><div class="stat-value">' + fmtInt(liveCount) + '</div></div>' +
-      '<div class="stat-card"><div class="stat-label">On top slab</div><div class="stat-value">' + fmtInt(MEMBERS.filter(function (m) { return LIVE_REWARDS.get(m.id).ownSlab === topSlabPct(); }).length) + '</div></div>' +
+      '<div class="stat-card"><div class="stat-label">On top slab</div><div class="stat-value">' + fmtInt(MEMBERS.filter(function (m) { return liveRewards().get(m.id).ownSlab === topSlabPct(); }).length) + '</div></div>' +
       '</div></div><div class="wizard-actions"><button class="btn btn-secondary" onclick="P.closeWizardExit()">Cancel</button><button class="btn btn-primary" onclick="P.closeWizardNext()">Continue</button></div>';
   } else if (w.step === 1) {
     body = '<div class="wizard-icon-wrap">' + ICON.shield + '</div><div class="wizard-title">Confirm a backup</div>' +
@@ -2338,12 +2587,13 @@ function closeWizardBack() { APP.closeWizard.step--; render(); }
 function generateBackup() { APP.closeWizard.backupGenerating = true; render(); setTimeout(function () { APP.closeWizard.backupGenerating = false; APP.closeWizard.backupConfirmed = true; render(); }, 800); }
 function finalizeClose() {
   const ym = APP.closeWizard.ym;
-  const rows = buildSnapshotRows(LIVE_BV);
+  const rows = buildSnapshotRows(liveBV(ym));
   SNAPSHOTS[ym] = [{ version: 1, closedOn: isoToday(0), rows: rows }];
   LAST_CLOSED_YM = ym;
-  CLOSED_ENTRIES[ym] = LIVE_ENTRIES;
-  LIVE_ENTRIES = new Map();
-  recalcLive();
+  // only the closing period is cleared — any other live month keeps its own figures (Rule-38)
+  CLOSED_ENTRIES[ym] = liveEntries(ym);
+  delete LIVE_BY_YM[ym];
+  APP.viewYm = null; APP.entryYm = null; // fall back to whatever is now oldest-open for entry
   pushAudit({ member: 'All members', field: 'Monthly close', before: ymLabel(ym), after: 'Closed', cause: 'Permanent record written; live figures cleared' });
   APP.closeWizard.step = 3; render();
 }
@@ -2701,9 +2951,9 @@ function lowSectionHtml(threshold) {
     (data.length ? '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Member #</th><th class="num">Average Business Volume</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state" style="padding:20px"><div class="empty-state-title">No members below this threshold</div></div>');
 }
 VIEWS.reports = function () {
-  const ym = isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM;
-  const monthlyPreview = MEMBERS.slice().sort(function (a, b) { return (LIVE_TBV.get(b.id) || 0) - (LIVE_TBV.get(a.id) || 0); }).slice(0, 6)
-    .map(function (m) { return '<tr><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td class="num">' + fmt2(LIVE_BV.get(m.id) || 0) + '</td><td class="num">' + fmtInt(LIVE_TBV.get(m.id) || 0) + '</td><td>' + pillSlab(LIVE_REWARDS.get(m.id).ownSlab) + '</td></tr>'; }).join('');
+  const ym = viewYm();
+  const monthlyPreview = MEMBERS.slice().sort(function (a, b) { return (liveTBV().get(b.id) || 0) - (liveTBV().get(a.id) || 0); }).slice(0, 6)
+    .map(function (m) { return '<tr><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td class="num">' + fmt2(liveBV().get(m.id) || 0) + '</td><td class="num">' + fmtInt(liveTBV().get(m.id) || 0) + '</td><td>' + pillSlab(liveRewards().get(m.id).ownSlab) + '</td></tr>'; }).join('');
   const yearly = yearlyAverages().slice().sort(function (a, b) { return b.avgTbv - a.avgTbv; }).slice(0, 6)
     .map(function (d) { return '<tr><td class="cell-primary">' + esc(d.name) + '</td><td class="mono">' + d.id + '</td><td class="num">' + fmt2(d.avgBv) + '</td><td class="num">' + fmt2(d.avgTbv) + '</td></tr>'; }).join('');
   const threshold = APP.lowThreshold != null ? APP.lowThreshold : SETTINGS.lowContributionThreshold;
@@ -2735,11 +2985,11 @@ VIEWS.reports = function () {
 };
 function updateLowThreshold(v) { const n = parseFloat(v); APP.lowThreshold = isNaN(n) ? SETTINGS.lowContributionThreshold : n; setHtml('low-section', lowSectionHtml(APP.lowThreshold)); }
 function exportMonthly() {
-  const ym = isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM;
+  const ym = viewYm();
   const checked = OPTIONAL_COLUMNS.filter(function (c) { const n = document.getElementById('col-' + c.key); return n && n.checked; });
   const header = ['Name', 'Member Number', 'Phone', 'Business Volume'].concat(checked.map(function (c) { return c.label; }));
   const rows = MEMBERS.map(function (m) {
-    const base = [m.name, m.id, m.phone, LIVE_BV.get(m.id) || 0];
+    const base = [m.name, m.id, m.phone, liveBV().get(m.id) || 0];
     const extra = checked.map(function (c) {
       switch (c.key) {
         case 'email': return m.email || '';
@@ -2748,10 +2998,10 @@ function exportMonthly() {
         case 'introducerName': return m.refId ? membersById.get(m.refId).name : '';
         case 'level': return m.level;
         case 'legs': return directChildren(m.id).length;
-        case 'tbv': return LIVE_TBV.get(m.id) || 0;
-        case 'slab': return LIVE_REWARDS.get(m.id).ownSlab;
-        case 'rewards': return LIVE_REWARDS.get(m.id).total;
-        case 'royalty': return LIVE_REWARDS.get(m.id).royalty;
+        case 'tbv': return liveTBV().get(m.id) || 0;
+        case 'slab': return liveRewards().get(m.id).ownSlab;
+        case 'rewards': return liveRewards().get(m.id).total;
+        case 'royalty': return liveRewards().get(m.id).royalty;
         case 'joined': return ddmmyyyy(m.joinedDate);
         case 'status': return m.active ? 'Active' : 'Inactive';
         default: return '';
@@ -2820,6 +3070,7 @@ window.P = {
   recoverySetContinue: recoverySetContinue, setRecoveryConfirmed: setRecoveryConfirmed, recoveryFinish: recoveryFinish,
   homeSearchInput: homeSearchInput, openAddMember: openAddMember,
   structureToggle: structureToggle, structureNodeKey: structureNodeKey, structureCollapseAll: structureCollapseAll,
+  openFullHierarchy: openFullHierarchy, drawFullHierarchy: drawFullHierarchy,
   structureZoomBy: structureZoomBy, structureZoomFit: structureZoomFit,
   structureSearchInput: structureSearchInput, structureSearchSelect: structureSearchSelect,
   openEditMember: openEditMember, confirmDeactivate: confirmDeactivate, reactivateMember: reactivateMember,
@@ -2828,6 +3079,7 @@ window.P = {
   refSearchInput: refSearchInput, selectRef: selectRef, clearRef: clearRef, toggleConsent: toggleConsent, checkPhone: checkPhone,
   saveMember: saveMember, switchToReactivate: switchToReactivate,
   entrySearchInput: entrySearchInput, entrySelectMember: entrySelectMember, entryClearSelection: entryClearSelection,
+  setEntryYm: setEntryYm, setViewYm: setViewYm,
   validateEntryForm: validateEntryForm, saveEntry: saveEntry, toggleCorrectionMode: toggleCorrectionMode, correctionMonthChange: correctionMonthChange,
   correctionSearchInput: correctionSearchInput, selectCorrectionMember: selectCorrectionMember, clearCorrectionSelection: clearCorrectionSelection,
   setCorrectionEntriesPageSize: setCorrectionEntriesPageSize, correctionEntriesPrevPage: correctionEntriesPrevPage, correctionEntriesNextPage: correctionEntriesNextPage,

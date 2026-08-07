@@ -28,6 +28,11 @@ A module (M1–M9) is **Done** only when, in addition to every story within it m
 - Any open item in [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) attributed to that module is resolved — not merely noted and deferred. **As of 6 August 2026 none remain**: every item raised by the readiness analysis is closed, so no module is gated by one. The three that were built in the prototype (settings warning, last-slab-row refusal, data-recovery screen) count as approved reference behaviour and must be ported, like any other approved prototype behaviour, before M7 / M5 / M8 are Done.
 - The five worked scenarios (Scenario 1–5) still reproduce their golden totals through the real UI, not just in a unit test, once M2/M3/M4 are all Done together.
 
+**Additional module gates from the 7 August 2026 change requests (CR-1/CR-2/CR-3):**
+- **M2 is not Done** until the full entry-eligibility matrix passes as a test, not merely as an implementation: an entry into an ended-but-unclosed month is accepted, a current-month entry is refused naming the blocking month, a closed-month entry is directed to the correction path, and a recalculation triggered in one live period leaves every other live period byte-identical (Rule-36 as amended, TEST-R36).
+- **M4 is not Done** until the full hierarchy window has been exercised against a network above 60 members: the size gate names the real count and Cancel opens nothing; the window draws every branch with exactly three fields per node; zoom, fit-width, in-window search and print all work; **the main console is measurably responsive while it draws**; and a figure recorded in the console afterwards leaves the open window unchanged (Rule-45, AC-44, AC-45). The responsiveness measurement is the client's binding constraint on CR-3 and is a gate, not a nicety.
+- **M4 is not Done** until phone matching behaves identically in **every** search box in the console, asserted against the shared search function rather than screen by screen (Rule-44, TEST-R44).
+
 ## Project-level (pre-handover)
 
 - All nine modules meet the module-level bar above.

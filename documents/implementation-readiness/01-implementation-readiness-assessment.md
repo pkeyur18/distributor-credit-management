@@ -14,6 +14,19 @@
 > verdict below stands as the record of the assessment at the time; **the conditions attached to it have all
 > been met**, and the project is now READY FOR IMPLEMENTATION. See
 > [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) for each decision.
+>
+> **Update — 7 August 2026.** Three client change requests (**CR-1, CR-2, CR-3**) were raised after the
+> `documents/final/` set was approved, and are now specified in full. **None is blocking and none changes the
+> calculation model** — the five golden totals are untouched. Two of them do change previously-frozen
+> behaviour, so read them before building M2 or M4:
+> - **CR-2 reverses RQ-11.** Rule-36's total entry lock is narrowed: an ended-but-unclosed month keeps
+>   accepting entries; only the *current* month is blocked, and only until that month is closed. The
+>   `periods.status` value `ended_locked` is renamed `awaiting_close`, and `member_period_totals` may now
+>   hold rows for more than one not-yet-closed period. No schema change.
+> - **CR-1** adds phone number as a search key across every search box (Rule-44); **CR-3** adds the full
+>   hierarchy window (Rule-45, FR-10), which also gives the previously-untraced ">60 descendants" gate a home.
+>
+> Full reasoning: [../final/06-decision-log-and-open-items.md](../final/06-decision-log-and-open-items.md) §5.
 
 ## 1. Overall Status
 
@@ -64,14 +77,19 @@ PIN-vs-password (resolved: both supported), empty-month averaging (resolved via 
 
 **None outstanding.** All three are decided:
 - HIGH-1 (export/backup command reconciliation) — resolved, applied in the API spec.
-- The large-subtree (>60 descendants) confirmation gate — confirmed as a deliberate, already-rectified design decision; no longer flagged.
+- The large-subtree (>60 descendants) confirmation gate — confirmed as a deliberate, already-rectified design decision; no longer flagged. **Fully closed 7 Aug 2026 by CR-3**: it now gates the full hierarchy window and is backed by Rule-45 and V4.5, so it is no longer untraced prototype behaviour.
 - The settings-mid-period-recalculation warning — designed and **built** in the prototype (variant C), along with the last-slab-row refusal and the data-recovery screen.
+
+**Two technical decisions taken on 7 August 2026 as a consequence of CR-2**, both documentation-only because no implementation exists yet:
+- **`periods.status` value renamed** `ended_locked` → `awaiting_close`. The old name described a total entry lock that Rule-36 no longer imposes; leaving it would have made the schema state the opposite of the behaviour.
+- **`member_period_totals` widened** from "the currently-open period only" to "any not-yet-closed period". The composite primary key `(member_id, period_id)` already supported this, so **no schema change** — only the lifecycle statement and the requirement that a recalculation stays confined to the period its triggering entry belongs to.
 
 ## 8. Requirements ↔ Prototype, ↔ Design Cross-Checks (Summary)
 
 Full detail lives in [02-requirements-traceability-matrix.md](02-requirements-traceability-matrix.md) and [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md). Headline findings:
 
 - **Requirements ↔ Prototype**: the prototype implements every FR-1–9 screen and workflow described in `requirement-spec.md`, plus two elements not sourced from any requirement document (large-subtree confirm-gate; the 12-column optional export list is more granular than Appendix B's bare "editable" statement, but not contradictory). No missing screens, fields, or validation states were found.
+  - **Re-checked 7 Aug 2026 while specifying CR-1/2/3, three drifts found and resolved:** the ">60 descendants" gate was documented but **absent** from the prototype — now given a rule and a home (CR-3); the Structure screen's zoom, fit-width, collapse-all and search controls exist in the prototype but were **documented nowhere** — now specified in [../final/03-functional-specification.md](../final/03-functional-specification.md) §5.3; and V2.5 stated the entry screen carries **no date field** while the prototype has always shown one — resolved in favour of the built behaviour, with V2.5 amended, since CR-2 makes a date field structurally necessary.
 - **Requirements ↔ Design**: `architecture.md`'s data model, IPC surface, and NFR matrix cover every Rule 1–38 and every FR-1–9. The one true gap was the `reverse_entry` command, now resolved (§5). Non-functional requirements (performance, scalability to 25,000 members, security, retention) all have an architectural answer.
 - **Design ↔ Prototype**: architecturally consistent. The one presentation-layer gap — the missing mid-period-recalculation warning — has since been designed and built.
 

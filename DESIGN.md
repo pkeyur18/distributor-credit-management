@@ -296,6 +296,17 @@ Two further tiers exist below and above those two steps — not drift, but real 
 - **Content:** exactly three fields, per FR-2/UN-16 — name (13px/650), member number (11px muted), and own Business Volume as a tabular numeric value with a small uppercase label above a 1px top-border divider.
 - **Interaction:** hover lifts the border to indigo and nudges the card up 1px (`translateY(-1px)`) — a small, honest affordance that it's clickable, not a shadow-based lift.
 - **Connector lines:** drawn as thin (`1.5px`) `--border`-colored SVG lines, never colored, so the tree's data (the nodes) always reads louder than its scaffolding (the connectors).
+- **Reused verbatim in the Full Hierarchy Window** (below). Same card, same three fields, same connector rule. Showing more of the tree never means showing more per node — FR-2's constraint belongs to the component, not to the screen it sits on.
+
+### Full Hierarchy Window (FR-10/UN-31/Rule 45)
+- **What it is:** a separate top-level window showing the whole structure from the top member, every branch expanded, drawn once and never updated. Not a modal, not a route — its own window, so its rendering cost never lands on the console.
+- **Header:** the top member's name, the total member count, and an **"as at &lt;date, time&gt;"** stamp at page-title weight. The stamp is not decoration — it is what makes a printed copy honest about when it was true, and it must survive printing.
+- **Toolbar:** the Structure screen's zoom control, extended — the zoom **floor drops to 10%** (against the main chart's 50%) because a whole network has to be takeable-in at once; the ceiling stays 150%. Plus fit-width, a search field, and Print. Same control shapes and sizes as the Structure toolbar; nothing new is invented here.
+- **Search highlight:** the matched node gets a 2px indigo ring and is scrolled to centre. A focus treatment, not a fill — its three fields must stay exactly as legible as every other node's.
+- **Size gate:** above 60 descendants, a confirmation names the **exact** count before anything is drawn ("This will draw 4,182 members in a new window. It may take a moment."), Cancel first, then the primary Open action. The count must be real — never an estimate, never rounded.
+- **Print:** a print stylesheet drops the toolbar, keeps the header and stamp on the first page, and lets the chart break across pages. A wide chart spans many pages by nature; do not scale it to fit one page, which would make the node text unreadable.
+- **Theme:** inherits the console's light/dark theme as at the moment it opens, through the same tokens. It does not follow later theme changes — consistent with it not following data changes either.
+- **Read-only, visibly:** no node is a link, no control writes anything, nothing hovers as though clickable. The absence of affordances is the design — **do not** add the node's `translateY(-1px)` hover lift here, since that affordance means "opens a branch" and there are no branches left to open.
 
 ## Do's and Don'ts
 
@@ -306,7 +317,9 @@ Two further tiers exist below and above those two steps — not drift, but real 
 - **Do** keep the outstanding-month banner undismissable — no close icon, no auto-hide, ever (Rule 20).
 - **Do** stay inside the restricted vocabulary (*member, Business Volume, Rewards, royalty, volume, slab, level, leg*) in every visible string, including placeholder/empty-state copy and error messages.
 - **Do** reserve shadow for things that float temporarily above the page (modal, toast, search dropdown), plus the one narrow control-lift exception on a segmented control's active state — nothing beyond those.
-- **Do** gate any view that renders an unbounded number of nodes at once (the structure screen's full hierarchy) behind an explicit confirmation once the count passes a readable threshold — a scrollable container is not the same thing as a readable one.
+- **Do** gate any view that renders an unbounded number of nodes at once behind an explicit confirmation naming the real count once it passes a readable threshold (>60) — a scrollable container is not the same thing as a readable one. In this system that view is the **Full Hierarchy Window**, which is where the gate lives; the Structure screen's one-branch-at-a-time chart is bounded by a single generation and needs none.
+- **Do** show the phone number in member search results (Rule 44) — the operator has to confirm they picked the right person, and a name alone does not do that. It is personal data on a landing screen, deliberately, visible only to the one administrator who already sees it everywhere else.
+- **Do** keep any view that could be slow in its own window rather than making the main console carry it, and say plainly, before it opens, how much work it is about to do.
 
 ### Don't:
 - **Don't** add a shadow to a card, table row, or sidebar — flat-by-default is load-bearing to this system's density, not a stylistic default that can flex.

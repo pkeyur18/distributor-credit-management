@@ -1,6 +1,6 @@
 # 05 — Quality & Acceptance
 
-Every error/edge case, the full test strategy, the golden regression scenarios, all 39 acceptance criteria and 8 success criteria, and the Definition of Done. Nothing is claimed complete until it passes what is written here.
+Every error/edge case, the full test strategy, the golden regression scenarios, all 45 acceptance criteria and 8 success criteria, and the Definition of Done. Nothing is claimed complete until it passes what is written here.
 
 ---
 
@@ -18,7 +18,7 @@ Full trees: [02](02-business-rules.md) §5. These are the client's own hand-work
 
 ---
 
-## 2. Error & edge-case matrix — 46 scenarios, organised by workflow
+## 2. Error & edge-case matrix — 63 scenarios, organised by workflow
 
 "Behaviour" is stated as defined by a source document; where a rule leaves something undefined, the gap is named rather than filled with an invented default. See [06](06-decision-log-and-open-items.md) §3 for the five items still genuinely open.
 
@@ -45,11 +45,28 @@ Full trees: [02](02-business-rules.md) §5. These are the client's own hand-work
 | Amount is zero | Refused | Rule-16a |
 | Amount is negative | Refused | Rule-16a |
 | Amount has more than 2 decimal places | Refused, field-level | Rule-16 |
-| Entry attempted while a reset is outstanding | **Entire screen locked** — no entry form rendered, locked state names the outstanding month | Rule-36 |
-| Entry date outside the current period's bounds | Refused, date clamped to period bounds | Rule-21 |
+| Entry dated in a month that has ended but is not closed | **Accepted** — recorded into that month, which recalculates; no other month is touched | Rule-36 (amended 7 Aug 2026) |
+| Entry dated in the **current** month while an earlier month is outstanding | **Refused, naming the month that must be closed first.** The form stays available; only this date is rejected | Rule-36, V2.7 |
+| Entry dated in a month that is already **closed** | Not offered on the entry screen — the correction panel is the route (a link is shown, not an error) | Rule-39, V2.7 |
+| Entry date outside the bounds of the month being recorded into | Refused, date clamped to that month's bounds | Rule-21, V2.6 |
+| Several months outstanding at once, all holding live figures | Each accepts entries independently; the entry screen shows a month selector, and figure screens show the oldest by default. The selector is not rendered when only one month is in play | Rule-36, Rule-20 |
 | Correcting an entry in the current **open** month | Permitted, standard edit | Rule-39 |
 | Correcting an entry in a **closed** month | Permitted — new snapshot/backup version, original never overwritten, warning shown before the edit | Rule-39 |
 | Concurrent entry conflict (two writes to the same member at once) | **Not applicable** — single-user, single-session by design; no concurrency-control mechanism needed | ADR-001, OC-1 |
+
+### Search & Structure (M4)
+
+| Scenario | Behaviour | Rule |
+|---|---|---|
+| Search query is empty | No results shown — not an error, not "all members" | V4.1 |
+| Search query matches nothing | States so plainly, naming the query | V4.1 |
+| Phone query of fewer than 4 digits | **Not an error** — the phone clause simply does not engage; name and ID still match | Rule-44, V4.4 |
+| Phone entered with spaces, dashes or a country prefix | Matches — both sides are reduced to a canonical key first (digits, then an international prefix or trunk zero dropped), so it works in both directions; the stored value is never rewritten | Rule-44 |
+| Phone query matches an **inactive** member | Shown normally, in the distinct inactive colour with a labelled pill — inactive members are found by search like any other | Rule-28, M4.5 |
+| Full hierarchy requested above 60 descendants | Confirmation first, naming the exact count; **Cancel opens nothing at all** | Rule-45, V4.5 |
+| Full hierarchy requested on a structure with nobody beneath the top member | Opens showing the single root node, stating plainly there is nothing beneath it — not an error | Rule-45 |
+| Data changes in the console while a full hierarchy window is open | The open window does **not** update — it is a point-in-time draw and its timestamp still names when it was drawn | Rule-45 |
+| Full hierarchy on a network at the 25,000-member ceiling | Draws, slowly, in its own window; the main console stays responsive throughout. Width is extreme — the accepted limit, not a defect | Rule-45, TR-7 |
 
 ### Monthly Close (M5)
 
@@ -59,7 +76,7 @@ Full trees: [02](02-business-rules.md) §5. These are the client's own hand-work
 | Backup generation is cancelled by the admin | Same as failure — abort, no partial state | Rule-18 |
 | Admin attempts to close a month that is not the oldest outstanding | Rejected — oldest-first enforced | Rule-20 |
 | Multiple months outstanding | All listed; each closes separately with its own backup and snapshot; never merged | Rule-20 |
-| A calendar month elapses with **zero entries** | **No snapshot produced**, excluded from the yearly-averaging denominator | RQ-16 |
+| A calendar month elapses with **zero entries** | **No snapshot produced**, excluded from the yearly-averaging denominator. Less likely since 7 Aug 2026 — a month awaiting close still accepts entries, so it no longer goes empty merely because an earlier month was outstanding — but the rule is unchanged and must still be built | RQ-16 |
 | External (physically-separate-medium) backup fails to write | **Does not block the close** — internal retained copy is the actual gate; external failure re-prompts/reminds | Rule-31 |
 | Internal retained backup copy write fails | **Blocks the close** — this is the real gate | Rule-18, Rule-31 |
 | Admin loses/never takes the external backup copy at all | **Not defended** — documented single point of failure; accepted risk, not solved | TR-4 |
@@ -126,6 +143,9 @@ Full trees: [02](02-business-rules.md) §5. These are the client's own hand-work
 - Empty-month exclusion from yearly averaging.
 - **Members never removed, never omitted:** no code path deletes a `members` row (there is no delete command to call); every export includes deactivated members.
 - Last slab row cannot be removed: with one row remaining, the remove handler refuses and the row count is unchanged.
+- **Phone matching (Rule-44):** a stored `+91 98765 43210` is found by `9876543210`, by `98765 43210`, by `+919876543210` and by the mid-number fragment `4321`; a 3-digit query does not match it on phone at all; a query matching a member's name and a different member's phone returns both.
+- **Entry eligibility (Rule-36 as amended):** given June outstanding and today in August — a June-dated entry is accepted, an August-dated one is refused naming June, a May-dated one (closed) is refused and directed to the correction path, and a September-dated one is refused as future. After June closes, the August-dated entry is accepted.
+- **Full-tree layout:** the single post-order pass places every node without overlap and produces the same geometry for the same input twice; a single-node structure and a single-chain structure both lay out correctly.
 - `preview_settings_impact` leaves nothing behind: call with candidate settings, confirm live settings and all live figures are byte-identical afterward. Test the restore-on-panic path deliberately, by feeding a candidate that panics the engine.
 
 **Integration — transactional correctness**
@@ -133,6 +153,7 @@ Full trees: [02](02-business-rules.md) §5. These are the client's own hand-work
 - Monthly close atomicity: simulate a backup-verification failure mid-close, confirm zero data is mutated.
 - Closed-month correction versioning: edit an entry in a closed month, confirm a new version is created, the original version's row is byte-identical to before, and `redownload_backup`/`export_yearly_average` both read the new version.
 - Settings-change mid-period recalculation: change the royalty rate mid-month, confirm only the current open period recalculates and no closed-month snapshot is touched.
+- **Entry into an outstanding month recalculates only that month:** with two periods holding live figures, record into the older one and confirm every ancestor chain in **that** period recalculates while the other period's `member_period_totals` rows are byte-identical to before.
 - **The settings preview must equal what actually lands:** capture the Rewards figure the warning predicts, confirm the save, then re-open the warning with no further edits and confirm the settled "before" figure equals the earlier prediction exactly.
 - Restore from backup: against a deliberately corrupted database, confirm the recovery state appears rather than a crash; confirm a checksum-mismatch restore is refused and leaves the corrupt file untouched; confirm a successful restore leaves the app at sign-in with the credential still required.
 
@@ -144,7 +165,10 @@ One test per command in [04](04-technical-architecture.md) §6: request/response
 **E2E — full user workflows through the actual built UI**
 - First-run setup → root member creation → first Business Volume entry → visible Rewards on screen, no manual recalculation step anywhere.
 - Full monthly-close wizard: backup confirm → commit → figures zeroed → alert clears → (if applicable) next outstanding month's alert appears.
-- Entry-lock enforcement: let a month elapse without closing, confirm the BV Entry screen shows the locked empty state and the persistent banner appears with no dismiss control.
+- **Late-entry flow (CR-2):** let a month elapse without closing; confirm the BV Entry screen still renders its form, names the outstanding month it is recording into, accepts a figure dated in that month, and shows the recalculated figures. Confirm the persistent banner appears with no dismiss control and states that entries dated in the outstanding month are still accepted.
+- **Current-month refusal (CR-2):** in the same state, attempt a figure dated in the current month; confirm it is refused with the blocking month named, that the form is not otherwise disabled, and that after completing the close the same figure saves.
+- **Phone search (CR-1):** find a member by their phone from the Home search, confirm the phone column renders in the results, and repeat the search from the Structure, Volume Entry and Correction screens to confirm identical behaviour.
+- **Full hierarchy (CR-3):** from the Structure screen, activate "View full hierarchy" on a network above 60 members; confirm the confirmation names the real count, the window opens with every branch expanded and three fields per node, that zoom / fit-width / in-window search / print all work, that the main console remains usable throughout, and that recording an entry in the console afterwards leaves the open window unchanged.
 - Closed-month correction end-to-end: correct an entry via the correction panel, confirm the warning copy, confirm the toast, confirm the exported closed-month snapshot reflects the correction.
 - Settings warning end-to-end: save the slab table → warning shows before → after and affected members → Cancel leaves settings and typed values untouched → re-save applies. Repeat for royalty. Confirm a duplicate threshold is refused outright, no warning offered.
 - Data-recovery screen: launch against an unreadable database, confirm the recovery screen appears in place of sign-in, restore points listed newest-first, states that anything after the chosen backup needs re-entering.
@@ -162,8 +186,9 @@ One test per command in [04](04-technical-architecture.md) §6: request/response
 **Performance**
 Targets: screens < 2s, recalculation < 2s, extracts < 30s, at the **25,000-member design ceiling**. Client's actual scale: 500–5,000 members, ~1,000 entries/month.
 - Chain-upward recalculation time vs. tree depth/width — confirm *O*(depth × average width) complexity, independent of total member count.
-- Search response time at 25,000 members.
+- Search response time at 25,000 members — including a phone query, whose canonical-key substring match is a scan rather than an index seek (Rule-44).
 - Monthly export generation time at 25,000 members / a full year of entries.
+- **Full hierarchy draw time at 25,000 members**, measured in the separate window, with the main console's responsiveness measured *at the same time* — the second measurement is the one that matters, since the first is a known and accepted cost (TR-7).
 
 **UAT — the five worked scenarios, reconciled by the client**
 Re-run all five scenarios through the actual built UI (not just the isolated engine) and have the client confirm the on-screen figures match their own hand-worked numbers. **This is the single most important acceptance gate in the entire test strategy** — the client's own stated bar for trust (R-9).
@@ -186,6 +211,9 @@ Re-run all five scenarios through the actual built UI (not just the isolated eng
 | Recalculation trigger/scope (Rule-26) | Integration (chain-upward, transactional) |
 | Entry/correction (Rules 16, 16a, 39) | Unit + E2E |
 | Monthly close/backup gate (Rules 17–20, 31, 38) | Integration (atomicity) + E2E (wizard) |
+| Entry eligibility by period (Rule-36 as amended) | Unit (the four-state matrix) + integration (recalc confined to one period) + E2E (late entry, current-month refusal) |
+| Phone as a search key (Rule-44) | Unit (normalisation, four-digit floor) + E2E (every search box) + performance (scan at 25,000) |
+| Full hierarchy view (Rule-45) | Unit (layout pass) + E2E (gate, draw, print, read-only) + performance (draw time and main-console responsiveness) |
 | Member lifecycle/hierarchy integrity (Rules 28, 30, 34, 35, 37, 40) | Unit + E2E |
 | Members never removed, never omitted (Rule-42) | Unit (no delete path) + integration (exports include deactivated members) |
 | Exports/reporting (Rules 19, 23, 24, 33) | Integration + E2E |
@@ -199,7 +227,7 @@ Re-run all five scenarios through the actual built UI (not just the isolated eng
 
 ---
 
-## 4. Acceptance criteria — AC-1 to AC-39
+## 4. Acceptance criteria — AC-1 to AC-45
 
 ### 4.1 Calculation — the five worked examples
 
@@ -238,7 +266,7 @@ Re-run all five scenarios through the actual built UI (not just the isolated eng
 | # | Criterion |
 |---|---|
 | **AC-18** | Once a month ends, an undismissable banner appears on every screen naming it, plus a notification entry |
-| **AC-19** | All recording is locked while any month is outstanding; the entry screen names the month waiting |
+| **AC-19** | While a month is outstanding, entries dated in **that** month are still accepted, and an entry dated in the current month is refused naming the month that must be closed first. The entry screen always names the month it is recording into **[AMENDED 7 Aug 2026, CR-2 — previously "all recording is locked while any month is outstanding"]** |
 | **AC-20** | The alert clears only on a completed close — not navigation, logout, or acknowledgement |
 | **AC-21** | With several months outstanding, all are listed and only the oldest can be closed |
 | **AC-22** | A failed or cancelled backup abandons the close — nothing is cleared, the alert stays up |
@@ -274,6 +302,17 @@ Re-run all five scenarios through the actual built UI (not just the isolated eng
 | **AC-37** | The whole console — every member, entry, monthly record and setting — can be backed up on a schedule (off/daily/weekly/monthly) or on demand; the most recent backups (default 10, adjustable) are kept, older pruned automatically |
 | **AC-38** | Installing on a different computer and restoring from a backup file brings it to exactly the state the original held, no separate setup step, same login credential working unchanged |
 | **AC-39** | Restoring always names what will be replaced and requires deliberate confirmation; the console backs up its own current state immediately beforehand |
+
+### 4.8 The three change requests of 7 August 2026
+
+| # | Criterion |
+|---|---|
+| **AC-40** | A member is found by typing their phone number, in every search box in the console, with or without spaces, dashes or a country prefix; a query of fewer than four digits does not match on phone at all |
+| **AC-41** | Search results display the phone number alongside the name and member number |
+| **AC-42** | While a month is outstanding, a figure dated in that month can be recorded, and it recalculates that month's chain to the top, leaving every other month untouched |
+| **AC-43** | While a month is outstanding, a figure dated in the current month is refused, and the refusal names the month that must be closed first. Once that month is closed, the same figure saves |
+| **AC-44** | "View full hierarchy" opens a separate window showing the whole structure from the top member with every branch expanded, each node carrying name, member number and own Business Volume only; above 60 descendants the exact member count is named and confirmed before anything is drawn |
+| **AC-45** | The main console stays responsive while the full hierarchy window is open and while it is drawing; the window itself never updates after it is drawn, and closing it changes nothing in the console |
 
 ---
 

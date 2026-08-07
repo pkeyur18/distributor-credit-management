@@ -120,10 +120,10 @@ External medium — user-chosen, physically separate from the install disk
 | Module | Responsibilities | Commands |
 |---|---|---|
 | **M1 — Member & Structure** | Root creation (once), add/edit/deactivate/reactivate, all structural validation | `create_root_member`, `add_member`, `edit_member`, `deactivate_member`, `reactivate_member`, `search_members` |
-| **M2 — Business Volume Entry** | Record BV, edit/correct an entry in any period, enforce the entry lock | `record_entry`, `edit_entry`, `get_period_lock_status` |
+| **M2 — Business Volume Entry** | Record BV, edit/correct an entry in any period, decide which months are recordable (Rule-36 as amended) | `record_entry`, `edit_entry`, `get_period_lock_status` |
 | **M3 — Calculation Engine** | Bottom-up rollup, slab lookup, differential, royalty, Rewards. **Pure function set, no I/O.** | `preview_settings_impact` (the only command — see §3.2) |
-| **M4 — Search & Chart** | Home search, member detail, hierarchy chart, inactive-member colour coding | `search_members` (shared), `get_member_detail`, `get_direct_children_chart` |
-| **M5 — Monthly Close** | Alert/lock lifecycle, gated close flow, permanent snapshot writing, closed-month correction, on-demand backup | `get_outstanding_periods`, `begin_close`, `confirm_backup_and_close`, `manual_backup_current_period` |
+| **M4 — Search & Chart** | Home search (name/ID/phone), member detail, hierarchy chart, **full hierarchy window**, inactive-member colour coding | `search_members` (shared), `get_member_detail`, `get_direct_children_chart` (both one-depth and `full_tree`) |
+| **M5 — Monthly Close** | Alert lifecycle and entry eligibility, gated close flow, permanent snapshot writing, closed-month correction, on-demand backup | `get_outstanding_periods`, `begin_close`, `confirm_backup_and_close`, `manual_backup_current_period` |
 | **M6 — Reporting & Exports** | Three extracts, re-download of any past backup, inactive-row colouring | `export_monthly`, `export_yearly_average`, `export_low_contribution`, `list_backups`, `redownload_backup` |
 | **M7 — Settings** | All client-adjustable parameters, slab row add/remove, mid-period recalculation warning, console backup schedule/retention | `get_settings`, `update_settings`, `add_slab_row`, `remove_slab_row`, `update_slab_row`, `get_console_backup_settings`, `update_console_backup_settings` |
 | **M8 — Access & Alerts** | Setup wizard, login, lockout, session lock, outstanding-month alert, pre-flight recovery, whole-console backup/restore | `setup_first_run`, `login`, `lock_session`, `unlock_session`, `use_recovery_code`, `get_outstanding_alert`, `check_data_readable`, `list_restore_points`, `restore_from_backup`, `run_console_backup_now`, `restore_from_backup_file` |
@@ -181,7 +181,9 @@ slab_table, settings, auth — standalone, referenced by the calc engine at read
 | `consent_date` | TEXT NOT NULL | Auto-captured |
 | `created_at` | TEXT NOT NULL | |
 
-Indexes: PK `id`; unique `phone`; index `introducer_member_id` (chain traversal); index `name` (search).
+Indexes: PK `id`; unique `phone` (uniqueness under Rule-34 **and** the lookup index for phone search under Rule-44); index `introducer_member_id` (chain traversal); index `name` (search).
+
+**Note on phone search (Rule-44):** matching is a substring comparison on the canonical key (digits, then an international prefix or trunk zero dropped), so the unique index accelerates an exact or prefix match but a mid-number match is a scan. At the NFR-2 ceiling of 25,000 rows that scan is trivially inside the NFR-1 two-second budget, and no additional index or normalised column is warranted. If a future profile ever shows otherwise, the cheapest fix is a stored canonical-key shadow column — **do not add it speculatively.**
 
 **`business_volume_entries`** — the append-only ledger
 
@@ -191,7 +193,7 @@ Indexes: PK `id`; unique `phone`; index `introducer_member_id` (chain traversal)
 | `member_id` | INTEGER NOT NULL, FK → members.id | |
 | `amount` | INTEGER NOT NULL | `×100`; `CHECK (amount > 0)` — Rule-16a |
 | `entry_date` | TEXT NOT NULL | Editable only within `period_month`'s bounds |
-| `period_month` | TEXT NOT NULL | `YYYY-MM`, fixed at creation, never changes |
+| `period_month` | TEXT NOT NULL | `YYYY-MM`, **derived from `entry_date` at creation**, fixed thereafter, never changes. A figure belongs to the month its own date falls in — never to "the month being closed" (Rule-21) |
 | `created_at` | TEXT NOT NULL | |
 | `updated_at` | TEXT NULL | Set on `edit_entry` |
 
@@ -206,7 +208,9 @@ Index: `(member_id, period_month)` — hot path for entry display and monthly ex
 | `percentage` | INTEGER NOT NULL | 0–100. **No monotonicity check** (Rule-41) |
 | `sort_order` | INTEGER NOT NULL | Lookup order |
 
-**`member_period_totals`** *(live cache, current open period only)*
+**`member_period_totals`** *(live cache — one row set per **not-yet-closed** period)*
+
+> **Amended 7 Aug 2026 (CR-2).** Previously *"current open period only"*. Because an ended-but-unclosed month still accepts entries (Rule-36 as amended), more than one period can hold live figures at the same time. The composite primary key already carries this without a schema change; what changes is the lifecycle statement, not the table. A close clears **only** the period being closed (Rule-38). In practice more than one live period is rare — it requires a month to have been left unclosed past the end of the next one.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -225,8 +229,8 @@ Index: `(member_id, period_month)` — hot path for entry display and monthly ex
 |---|---|---|
 | `id` | INTEGER PK | |
 | `period_month` | TEXT NOT NULL UNIQUE | `YYYY-MM` |
-| `status` | TEXT NOT NULL CHECK IN (`open`,`ended_locked`,`closed`) | §5.4 state machine |
-| `ended_at` | TEXT NULL | Set when the calendar month elapses |
+| `status` | TEXT NOT NULL CHECK IN (`open`,`awaiting_close`,`closed`) | §7.1 state machine. **Renamed 7 Aug 2026 (CR-2): `ended_locked` → `awaiting_close`** — the period is ended and *still accepting entries*, so the old name stated the opposite of the truth. Documentation-only rename; no implementation exists yet |
+| `ended_at` | TEXT NULL | Set when the calendar month elapses — raises Rule-20's alert and blocks the *current* month for entry, not this one |
 | `closed_at` | TEXT NULL | Set on successful close |
 
 **`monthly_snapshots`** — the permanent, versioned historical record
@@ -341,7 +345,7 @@ CREATE UNIQUE INDEX idx_slab_threshold ON slab_table(threshold);
 CREATE TABLE periods (
     id            INTEGER PRIMARY KEY,
     period_month  TEXT NOT NULL UNIQUE,
-    status        TEXT NOT NULL CHECK (status IN ('open','ended_locked','closed')),
+    status        TEXT NOT NULL CHECK (status IN ('open','awaiting_close','closed')),
     ended_at      TEXT NULL,
     closed_at     TEXT NULL
 );
@@ -505,14 +509,14 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 | API-03 | `edit_member` | Update name/phone/email/address | Auth | Phone uniqueness re-checked; **introducer field never accepted as editable input** (Rule-37, locked at the API layer) | Single-row update | Per changed field, `edit` |
 | API-04 | `deactivate_member` | Mark inactive | Auth | Root cannot be deactivated | Single-row update; **no recalculation triggered** — zero calculation effect | `edit` |
 | API-05 | `reactivate_member` | Reactivate, preserving ID/position/history | Auth | Member must currently be inactive | Single-row update | `edit` |
-| API-06 | `search_members` | Search by name or ID | Auth | None — empty query → empty result, not an error | Read-only | Not audited |
+| API-06 | `search_members` | Search by name, ID **or phone** (Rule-44) | Auth | None — empty query → empty result, not an error. Phone clause engages only at ≥4 digits (V4.4); both sides reduced to a canonical key before comparison — digits only, then an international prefix or trunk zero dropped (see Rule-44) | Read-only | Not audited. Response includes `phone` so results can display it |
 
 ### Module M2 — Business Volume Entry
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-07 | `get_period_lock_status` | Check whether entry is locked | Auth | — | Read-only | Not audited |
-| API-08 | `record_entry` | Record BV against a member, current open period | Auth | `amount > 0` (Rule-16a), ≤2 decimals (Rule-16), date within period bounds; **refused entirely if a reset is outstanding** (Rule-36) | Insert entry + chain-upward recalc (ADR-005), one transaction | `entry` |
+| API-07 | `get_period_lock_status` | Report **which months accept entries**, oldest first, and which month is blocked and by what | Auth | — | Read-only | Not audited. Returns a list of recordable periods plus the blocking month, **not a boolean** (amended 7 Aug 2026, CR-2 — the name is retained for continuity; the semantics are now "entry eligibility", not "locked yes/no") |
+| API-08 | `record_entry` | Record BV against a member, into the period its `entry_date` falls in | Auth | `amount > 0` (Rule-16a), ≤2 decimals (Rule-16), `entry_date` within its own period's bounds (V2.6). **Refused when that period is `closed`** (use API-09 instead, Rule-39), **and when it is the current month while any earlier period is `awaiting_close`** (V2.7, Rule-36) | Insert entry + chain-upward recalc (ADR-005) **within that entry's own period**, one transaction | `entry` |
 | API-09 | `edit_entry` | Correct an entry — open period **or any closed month** | Auth | Same amount/date validation, scoped to the entry's own period bounds | Update entry + chain recalc; if period closed, additionally new `monthly_snapshots`/`backups` version | `edit` or `correction` |
 
 ### Module M3 — Calculation Engine *(no exposed commands except the preview)*
@@ -526,7 +530,9 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
 | API-10 | `get_member_detail` | Full detail: contact, Rewards breakdown, direct children, TBV, leg count | Auth | member_id must exist | Read-only | Not audited |
-| API-11 | `get_direct_children_chart` | Chart node data for a member and its direct children | Auth | member_id must exist | Read-only | Not audited |
+| API-11 | `get_direct_children_chart` | Chart node data. Request: `member_id`, `full_tree: bool`. With `full_tree: false` — the member and its direct children (FR-2). With `full_tree: true` — **the entire subtree**, which is what the full hierarchy window draws (FR-10, Rule-45) | Auth | member_id must exist | Read-only | Not audited |
+
+**On API-11's `full_tree` flag.** The parameter was always in the command's contract; it is now put to work by FR-10 and no new command is introduced for the full hierarchy view. Either value returns the same node shape — name, ID, own Business Volume, active flag, introducer link — so FR-2's three-field constraint holds identically in both modes. The main window calls it once to obtain the count for the size gate (V4.5); the full hierarchy window calls it once more to draw. Both are cheap local reads against SQLite; the cost of the full view is in *rendering*, not in fetching, which is exactly why the render happens in a separate window.
 
 ### Module M5 — Monthly Close
 
@@ -598,13 +604,23 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 ```
 [start] → open  (system start / previous period closed)
-open → ended_locked  (calendar month elapses — Rule-36)
-ended_locked → closed  (backup confirmed + snapshot written — Rule-18/38)
-ended_locked → ended_locked  (backup fails/cancelled — abort, alert stays)
+open → awaiting_close  (calendar month elapses — Rule-36)
+awaiting_close → closed  (backup confirmed + snapshot written — Rule-18/38)
+awaiting_close → awaiting_close  (backup fails/cancelled — abort, alert stays)
 closed → [end]
 ```
 
-At most one period is `open` for new entries — Rule-36's hard lock prevents a second one starting while any prior period is `ended_locked`. Multiple periods can sit at `ended_locked` simultaneously (Rule-20's queue); only the oldest is closable; each closes through its own instance of this state machine.
+**Entry eligibility by state (Rule-36 as amended, 7 Aug 2026 — CR-2):**
+
+| State | Accepts new entries? |
+|---|---|
+| `awaiting_close` | ✅ Yes — for as long as it stays unclosed. This is the whole point of the amendment |
+| `open` (the current month) | ✅ Only when **no** earlier period is `awaiting_close`; otherwise refused, naming that period |
+| `closed` | ❌ Never via `record_entry` — corrections only, through API-09 (Rule-39) |
+
+A period row for the current month is created as `open` as soon as the calendar month begins, whether or not it can yet be written to; its writability is a function of what sits behind it, not of its own state. Multiple periods can sit at `awaiting_close` simultaneously (Rule-20's queue) and **each of them accepts entries**; only the oldest is closable, and each closes through its own instance of this state machine. More than one live period at once is expected to be rare — it requires a month to be left unclosed past the end of the next one.
+
+**Renamed 7 Aug 2026:** `ended_locked` → `awaiting_close`. The old name described a total entry lock that no longer exists; keeping it would have made the schema state the opposite of the behaviour. Documentation-only — no implementation exists yet.
 
 ### 7.2 Member lifecycle
 
@@ -683,6 +699,7 @@ The restored database is still encrypted and still requires the credential to op
 | Encryption at rest | SQLCipher, key derived via Argon2id at login |
 | Encryption in transit | **Ruled inapplicable** — no network exists |
 | No PII in filenames | Backup/export filenames never embed a member name/phone/ID |
+| Phone on the landing screen (Rule-44) | Accepted. Search results display the phone number so the administrator can confirm the right person. It is personal data under the DPDP Act 2023, but visible only to the single administrator role, which already sees it on Member Detail and in every export (Rule-33). No new party gains access and no new surface is created — see §8.9 |
 | Filesystem isolation | WebView has zero general filesystem/shell/network capability — only the 40 allowlisted commands |
 | Vocabulary constraint | No excluded word in any user-visible string, including error messages, tooltips, filenames |
 
@@ -766,6 +783,7 @@ If the client never takes the external-medium backup, the internal copy and the 
 | **TR-4** | Single-machine data loss if the client never takes the external-medium backup | Medium | Critical | Prompts and reminds at every close; ultimately a client process discipline, stated plainly |
 | **TR-5** | Fixed-point arithmetic bugs (an off-by-one in a ×100 conversion) are subtle and could silently misstate every downstream figure | Low (if the five-scenario suite is followed) | Critical | The five-scenario unit test suite exists specifically to catch this class of bug before any UI is built on top |
 | **TR-6** | Solo maintainer, no second reviewer — a design flaw or security gap could ship unnoticed | Medium | Medium–High | This document set itself is the primary mitigation — decisions recorded with rationale for later re-examination |
+| **TR-7** | The full hierarchy view (FR-10, Rule-45) is a **top-down** chart, whose width grows with the number of leaves rather than with depth. At the NFR-2 ceiling of 25,000 members the canvas is tens of thousands of pixels wide; a print spans many pages, and the first draw takes noticeably longer than a normal screen | Medium (only at large network sizes) | Medium (usability of one view; no data risk) | **Chosen deliberately by the client on 7 Aug 2026** over a width-stable indented outline, because it matches the Structure screen's visual language. Mitigations agreed at the same time: a 10% zoom floor (far below the main chart's range), fit-width, search-and-scroll inside the window, and the >60-descendant confirmation naming the exact count before anything is drawn. Isolation in a separate window means the cost never lands on the main console. If the client later finds it unusable at scale, the fallback is the indented-outline layout, not a rewrite of the data path |
 
 ---
 
@@ -782,6 +800,9 @@ management_system/
 ├── src/                       # React + TypeScript frontend
 │   ├── screens/               # Home/Search, MemberDetail, AddEditMember, BVEntry,
 │   │                          # HierarchyChart, Settings, MonthlyClose, Reports, Auth
+│   ├── windows/               # FullHierarchy — the separate-window entry point (FR-10).
+│   │                          # Its own root, its own render; shares only the node component
+│   │                          # and design tokens with the main app, never live state
 │   ├── components/            # shadcn/ui-based shared components
 │   └── lib/                   # typed IPC command wrappers, formatting helpers
 └── src-tauri/

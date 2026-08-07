@@ -1,6 +1,6 @@
 # Delivery Plan — Epics, Stories, PI & Sprint Breakdown
 
-31 user stories across Epic 0 and modules M1–M9, their dependency graph, and a proposed two-PI, eight-sprint sequence. **Sprint boundaries are a starting proposal — adjust them freely. The dependency constraints are not optional** — a story cannot start before what it depends on is Done (per [05](05-quality-and-acceptance.md) §6.1).
+35 user stories across Epic 0 and modules M1–M9, their dependency graph, and a proposed two-PI, eight-sprint sequence. **Four stories were added on 7 August 2026** by change requests CR-1/CR-2/CR-3 — US-M2.3, US-M2.4, US-M2.5 and US-M4.3 — and US-M1.4, US-M2.1 and US-M5.3 were amended (see [06](06-decision-log-and-open-items.md) §5). **Sprint boundaries are a starting proposal — adjust them freely. The dependency constraints are not optional** — a story cannot start before what it depends on is Done (per [05](05-quality-and-acceptance.md) §6.1).
 
 Solo-maintainer project, two-week sprints assumed. Adjust cadence to actual availability; the sequencing logic holds regardless of sprint length.
 
@@ -55,7 +55,7 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 
 ---
 
-## 3. Stories — all 25, with acceptance criteria and dependencies
+## 3. Stories — all 35, with acceptance criteria and dependencies
 
 ### Epic 0 — Project Scaffolding
 
@@ -95,9 +95,13 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 - Given an inactive member, when reactivated, then their original ID, hierarchy position, and full history are preserved unchanged.
 *Testing:* see [05](05-quality-and-acceptance.md) §3.1's dedicated unit test for Rule-28.
 
-**US-M1.4 — Search by name or ID.**
-*Requirement refs:* FR-1, UN-15.
-*Acceptance criteria:* Given a query matching a name substring or exact 6-digit ID, when submitted, then matching members are listed with name, ID, TBV, slab, status; given no query, then no results are shown — not an error, not "all members."
+**US-M1.4 — Search by name, ID or phone.** *(amended 7 Aug 2026, CR-1)*
+*Requirement refs:* FR-1, UN-15, UN-29, Rule-44.
+*Acceptance criteria:*
+- Given a query matching a name substring or a 6-digit ID, when submitted, then matching members are listed with name, ID, **phone**, TBV, slab, status; given no query, then no results are shown — not an error, not "all members."
+- Given a query of 4 or more digits matching a member's phone number — with or without spaces, dashes or a country prefix — when submitted, then that member is listed.
+- Given a query of fewer than 4 digits, when submitted, then no member is matched **on phone**; name and ID matching is unaffected.
+*Technical:* one shared search function, used by every search box in the console (Home, Structure, Volume Entry, Correction panel, Add-Member reference lookup). Search behaviour must not differ between screens. Both sides are reduced to a canonical key before phone comparison — digits, then an international prefix or trunk zero dropped, so a plainly-stored number is still found when typed with a country code and vice versa. The stored value is never rewritten.
 
 ### Epic M2 — Business Volume Entry
 
@@ -107,7 +111,7 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 *Acceptance criteria:*
 - Given an open period and a selected member, when an amount >0 with up to 2 decimals is entered and saved, then the entry is recorded and the ancestor chain recalculates immediately, visible on screen with no separate recalculate step.
 - Given an amount of 0 or negative, when save is attempted, then it is rejected.
-- Given the current period is locked, when the entry screen is opened, then no entry form is rendered — a locked state naming the outstanding month is shown instead.
+- Given a month is outstanding, when the entry screen is opened, then the entry form **is** rendered, headed by the name of the month it is recording into. *(Amended 7 Aug 2026, CR-2 — this criterion previously required a locked state with no form.)*
 
 **US-M2.2 — Correct an entry, including in a closed month.**
 *Requirement refs:* Rule-39.
@@ -115,6 +119,34 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 - Given an entry in the current open period, when edited, then the ancestor chain recalculates and the change is audited.
 - Given an entry in a **closed** month, when edited, then a warning is shown before saving, and on save a new `monthly_snapshots`/`backups` version is created — the original is never overwritten.
 *Technical:* `edit_entry` is the sole correction mechanism — no separate reverse/void action.
+
+**US-M2.3 — Record into a month that has ended but is not closed.** *(new 7 Aug 2026, CR-2)*
+*Requirement refs:* Rule-36 (amended), M2.3, M2.6, UN-30, AC-42, V2.6.
+*Dependencies:* US-M2.1, US-M5.2 (the outstanding-period state must exist).
+*Acceptance criteria:*
+- Given June has ended and is not closed, and today is in August, when a figure dated in June is saved, then it is recorded into June and June's ancestor chain recalculates immediately.
+- Given the same state, when the entry screen is opened, then it names June as the month being recorded into, and the date field is bounded to June's first and last day.
+- Given the same state, when the figure is saved, then **no other period's figures change** — the recalculation is confined to the period the entry belongs to.
+- Given no month is outstanding, when the entry screen is opened, then it names the current month and the date field is bounded to the month start and today.
+*Technical:* the target period is derived from `entry_date`, never from "the period currently being closed". `member_period_totals` may hold rows for more than one not-yet-closed period at a time.
+
+**US-M2.4 — Refuse a current-month entry while an earlier month is outstanding.** *(new 7 Aug 2026, CR-2)*
+*Requirement refs:* Rule-36 (amended), M2.7, V2.3, V2.7, AC-43.
+*Dependencies:* US-M2.3.
+*Acceptance criteria:*
+- Given June is outstanding and today is in August, when a figure dated in August is saved, then it is refused and the refusal **names June** as the month that must be closed first.
+- Given the refusal, when the screen is inspected, then the form is still available and only that date is rejected — nothing else is disabled.
+- Given June is then closed, when the same August-dated figure is saved, then it is accepted.
+- Given a figure dated in an already-closed month, when entry is attempted, then it is not offered here — the correction panel is pointed to instead (Rule-39).
+
+**US-M2.5 — Month selector for multiple outstanding months.** *(new 7 Aug 2026, CR-2)*
+*Requirement refs:* Rule-36 (amended), Rule-20, §5.1, §5.4.
+*Dependencies:* US-M2.3.
+*Acceptance criteria:*
+- Given exactly one month is available to record into, when the entry screen is opened, then **no month selector is rendered at all**.
+- Given two or more months are outstanding, when the entry screen is opened, then a month selector listing them is rendered, defaulting to the **oldest**, and changing it re-bounds the date field.
+- Given two or more months hold live figures, when Home, Member Detail or Structure is opened, then figures shown are the **oldest** outstanding month's, with a month switcher available; with a single month in play, no switcher appears anywhere.
+*Note:* the client has stated this situation will not arise in practice. It is built so the system is correct if it ever does, not because it is expected.
 
 ### Epic M3 — Calculation Engine
 
@@ -138,6 +170,21 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 *Requirement refs:* FR-2, UN-16.
 *Acceptance criteria:* Given a member, when the chart opens, then each node shows exactly name, ID, and **own** Business Volume — never TBV.
 
+**US-M4.3 — Full hierarchy window.** *(new 7 Aug 2026, CR-3)*
+*Requirement refs:* FR-10, UN-31, Rule-45, M4.7, V4.5, AC-44, AC-45, §5.3a.
+*Dependencies:* US-M4.2 (the node component), US-M3.1 (figures to show).
+*Acceptance criteria:*
+- Given any position in the Structure screen, when "View full hierarchy" is activated, then the view opened is rooted at the **top member** — never at the currently-viewed member.
+- Given a structure of more than 60 descendants, when the action is activated, then a confirmation naming the **exact** member count is shown first; **Cancel opens nothing at all**; Open draws the window.
+- Given a structure of 60 or fewer descendants, when the action is activated, then it opens immediately with no confirmation.
+- Given the window is open, when it is inspected, then it is a **separate window**, every branch is expanded, each node shows exactly name, ID and own Business Volume, and the header carries the top member's name, the member count and an "as at" date and time.
+- Given the window is open, when a Business Volume figure is recorded in the main console, then the open window does **not** change and its timestamp still names when it was drawn.
+- Given the window is open or drawing, when the main console is used, then it stays responsive.
+- Given the window is open, when the toolbar is used, then zoom (to 10% out, 150% in), fit-width, in-window member search with highlight-and-scroll, and Print all work.
+- Given the top member has nobody beneath them, when the window opens, then it shows the single root node and states plainly there is nothing beneath it — not an error.
+*Technical:* `get_direct_children_chart` with `full_tree: true`; no new command. Node positions come from a single post-order layout pass emitting connectors as one pre-computed path — never measured back out of the rendered DOM. The window subscribes to nothing and holds no handle on live console state.
+*Known accepted limit:* TR-7 — the top-down layout's width grows with leaf count; at 25,000 members the canvas is extremely wide and a print spans many pages. Chosen deliberately by the client over a width-stable outline; do not switch layouts unilaterally.
+
 ### Epic M5 — Monthly Close
 
 **US-M5.1 — Close the oldest outstanding month.**
@@ -153,9 +200,13 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 *Requirement refs:* Rule-20.
 *Acceptance criteria:* Given a month has ended without being closed, when any screen loads, then an undismissable banner and a notification-list entry both appear, and neither clears except by completing the close.
 
-**US-M5.3 — Entry lock enforcement.**
-*Requirement refs:* Rule-36.
-*Acceptance criteria:* Given an outstanding close, when the entry screen is opened, then no entry of any kind is accepted until the close completes.
+**US-M5.3 — Entry eligibility by period.** *(amended 7 Aug 2026, CR-2 — was "Entry lock enforcement")*
+*Requirement refs:* Rule-36 (amended), M5.2.
+*Acceptance criteria:*
+- Given an outstanding close, when the entry screen is opened, then entries dated in the outstanding month **are** accepted, and entries dated in the current month are refused naming that outstanding month.
+- Given the close completes, when a current-month entry is attempted again, then it is accepted.
+*Note:* the enforcement itself is built as US-M2.3/US-M2.4 in Epic M2; this story is M5's side of the contract — publishing which periods are recordable (`get_period_lock_status`) and releasing the current month on close.
+*Superseded criterion:* "no entry of any kind is accepted until the close completes."
 
 **US-M5.4 — Empty-month handling.**
 *Requirement refs:* RQ-16.
@@ -250,7 +301,7 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 | **Sprint 1** | US-0.1, US-0.2 | Tauri/React/Rust scaffolding; encrypted DB with full schema and seed data |
 | **Sprint 2** | US-M1.1, US-M1.2, US-M1.3, US-M1.4 · US-M8.1, US-M8.2, US-M8.3 | Member directory and base authentication **in parallel** — M8's base auth has no data dependency on M1 |
 | **Sprint 3** | US-M3.1, US-M3.2 | The calculation engine, pure and unit-tested against the five scenarios *before* anything else is built on top — this is the highest-value, highest-risk work in the project |
-| **Sprint 4** | US-M2.1, US-M2.2 · US-M4.1, US-M4.2 · US-M8.4 | Entry, correction, member detail, hierarchy chart, credential recovery. **Sprint 4 exit gate:** all five golden scenarios reproduce through the real UI |
+| **Sprint 4** | US-M2.1, US-M2.2 · US-M4.1, US-M4.2, **US-M4.3** · US-M8.4 | Entry, correction, member detail, hierarchy chart, **full hierarchy window (CR-3)**, credential recovery. **Sprint 4 exit gate:** all five golden scenarios reproduce through the real UI |
 
 ### PI-2 — Configuration, Close, Reporting & Hardening (Sprints 5–8)
 
@@ -259,13 +310,13 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 | Sprint | Stories | Focus |
 |---|---|---|
 | **Sprint 5** | US-M7.1, US-M7.2, US-M7.3 | Slab table, royalty, structure/reporting settings, and the mid-period recalculation warning — needs M3 (Sprint 3) done |
-| **Sprint 6** | US-M5.1, US-M5.2, US-M5.3, US-M5.4 | Monthly close — the gated flow, alert, entry lock, empty-month handling. **This module carries the project's highest safety requirement** — the backup gate |
+| **Sprint 6** | US-M5.1, US-M5.2, US-M5.3, US-M5.4 · **US-M2.3, US-M2.4, US-M2.5** | Monthly close — the gated flow, alert, entry eligibility, empty-month handling — together with the entry side of the same contract (CR-2), which cannot be built or tested before the outstanding-period state exists. **This module carries the project's highest safety requirement** — the backup gate |
 | **Sprint 7** | US-M6.1, US-M6.2, US-M6.3, US-M6.4 · US-M7.4 · US-M9.1 (wired retroactively into M1/M2/M5/M7) | Reports/exports, console backup scheduling, and audit-log completion across everything built so far |
 | **Sprint 8** | US-M8.5, US-M8.6 · performance testing at 25,000-member ceiling · UAT prep and execution · vocabulary sweep, security tests | Cross-device restore, hardening, and the client's own reconciliation of the five scenarios — the actual acceptance gate |
 
 ### Sizing note
 
-31 stories across 8 sprints averages ~4 stories/sprint, but effort is not uniform — US-M3.1/M3.2 (the calculation engine) and US-M5.1 (the gated close transaction) are disproportionately more careful work than, say, US-M7.2 (a settings form). Sprint 3 and Sprint 6 should be treated as the two sprints where schedule risk actually lives; the others have slack by comparison.
+35 stories across 8 sprints averages ~4–5 stories/sprint, but effort is not uniform — US-M3.1/M3.2 (the calculation engine) and US-M5.1 (the gated close transaction) are disproportionately more careful work than, say, US-M7.2 (a settings form). Sprint 3 and Sprint 6 should be treated as the two sprints where schedule risk actually lives; the others have slack by comparison.
 
 ### What must not move
 

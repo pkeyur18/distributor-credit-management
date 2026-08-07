@@ -51,9 +51,13 @@ No `package.json`, `Cargo.toml`, `tsconfig.json`, or `src-tauri/` tree exists in
   - *This story carries the project's single highest-risk regression* — see the dedicated unit test called out in [08-testing-strategy.md](08-testing-strategy.md).
 
 **Feature M1.2 — Search**
-- **US-M1.4** Search by name or ID.
-  - *Requirement refs:* FR-1, UN-15.
-  - *Acceptance criteria:* Given a query matching a name substring or an exact 6-digit ID, When submitted, Then matching members are listed with name, ID, TBV, slab, status; given no query, Then no results are shown (not an error, not "all members").
+- **US-M1.4** Search by name, ID or phone. *(amended 7 Aug 2026, CR-1)*
+  - *Requirement refs:* FR-1, UN-15, UN-29, Rule-44.
+  - *Acceptance criteria:*
+    - Given a query matching a name substring or a 6-digit ID, When submitted, Then matching members are listed with name, ID, **phone**, TBV, slab, status; given no query, Then no results are shown (not an error, not "all members").
+    - Given a query of 4 or more digits matching a member's phone number — with or without spaces, dashes or a country prefix — When submitted, Then that member is listed.
+    - Given a query of fewer than 4 digits, When submitted, Then no member is matched **on phone**; name and ID matching are unaffected.
+  - *Technical considerations:* one shared search function backs every search box in the console (Home, Structure, BV Entry, Correction panel, Add-Member reference lookup, which keeps its active-only filter per Rule-30). Behaviour must not differ between screens. Both sides are reduced to a canonical key before the phone comparison — digits, then an international prefix or trunk zero dropped, so the match works in both directions. The stored value is never rewritten. No schema change — `members.phone` is already unique and indexed.
 
 ---
 
@@ -65,7 +69,7 @@ No `package.json`, `Cargo.toml`, `tsconfig.json`, or `src-tauri/` tree exists in
   - *Acceptance criteria:*
     - Given an open period and a selected member, When the admin enters an amount >0 with up to 2 decimals and saves, Then the entry is recorded and the member's ancestor chain recalculates immediately, visible on screen with no separate recalculate step.
     - Given an amount of 0 or a negative number, When the admin attempts to save, Then the save is rejected.
-    - Given the current period is locked (outstanding reset), When the admin opens this screen, Then no entry form is rendered — a locked state naming the outstanding month is shown instead.
+    - Given a month is outstanding, When the admin opens this screen, Then the entry form **is** rendered, headed by the name of the month it is recording into. *(Amended 7 Aug 2026, CR-2 — this criterion previously required a locked state with no form at all.)*
   - *Dependencies:* US-M1.1 (member must exist), US-0.2.
 - **US-M2.2** Correct an entry, including in a closed month.
   - *Requirement refs:* Rule-39 (extends Rule-38), UN-21.
@@ -73,6 +77,34 @@ No `package.json`, `Cargo.toml`, `tsconfig.json`, or `src-tauri/` tree exists in
     - Given an entry in the current open period, When edited, Then the ancestor chain recalculates and the change is audited.
     - Given an entry in a **closed** month, When edited, Then a warning is shown before saving ("recalculates the affected chain and writes a new snapshot version — the original record is never overwritten"), and on save a new `monthly_snapshots`/`backups` version is created, leaving the original version untouched.
   - *Technical considerations:* This is the sole correction mechanism — no separate "reverse/void" action exists (see [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md), reverse_entry technical decision).
+
+**Feature M2.2 — Entry eligibility by period** *(new 7 Aug 2026, CR-2)*
+- **US-M2.3** Record into a month that has ended but is not closed.
+  - *Requirement refs:* Rule-36 (amended), M2.3, M2.6, UN-30, AC-42, V2.6.
+  - *Acceptance criteria:*
+    - Given June has ended and is not closed, and today is in August, When a figure dated in June is saved, Then it is recorded into June and June's ancestor chain recalculates immediately.
+    - Given the same state, When the entry screen is opened, Then it names June as the month being recorded into, and the date field is bounded to June's first and last day.
+    - Given the same state, When the figure is saved, Then **no other period's figures change**.
+    - Given no month is outstanding, When the entry screen is opened, Then it names the current month and the date field is bounded to the month start and today.
+  - *Dependencies:* US-M2.1, US-M5.3 (the outstanding-period state must exist).
+  - *Technical considerations:* the target period is derived from `entry_date`, never from "the period being closed". `member_period_totals` may hold rows for more than one not-yet-closed period; the composite PK already carries this, so there is no schema change. Recalculation must be confined to the entry's own period.
+- **US-M2.4** Refuse a current-month entry while an earlier month is outstanding.
+  - *Requirement refs:* Rule-36 (amended), M2.7, V2.3, V2.7, AC-43.
+  - *Acceptance criteria:*
+    - Given June is outstanding and today is in August, When a figure dated in August is saved, Then it is refused and the refusal **names June**.
+    - Given the refusal, When the screen is inspected, Then the form is still available and only that date is rejected.
+    - Given June is then closed, When the same August-dated figure is saved, Then it is accepted.
+    - Given a figure dated in an already-closed month, When entry is attempted here, Then it is not offered — the correction panel is pointed to (Rule-39).
+  - *Dependencies:* US-M2.3.
+  - *Technical considerations:* typed errors `PeriodNotAcceptingEntries { month, blocking_month }` and `PeriodClosed { month }`. The retired `PeriodLocked` variant must not be reintroduced under a new meaning (see [04-api-specification.md](04-api-specification.md)).
+- **US-M2.5** Month selector for multiple outstanding months.
+  - *Requirement refs:* Rule-36 (amended), Rule-20.
+  - *Acceptance criteria:*
+    - Given exactly one month is available to record into, When the entry screen is opened, Then **no month selector is rendered at all**.
+    - Given two or more months are outstanding, When the entry screen is opened, Then a selector listing them is rendered, defaulting to the **oldest**, and changing it re-bounds the date field.
+    - Given two or more months hold live figures, When Home, Member Detail or Structure is opened, Then the figures shown are the **oldest** outstanding month's, with a switcher available; with a single month in play, no switcher appears anywhere.
+  - *Dependencies:* US-M2.3.
+  - *Note:* the client has stated this situation will not arise in practice. It is built so the system is correct if it ever does, not because it is expected.
 
 ---
 
@@ -101,6 +133,22 @@ No dedicated UI or IPC surface (see [04-api-specification.md](04-api-specificati
   - *Requirement refs:* FR-2, UN-16.
   - *Acceptance criteria:* Given a member, When the chart is opened, Then each node shows exactly name, ID, and **own** Business Volume — never TBV.
 
+**Feature M4.2 — Full hierarchy window** *(new 7 Aug 2026, CR-3)*
+- **US-M4.3** Full hierarchy view in a separate window.
+  - *Requirement refs:* FR-10, UN-31, Rule-45, M4.7, V4.5, AC-44, AC-45.
+  - *Acceptance criteria:*
+    - Given any position in the Structure screen, When "View full hierarchy" is activated, Then the view opened is rooted at the **top member** — never at the currently-viewed member.
+    - Given a structure of more than 60 descendants, When the action is activated, Then a confirmation naming the **exact** member count is shown first; **Cancel opens nothing at all**; Open draws the window.
+    - Given a structure of 60 or fewer descendants, When the action is activated, Then it opens immediately with no confirmation.
+    - Given the window is open, When inspected, Then it is a **separate window**, every branch is expanded, each node shows exactly name, ID and own Business Volume, and the header carries the top member's name, the member count and an "as at" date and time.
+    - Given the window is open, When a figure is recorded in the main console, Then the window does **not** change and its timestamp still names when it was drawn.
+    - Given the window is open or drawing, When the main console is used, Then it stays responsive.
+    - Given the window is open, When the toolbar is used, Then zoom (10% out to 150% in), fit-width, in-window search with highlight-and-scroll, and Print all work.
+    - Given the top member has nobody beneath them, When the window opens, Then it shows the single root node and states plainly there is nothing beneath it — not an error.
+  - *Dependencies:* US-M4.2 (the node component), US-M3.1 (figures to show).
+  - *Technical considerations:* `get_direct_children_chart` with `full_tree: true` — **no new command**. Node positions come from a single post-order layout pass emitting connectors as one pre-computed path, never measured back out of the rendered DOM as the main Structure screen does. The window subscribes to nothing and holds no handle on live console state. Read-only means no node links, no hover-lift affordance, no writes.
+  - *Known accepted limit:* TR-7 — the top-down layout's width grows with leaf count; at 25,000 members the canvas is extremely wide and a print spans many pages. Chosen deliberately by the client over a width-stable indented outline. **Do not switch layouts unilaterally** — raise it as a change request.
+
 ---
 
 ## Epic M5 — Monthly Close
@@ -117,9 +165,13 @@ No dedicated UI or IPC surface (see [04-api-specification.md](04-api-specificati
 - **US-M5.2** Persistent outstanding-month alert.
   - *Requirement refs:* Rule-20.
   - *Acceptance criteria:* Given a month has ended without being closed, When any screen loads, Then an undismissable banner and a notification-list entry both appear, and neither clears except by completing the close.
-- **US-M5.3** Entry lock enforcement.
-  - *Requirement refs:* Rule-36.
-  - *Acceptance criteria:* Given an outstanding close, When the admin opens Business Volume Entry, Then no entry of any kind is accepted until the close completes.
+- **US-M5.3** Entry eligibility by period. *(amended 7 Aug 2026, CR-2 — was "Entry lock enforcement")*
+  - *Requirement refs:* Rule-36 (amended), M5.2.
+  - *Acceptance criteria:*
+    - Given an outstanding close, When the admin opens Business Volume Entry, Then entries dated in the outstanding month **are** accepted, and entries dated in the current month are refused naming that outstanding month.
+    - Given the close completes, When a current-month entry is attempted again, Then it is accepted.
+  - *Note:* the enforcement itself is US-M2.3/US-M2.4 in Epic M2. This story is M5's side of the contract — publishing which periods are recordable via `get_period_lock_status`, and releasing the current month on close.
+  - *Superseded criterion:* "no entry of any kind is accepted until the close completes."
 - **US-M5.4** Empty-month handling.
   - *Requirement refs:* RQ-16.
   - *Acceptance criteria:* Given a calendar month elapses with zero entries recorded, When it becomes eligible for close, Then no snapshot is produced for it and it is excluded from the yearly-averaging denominator.
@@ -215,14 +267,16 @@ Every item raised by the readiness analysis has since been decided; the UI ones 
 - **US-BACKLOG-3** — ✅ Built. The last slab row cannot be removed: control disabled with an explanatory `aria-label` and hint, handler refuses with a named message. Port to M7.
 - **US-BACKLOG-4** — ✅ Built. Data-recovery screen at launch (design D), listing retained backups by the month they hold. Port to M5/M8. **Needs three new pre-flight commands** (API-34–36) which are, unavoidably, the only unauthenticated commands besides the auth trio — the database cannot be opened, so nothing can be authenticated against. `restore_from_backup` must verify the stored checksum before overwriting.
 - **US-BACKLOG-5** — ✅ Built 7 Aug 2026. New client requirement (RQ-23), not raised by the original readiness analysis: whole-console backup on a schedule or on demand, restorable on any machine including a brand-new install. See US-M7.4/US-M8.5/US-M8.6 above. **Needs four new commands** (API-37–40) and generalizes the `backups` table (`kind`/`schedule_kind`, nullable `period_id`) rather than adding a second table.
+- **US-BACKLOG-6** — ✅ Specified 7 Aug 2026, **not yet built in the prototype at the time of writing**. Three client change requests raised after this document set was approved: **CR-1** phone as a search key, **CR-2** entry into an ended-but-unclosed month, **CR-3** the full hierarchy window. They land as US-M1.4 (amended), US-M2.3/M2.4/M2.5 (new), US-M4.3 (new) and US-M5.3 (amended). **No new IPC command** — API-06/07/08/11 are amended and the surface stays at 40. Full reasoning: [../final/06-decision-log-and-open-items.md](../final/06-decision-log-and-open-items.md) §5.
+- **US-BACKLOG-7** — ✅ Closed by CR-3. The hierarchy chart's ">60 descendants" confirm-before-render gate had stood since 6 Aug 2026 as prototype behaviour with no source rule and no traceability row (LOW-1). It now belongs to the full hierarchy window, backed by Rule-45 and V4.5. **There are no remaining untraced prototype behaviours.**
 
 ## Suggested sequencing
 
 1. Epic 0 (scaffolding) — blocks everything.
 2. Epic M1 (members) and Epic M8 (auth) in parallel — M8 has no data dependency on M1.
 3. Epic M3 (calculation engine) — depends on M1's data model, blocks M2/M4/M5/M6.
-4. Epic M2 (entry) — depends on M1 + M3.
-5. Epic M4 (detail/chart) — depends on M1 + M3.
+4. Epic M2 (entry) — depends on M1 + M3. **Feature M2.2 (US-M2.3/M2.4/M2.5, entry eligibility by period) additionally depends on M5's outstanding-period state**, so it lands with Epic M5 rather than with the rest of M2.
+5. Epic M4 (detail/chart) — depends on M1 + M3. US-M4.3 (full hierarchy window) depends on US-M4.2's node component.
 6. Epic M7 (settings) — can start early (low dependency), but US-M7.3 depends on M3 existing to know what triggers recalculation; US-M7.4 depends only on the `backups` table generalization (ADR-012), not on M3.
 7. Epic M5 (monthly close) — depends on M2 + M3.
 8. Epic M6 (exports) — depends on M5 (needs snapshots to exist).

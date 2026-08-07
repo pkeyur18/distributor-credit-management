@@ -1,6 +1,6 @@
 # 02 — Business Rules & Calculation Model
 
-All 44 business rules (Rule-1 … Rule-43, plus Rule-16a) in corrected form, the calculation model, all five worked scenarios re-derived, and the 16-row settings inventory. This is the heart of the system — modules M1, M2, M3, M5, M6, M7 are built directly from this file.
+All 46 business rules (Rule-1 … Rule-45, plus Rule-16a) in corrected form, the calculation model, all five worked scenarios re-derived, and the 16-row settings inventory. This is the heart of the system — modules M1, M2, M3, M5, M6, M7 are built directly from this file.
 
 Every rule below is stated in its **current, corrected** form. Where a rule was corrected or extended after `requirement-spec.md` was written, the correction is marked and the authority cited — see [06](06-decision-log-and-open-items.md) for the full reasoning behind each correction.
 
@@ -21,7 +21,7 @@ Business Volume (own, manual entry) → Total Business Volume (rolled up, one le
 
 ---
 
-## 3. The 44 rules
+## 3. The 46 rules
 
 ### Rule-1 — Level widths are advisory
 **Rule:** Level 2/3/4 width defaults (9/6/3) are informational only. Onboarding never rejects a member for exceeding them; the UI may show a soft warning.
@@ -34,6 +34,7 @@ Business Volume (own, manual entry) → Total Business Volume (rolled up, one le
 **Rule:** Every member gets a unique 6-digit ID at onboarding, the primary lookup key for search, entry and reference linking.
 **Applies to:** M1 (creation), M4 (search), M2 (entry).
 **Implementation:** `members.id` is the PK, not a surrogate row ID.
+**Note:** The ID remains the *primary* lookup key. Since 7 Aug 2026 it is not the only one — phone number is a second, equally unique lookup key (Rule-44), and name remains a non-unique one.
 **Test:** Two members can never share an ID; search by ID returns exactly one row.
 
 ### Rule-3 — Slab lookup
@@ -115,7 +116,7 @@ Direct children only, both for counting and for paying.
 **Implementation:** No screen, export, or calculation may read this setting except the settings screen itself.
 
 ### Rule-15 — Business Volume entry flow
-**Rule:** Admin searches by name or ID, selects a member, records Business Volume against them.
+**Rule:** Admin searches by name, ID or phone (Rule-44), selects a member, records Business Volume against them.
 
 ### Rule-16 — Points-only entry
 **Rule:** Admin enters Business Volume directly, nothing else. Up to **two decimal places**. No rupee entry mode, no currency conversion, no rupee field anywhere on this screen.
@@ -149,7 +150,7 @@ Direct children only, both for counting and for paying.
 
 ### Rule-21 — Period boundaries **[PARTIALLY SUPERSEDED]**
 **Rule:** A period is a calendar month, 1st to last day. The reset closes whichever month it belongs to, whenever actually pressed.
-**Superseded detail:** The original third bullet ("points entered between the 1st and reset count into the month being closed") is struck through and superseded by Rule-36's hard entry lock, which makes that scenario unreachable. Retained in the source spec for historical record; do not implement the struck-through bullet.
+**Superseded detail:** The original third bullet ("points entered between the 1st and reset count into the month being closed") is struck through and stays struck through. It was originally superseded by Rule-36's hard entry lock, which made the scenario unreachable. Since Rule-36's amendment of 7 Aug 2026 (CR-2) that scenario is reachable again — an entry *can* now be made between the 1st and the reset — but the bullet's rule is still wrong and must still not be implemented: an entry counts into **the month its own date falls in**, never into "the month being closed". A figure dated 2 August is an August figure even if July is still awaiting close; it is simply refused until July closes, rather than being silently absorbed into July. Retained in the source spec for historical record.
 
 ### Rule-22 — Precision
 **Rule:** Business Volume and Rewards carry **two decimal places** throughout storage and calculation. Rounding happens **only at the point of display** — never at an intermediate step.
@@ -209,16 +210,35 @@ Direct children only, both for counting and for paying.
 
 ### Rule-34 — Phone number uniqueness
 **Rule:** A phone number identifies exactly one member, **unique across active and inactive members alike**. A match on an inactive member offers **reactivation** instead of erroring — preserving the original 6-digit ID, hierarchy position, and full history. A duplicate record is never created.
+**Note:** This uniqueness is what makes Rule-44 possible — because a phone number resolves to exactly one member, it is a safe lookup key, not merely a duplicate-entry guard.
 
 ### Rule-35 — Member ID allocation **[CORRECTED — see [06](06-decision-log-and-open-items.md) C4]**
 **Rule:** Each member receives a randomly-chosen, currently-available 6-digit number in the range **100001–999999**. Allocation is random, never sequential. IDs are **never released** once assigned — a deactivated member's number stays permanently taken, which is what makes reactivation possible.
 **Source:** `requirement-spec.md` originally stated 100000–999999; confirmed 4 Aug 2026 that the usable range starts at 100001.
 **Implementation:** ID-allocation logic must exclude 100000 from the candidate pool.
 
-### Rule-36 — Reset enforcement
-**Rule:** Once a calendar month ends, **all entry of Business Volume is locked** until that month's reset completes. No entry of any kind is accepted while a reset is outstanding.
-**Source:** Reverses an earlier "non-blocking alert only" decision — offered and rejected once already, then the client asked for the block.
-**Implementation:** This is what makes Rule-21's struck-through third bullet unreachable.
+### Rule-36 — Reset enforcement **[AMENDED 7 Aug 2026 — CR-2; the lock is narrowed, not removed]**
+**Rule:** Business Volume may be recorded into **any month that has ended but has not yet been closed**. The current, still-running month accepts entries **only when no earlier month is outstanding**. Recording into an already-closed month remains available solely through the correction path (Rule-39).
+
+The entry screen always names the month it is recording into. An attempt to record into the current month while an earlier month is outstanding is **refused, naming the month that must be closed first**.
+
+| Target month's state | Entry accepted? | Path |
+|---|---|---|
+| Ended, awaiting close | ✅ Yes | Business Volume Entry screen |
+| Current month, **no** earlier month outstanding | ✅ Yes | Business Volume Entry screen |
+| Current month, an earlier month **is** outstanding | ❌ Refused, naming the blocking month | — |
+| Already closed | ❌ Not on the entry screen | Correction panel (Rule-39) |
+| Future-dated | ❌ Refused | — |
+
+**Superseded wording (3 Aug 2026 – 7 Aug 2026), kept for the record:** *"Once a calendar month ends, all entry of Business Volume is locked until that month's reset completes. No entry of any kind is accepted while a reset is outstanding."*
+**Source:** Client change request **CR-2**, 7 Aug 2026. A member who purchases on the last day of a month commonly reports it two to three days later; under the previous wording that figure could not be recorded at all. The client's stated condition is reproduced exactly above — the previous month stays open for entry until it is closed, and the current month unlocks only once it is.
+**Rationale — why this is safe:** live figures belong to a period. An entry dated inside the ended-but-unclosed month is already an entry against **that** period's live figures, so it contaminates nothing. What must stay blocked is a **current-month** entry, whose figures would mix into a period that has not yet been snapshotted and zeroed (Rule-38). The lock therefore narrows from *"no entry at all"* to *"no entry into a month that cannot yet hold figures."*
+**Applies to:** M2 (entry eligibility), M5 (the close that releases the current month).
+**Validation:** V2.3, V2.6, V2.7.
+**Implementation:** `record_entry` derives the target period from `entry_date` and refuses when that period is `closed`, or when it is the current month and any earlier period is still `awaiting_close`. The period status `awaiting_close` (formerly `ended_locked`) is deliberately named for what it now is — ended, still accepting entries, waiting to be closed.
+**Unchanged by this amendment:** Rule-20's alert and banner remain undismissable; Rule-21 (one period row per calendar month) still holds; Rule-39 remains the only route into a closed month; Rule-18/38's close sequence is untouched.
+**Consequence for Rule-21:** Rule-21's struck-through third bullet is no longer made unreachable by a total lock — but it stays struck through, because a month still cannot be *closed* out of order, and a period row is still created per calendar month.
+**Test:** With June outstanding and today in August — a June-dated entry saves and recalculates June's chain; an August-dated entry is refused naming June. After June closes, an August-dated entry saves.
 
 ### Rule-37 — Transfers prohibited
 **Rule:** A member's sponsor/introducer is fixed at creation and can **never** change. No override exists.
@@ -257,6 +277,37 @@ Direct children only, both for counting and for paying.
 **Applies to:** M7 (schedule/retention setting), M8 (taking and restoring a backup).
 **Validation:** Schedule value must be one of `off`/`daily`/`weekly`/`monthly`; retention count ≥ 1. A restore is refused if the target file's checksum does not verify.
 **Implementation:** Generalizes the existing `backups` table (ADR-012) rather than adding a second one. Full detail: [04](04-technical-architecture.md) §9.
+
+### Rule-44 — Phone number is a search key **[NEW — client requirement, 7 Aug 2026, CR-1]**
+**Rule:** Every member search accepts a **phone number** as well as a name and a 6-digit member ID. Because a phone number is unique across active and inactive members alike (Rule-34), it resolves to exactly one member — the fastest unambiguous handle the administrator already holds when a member telephones or walks in.
+
+Matching rules, applied together — a member matches when **any** clause holds:
+
+1. the query, case-insensitive, is a substring of the member's **name**; or
+2. the query's digits are a substring of the member's **6-digit ID**; or
+3. the query's digits are a substring of the member's **phone number's digits**, and the query contains **at least 4 digits**.
+
+**Number normalisation:** before comparison, both the query and the stored phone number are reduced to a single canonical key — non-digits are stripped, and then an **international prefix or a trunk zero is dropped** by keeping the last 10 digits of anything longer than 10 (and stripping leading zeros from anything shorter). So `+91 98765 43210`, `098765 43210` and `9876543210` all produce the same key and find the same member, **in either direction** — a number stored plainly is still found when the administrator types it with a country code, and vice versa. Stripping non-digits alone is **not sufficient** and will fail that case.
+
+**The stored value is never rewritten.** Normalisation happens only at the moment of comparison; the member's phone is displayed exactly as it was entered.
+
+**The same key governs Rule-34's uniqueness.** A number is the same number however it was written down, so a duplicate check must compare canonical keys too — otherwise the same person could be added twice under two spellings of one number.
+**The four-digit floor** prevents a two- or three-digit query from sweeping in every member whose phone happens to contain those digits. Below four digits, only name and ID are matched — exactly the behaviour that existed before this rule.
+**Applies to:** M4 (home and structure search), M2 (entry and correction search), M1 (Add Member reference lookup, which additionally filters to active members per Rule-30).
+**Scope:** One shared search behaviour serves every search box in the console. Search behaviour must never differ between screens.
+**Display:** Search results show the phone number as a column alongside name and member ID, so the administrator can confirm they have the right person before selecting. Phone is personal data under the DPDP Act 2023; it is visible only to the single administrator role, which already sees it on Member Detail and in exports (Rule-33).
+**Validation:** V4.4.
+**Test:** A member whose stored phone is `+91 98765 43210` is found by `9876543210`, by `98765 43210`, by `+919876543210`, by `09876543210`, and by the fragment `4321`. A member stored as plain `9876543210` is equally found by `+91 98765 43210` — the normalisation must work in both directions. A query of `987` matches them by phone **not at all**, and matches by name or ID only if those contain `987`.
+
+### Rule-45 — Full hierarchy view is a point-in-time draw **[NEW — client requirement, 7 Aug 2026, CR-3]**
+**Rule:** The console offers a **full hierarchy view** — the entire structure, every branch expanded at once, rooted always at the top member — drawn in a **separate window**. It renders once, at the moment it is opened, and never updates. It carries the date and time it was drawn, so a printed copy is self-dating. It is **read-only**: nothing can be recorded, edited or navigated from it. Closing it discards it entirely.
+**Source:** Client change request **CR-3**, 7 Aug 2026. The main Structure screen deliberately opens one branch at a time (FR-2, UN-16); that is the right default for daily use but cannot show the shape of the whole network. The client's binding constraint on this request was that **the main console must not slow down** — hence a separate window that draws and then forgets.
+**Applies to:** M4.
+**Binding constraint inherited from FR-2:** each node shows exactly **name, ID and own Business Volume** — never Total Business Volume. The full view relaxes *how much of the tree* is shown; it relaxes nothing about *what a node shows*.
+**Size gate:** opening is gated behind an explicit confirmation naming the exact member count whenever the structure exceeds **60 descendants**. This is the >60 confirm-before-render gate already carried by the design system; the full hierarchy window is where it now lives.
+**Validation:** V4.5.
+**Implementation:** A separate top-level window, so the main console's DOM, layout and paint budget are untouched. Node positions come from a single post-order layout pass and the connectors are emitted as one pre-computed path during that pass — never measured back out of the rendered DOM. Read-only means read-only: the window subscribes to nothing and holds no handle on live state.
+**Test:** Open the full view on a network of more than 60 members; the count is named before it opens, every branch is expanded, each node shows three fields, and the main console remains responsive throughout. Record an entry in the main console afterwards; the already-open window does not change, and its timestamp still names when it was drawn.
 
 ---
 
@@ -437,10 +488,10 @@ Rows in **bold** carry a default not stated in any source document — see [06](
 
 | Rule | Module(s) |
 |---|---|
-| 1, 2, 30, 32, 34, 35, 37, 40, 42 | M1 |
-| 15, 16, 16a, 22, 36, 39 | M2 |
+| 1, 2, 30, 32, 34, 35, 37, 40, 42, 44 | M1 |
+| 15, 16, 16a, 22, 36, 39, 44 | M2 |
 | 3, 5–13, 25, 26, 41 | M3 |
-| 2, 6, 7, 12 | M4 |
+| 2, 6, 7, 12, 44, 45 | M4 |
 | 17, 18, 20, 21, 31, 36, 38, 39 | M5 |
 | 19, 23, 24, 33, 42 | M6 |
 | 4, 14, 27, 43 | M7 |

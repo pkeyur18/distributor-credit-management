@@ -126,7 +126,7 @@ Keyur Patel. Builds and supports the system on request; no standing operational 
 | ID | Goal | Frequency |
 |---|---|---|
 | **UG-1** | Record a figure against one member and move on, confident the rest updates itself | Daily |
-| **UG-2** | Find a specific member instantly, by name or number | Daily |
+| **UG-2** | Find a specific member instantly, by name, number or phone | Daily |
 | **UG-3** | Answer a member's question about their figure, with the contributing detail to hand | Weekly |
 | **UG-4** | See the shape of a branch — who sits under whom | Weekly |
 | **UG-5** | Onboard a new member under their introducer, in under a minute | Weekly |
@@ -146,10 +146,10 @@ Keyur Patel. Builds and supports the system on request; no standing operational 
 |---|---|
 | **Structure** | One permanent root member; every other member introduced by an existing one; adjustable depth and level widths, treated as guidance only |
 | **Members** | Add, edit, deactivate, reactivate; unique random 6-digit numbers; unique contact numbers; mandatory consent capture |
-| **Recording** | Search by name or number; record Business Volume to two decimal places; correct any entry at any time, in any month |
+| **Recording** | Search by name, number or phone; record Business Volume to two decimal places into the current month or into a month that has ended but is not yet closed; correct any entry at any time, in any month |
 | **Calculation** | Team totals, slab assignment, differential rewards, royalty, immediate recalculation on every entry |
-| **Viewing** | Home search; structure chart; member detail with direct team and full reward breakdown; audit log |
-| **Monthly close** | Manual close, undismissable alert, recording lock, mandatory backup gate, permanent versioned record, clearing of all live figures |
+| **Viewing** | Home search; structure chart, one branch at a time; **full hierarchy view — the whole structure expanded, in a separate read-only window**; member detail with direct team and full reward breakdown; audit log |
+| **Monthly close** | Manual close, undismissable alert, mandatory backup gate, permanent versioned record, clearing of all live figures. The current month cannot be recorded into until the outstanding one is closed |
 | **Reporting** | Monthly extract with adjustable columns; yearly average extract; low-contribution report; re-download of any past closed month |
 | **Settings** | Thresholds, percentages, slab rows, depth, widths, royalty rate and qualifying count, yearly cycle, low-contribution threshold, reference unit value, default extract columns, session timeout, whole-console backup schedule and retention |
 | **Access** | One administrator login, PIN and/or password, mandatory failed-attempt lockout, one-time recovery codes |
@@ -186,6 +186,7 @@ Keyur Patel. Builds and supports the system on request; no standing operational 
 | Additional logins or roles | Not required today |
 | Moving an entry between months | RQ-21: date edits stay within their own month. A cross-month move would be an explicit separate action, not a silent date-field behaviour |
 | Phone or tablet use | Never discussed |
+| A width-stable (indented outline) full hierarchy layout | The client chose the top-down chart on 7 Aug 2026 knowing its width behaviour (TR-7). The outline remains the fallback if the chart proves unusable at scale — the data path would not change |
 
 ---
 
@@ -205,7 +206,7 @@ All sixteen, as confirmed by the client (3–7 August 2026), with how the archit
 
 | ID | Quality | Requirement | Satisfied by |
 |---|---|---|---|
-| **NFR-1** | **Performance** | Any screen **< 2 s**; recalculation **< 2 s**; extracts **< 30 s**. Targets are fixed regardless of volume. Sizing: ~**1,000** Business Volume entries per month, explicitly approximate and variable (confirmed 4 Aug 2026) | ADR-005 chain-upward recalculation — cost is *O*(depth × average width), independent of total member count |
+| **NFR-1** | **Performance** | Any screen **< 2 s**; recalculation **< 2 s**; extracts **< 30 s**. Targets are fixed regardless of volume. Sizing: ~**1,000** Business Volume entries per month, explicitly approximate and variable (confirmed 4 Aug 2026). **Exception, agreed 7 Aug 2026:** the full hierarchy view (FR-10) is **outside** the two-second screen budget — it draws the entire network at once, in a separate window, behind an explicit confirmation naming the member count. The budget that binds it instead is that the **main console stays responsive** while it draws (AC-45) | ADR-005 chain-upward recalculation — cost is *O*(depth × average width), independent of total member count. The full view's isolation in a separate window is what keeps its cost off every other screen (TR-7) |
 | **NFR-2** | **Scalability** | Design ceiling **25,000 members / 200,000 entries per year**. Client's actual scale 500–5,000 | ADR-005; SQLite handles this row volume comfortably |
 | **NFR-3** | **Availability** | ~100% — meaning the *software* is available whenever the machine is on. **Not** protection against the client's device failing (that is NFR-13) | ADR-001 — no server or network dependency to fail |
 | **NFR-4** | **Security** | Encryption at rest; session/inactivity lock; mandatory failed-attempt lockout; **no member data in extract filenames**. "Encryption in transit" is **ruled inapplicable** — nothing ever transits | ADR-003, ADR-008; see [04](04-technical-architecture.md) §8 |
@@ -256,11 +257,11 @@ All sixteen, as confirmed by the client (3–7 August 2026), with how the archit
 | ID | Constraint |
 |---|---|
 | **OC-1** | One user operates the entire system. No cover, no second pair of hands. |
-| **OC-2** | Recording is fully locked from the moment a month ends until that month is closed. |
+| **OC-2** | From the moment a month ends until it is closed, recording continues **into that month** but not into the current one. Amended 7 Aug 2026 (CR-2); previously *"recording is fully locked from the moment a month ends until that month is closed."* |
 | **OC-3** | Where several months are open, only the oldest can be closed; the rest wait behind it. |
 | **OC-4** | The close cannot proceed without a confirmed backup. |
 | **OC-5** | Backups and monthly records are retained permanently. Nothing is deleted automatically. |
-| **OC-6** | 🔴 The client's availability at each month end is a hard dependency of the business continuing to record activity. Accepted deliberately (RQ-11 — the hard stop is kept, no grace period). |
+| **OC-6** | 🟡 The client's availability at each month end determines when the **new** month can start being recorded. Materially eased 7 Aug 2026 (CR-2): activity in the month that has ended can still be recorded throughout, so nothing is lost while the client is away — only the new month waits. Previously a hard 🔴 dependency of the business continuing to record at all (RQ-11's original answer). |
 
 ### 8.4 Compliance constraints
 
@@ -297,14 +298,14 @@ Every assumption originally inferred by the architect has since been confirmed o
 
 ## 10. Business risks
 
-Fourteen risks were identified. Eleven are closed; three remain live and are accepted rather than mitigated.
+Fourteen risks were identified. Eleven are closed, one is mitigated (R-4, by CR-2 on 7 Aug 2026); two remain live and are accepted rather than mitigated.
 
 | ID | Risk | L | I | Position |
 |---|---|---|---|---|
 | **R-1** | A month's record is lost entirely — the close clears everything, so a close on a failed backup leaves no evidence | Low | **Critical** | 🟢 **Closed 3 Aug 2026.** The retained in-system copy is the verifiable gate (RQ-6) |
 | **R-2** | An edited threshold table produces negative rewards — Rule-9's guarantee depends on the table always rising | **Medium** | **High** | 🔶 **LIVE — accepted by the client, not mitigated in software.** The recommended validation was explicitly declined. See Rule-41, ADR-009 |
 | **R-3** | A wrong figure cannot be traced — one login, instant recalculation, no record of change | Medium | High | 🟢 **Closed 3 Aug 2026.** Audit log built (RQ-9, NFR-5) |
-| **R-4** | The business stops being recorded — recording locks the instant a month ends; if the client is away, nothing can be recorded | **Medium** | **High** | 🔶 **LIVE — accepted deliberately.** The hard stop is kept, with no grace period (RQ-11). Also OC-6 |
+| **R-4** | The business stops being recorded because a month end falls while the client is away | **Low** *(was Medium)* | **Low–Medium** *(was High)* | ✅ **MITIGATED 7 Aug 2026 by CR-2.** Recording no longer stops when a month ends: activity dated in the ended month can be recorded for as long as it stays unclosed, which is precisely the case this risk described. What remains is narrower — the **new** month cannot be recorded into until the old one is closed, so a long absence still defers new-month recording (and those figures must then be entered afterwards, dated correctly). The undismissable alert (Rule-20) remains the pressure to close. Also OC-6 |
 | **R-5** | Total loss of access — one login, one credential | Low | Critical | 🟢 **Closed.** Recovery codes at setup (3 Aug); strengthened 4 Aug by dual credentials, either authenticating |
 | **R-6** | Personal data exposure — thousands of people's details behind one credential | Low | High | 🟢 **Closed.** Permanent retention agreed, mandatory lockout, consent capture (RQ-8, RQ-22) |
 | **R-7** | ~~Deactivation produces wrong figures~~ | — | — | 🟢 **Closed 4 Aug 2026.** Inactive is display-only, zero calculation effect (RQ-2) |

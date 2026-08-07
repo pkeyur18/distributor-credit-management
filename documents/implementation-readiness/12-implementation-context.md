@@ -2,6 +2,8 @@
 
 **Read this file first in any future Claude Code session picking up implementation work on this project.** It is a condensed summary, not a replacement for the source documents — every section links to the full deliverable or source artifact it was distilled from.
 
+> ⚠️ **Superseded by `documents/final/` (7 August 2026).** That set is the build reference; where this file disagrees with it, it is wrong. This file was written on 6 August and has been patched — not rewritten — for the three change requests of 7 August (**CR-1** phone search, **CR-2** entry into an ended-but-unclosed month, **CR-3** the full hierarchy window). **CR-2 in particular reverses a previously frozen rule**: recording is no longer locked outright when a month ends. Start at [../final/00-master-index.md](../final/00-master-index.md).
+
 ---
 
 ## 1. Project Purpose
@@ -52,7 +54,7 @@ Full rule text: [03-business-rules.md](03-business-rules.md).
 
 ## 6. Data Model Summary
 
-10 entities: `members` (the hierarchy, self-referencing via `introducer_member_id`), `business_volume_entries` (append-only ledger), `slab_table` (editable %-band config), `member_period_totals` (live cache, current open period only), `periods` (open/ended_locked/closed lifecycle), `monthly_snapshots` (permanent, **versioned** historical record — all yearly reporting reads this, never live values), `backups` (metadata, internal-retained-copy is the actual close-gate), `settings` (13 configurable items), `auth` (single-row credentials), `audit_log` (append-only who-changed-what).
+10 entities: `members` (the hierarchy, self-referencing via `introducer_member_id`; `phone` is unique **and** a search key since CR-1), `business_volume_entries` (append-only ledger; `period_month` derived from `entry_date`), `slab_table` (editable %-band config), `member_period_totals` (live cache — **any not-yet-closed period**, amended by CR-2; was "current open period only"), `periods` (**open/awaiting_close/closed** lifecycle — `ended_locked` renamed by CR-2), `monthly_snapshots` (permanent, **versioned** historical record — all yearly reporting reads this, never live values), `backups` (metadata, internal-retained-copy is the actual close-gate), `settings` (13 configurable items), `auth` (single-row credentials), `audit_log` (append-only who-changed-what).
 
 Full attribute-level detail: [05-data-model-specification.md](05-data-model-specification.md).
 
@@ -72,7 +74,7 @@ One role: Administrator. Full access to everything. Network members have **zero*
 ## 9. Key Workflows
 
 1. **Onboarding** — search a Reference ID, fill name/phone/address/consent, save → random 6-digit ID (100001–999999) assigned.
-2. **Recording** — search member, enter one Business Volume figure, save → entire ancestor chain's TBV/slab/Rewards visible correct on screen instantly, no recalculate button anywhere.
+2. **Recording** — search member (by name, 6-digit ID **or phone**, per Rule-44), enter one Business Volume figure, save → entire ancestor chain's TBV/slab/Rewards visible correct on screen instantly, no recalculate button anywhere. The entry always names the month it is recording into: the oldest month awaiting close if there is one, otherwise the current month (Rule-36 as amended).
 3. **Monthly close** — outstanding-month alert (undismissable) → admin triggers close on the oldest outstanding month → backup generated and verified → **only then** are figures zeroed and a permanent snapshot written → alert clears; repeats for any further outstanding months, oldest-first, never merged.
 4. **Correction** — any entry, in any month including closed ones, can be edited; a closed-month edit writes a new snapshot/backup **version**, the original is never overwritten, reporting always reads the latest version.
 5. **Reporting** — three export types (monthly data, yearly average [divided by actual snapshot count, not a fixed 12], low-contribution [filtered on own-BV yearly average]) plus re-download of any past closed-month snapshot.
@@ -83,7 +85,7 @@ Vocabulary is restricted everywhere (screens, exports, error messages, tooltips,
 
 ## 11. Error Handling Summary
 
-Full matrix: [07-error-edge-case-matrix.md](07-error-edge-case-matrix.md). Headline patterns: validation failures are inline, non-blocking where the rule is advisory (level-width/depth guidance always warns, never blocks); backup failure during close **aborts everything, mutates nothing**; recording is **fully locked** (not just warned) once a month ends and stays locked until close completes; inactive-member deactivation has **zero calculation effect** (display-only) — this is the single highest-risk correction to implement faithfully, since the original spec wording (superseded) would silently corrupt ancestor totals if followed.
+Full matrix: [07-error-edge-case-matrix.md](07-error-edge-case-matrix.md). Headline patterns: validation failures are inline, non-blocking where the rule is advisory (level-width/depth guidance always warns, never blocks); backup failure during close **aborts everything, mutates nothing**; once a month ends it **keeps accepting entries dated within it** while the **current** month is refused until it closes (Rule-36 as amended by CR-2, 7 Aug 2026 — this reverses the earlier "recording is fully locked" wording, which appears throughout the 6 August documents and is stale); inactive-member deactivation has **zero calculation effect** (display-only) — this is the single highest-risk correction to implement faithfully, since the original spec wording (superseded) would silently corrupt ancestor totals if followed.
 
 ## 12. Testing Strategy Summary
 

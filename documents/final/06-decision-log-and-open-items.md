@@ -8,6 +8,8 @@ Three kinds of thing live here:
 - **§3 — Open items (O1–O5):** genuinely undecided. **No default has been invented for any of them.**
 - **§6 — Do not re-raise:** decisions that look like oversights and are not.
 
+**Change requests are recorded in §5, by date.** The most recent are **CR-1, CR-2 and CR-3 of 7 August 2026**, which amend Rule-36 and add Rule-44 and Rule-45. CR-2 in particular **reverses RQ-11's earlier answer** — if you find a document still describing a total entry lock when a month is outstanding, that document is stale and §5 is right.
+
 ---
 
 ## 1. The precedence rule
@@ -184,7 +186,7 @@ Chronological record of what was decided, when, and where it differed from the r
 | Differential applies to the child's **Total Business Volume** | Only Scenario 3 disambiguates it |
 | A member earns **nothing** on their own Business Volume | Confirms all five scenarios' behaviour as deliberate |
 | Own Business Volume is **always** included in a member's own Total Business Volume | Scenarios 4 and 5 omitted it as a write-up simplification, not a different rule |
-| 🔷 The reset zeroes **everything** — Business Volume, Total Business Volume, Rewards, royalty | Differs from the recommendation, which proposed keeping Rewards live. Makes the backup gate and entry lock load-bearing |
+| 🔷 The reset zeroes **everything** — Business Volume, Total Business Volume, Rewards, royalty | Differs from the recommendation, which proposed keeping Rewards live. Makes the backup gate load-bearing — and, as it stood on 3 Aug 2026, the total entry lock too. That lock was narrowed on 7 Aug 2026 (CR-2); the backup gate is untouched and still load-bearing |
 | A period is a **calendar month**; the close closes whichever month it belongs to | Plus a client-added requirement: a persistent, undismissable alert |
 | Yearly average divides by the count of months that **have a snapshot**, with that count displayed | Protects late joiners |
 | 🔷 The low-contribution report filters on the yearly average of **own** Business Volume | Differs from the recommendation of Total Business Volume |
@@ -270,6 +272,47 @@ Chronological record of what was decided, when, and where it differed from the r
 
 **Four small prototype fixes, made alongside the above (not requirement changes, carry forward as build notes when porting the UI):** Escape now closes a dismissable modal (add/edit member modals still ignore it, by design — see [07](07-design-system.md) §6.6); `role="dialog"`/`aria-modal`/`aria-labelledby` added to the modal primitive; toast icons given an explicit size rule (`.toast svg`) after rendering at the SVG default; a `hashchange` listener added so the recovery-screen trigger fires correctly (a hash appended to an already-open page is a same-document navigation, so `init()` would otherwise never re-run). Source: `11-open-questions-and-decisions.md`, "Improvements made while building the above."
 
+### 7 August 2026 — CR-1, CR-2, CR-3: three client change requests
+
+Raised by the client after reviewing this approved set. All three change behaviour that was already frozen, so each is recorded here in full: what was asked, what was decided, and what it reverses.
+
+#### CR-1 — Phone number as a search key
+
+| | |
+|---|---|
+| **Requested** | The home page should let the client search by phone number as well as by member ID and name, "since phone number is unique to member so it is easy to search member by mobile number" |
+| **Decided** | Every search box in the console accepts a phone number. Matching is on digits alone, so formatting is irrelevant, and the phone clause engages only from **four digits** upward so short queries do not sweep in unrelated members. Search results gain a **phone column** |
+| **Rule** | **Rule-44** (new). Also FR-1, M2.1, M4.6, V4.4, AC-40, AC-41, UN-29 |
+| **Notes** | Applied to *all* search boxes rather than only Home, because one shared search function serves them all — differing behaviour between screens would be a defect, not a feature. Phone is personal data under the DPDP Act 2023; it now appears on the landing screen, visible only to the single administrator role that already sees it on Member Detail and in exports. Recorded in [04](04-technical-architecture.md) §8.7 |
+| **Rejected alternative** | Home-only phone search, and "match on phone but do not display it". The client chose full scope and display |
+
+#### CR-2 — Grace period for entry into an unclosed month
+
+| | |
+|---|---|
+| **Requested** | Remove the hard lock on Business Volume entry when the previous month is not closed. The client's rationale: a member who purchases on the last day of a month often reports it two or three days later, and under the frozen rule that figure could not be recorded at all. The client's stated condition, verbatim in substance: *while the previous month is unclosed I can add entries for the previous month, but I cannot add current-month entries; to add current-month entries the previous month must be closed* |
+| **Decided** | Rule-36 is **narrowed, not removed**. A month that has ended but is not closed continues to accept entries, indefinitely, for as long as it stays unclosed. The current month accepts entries only when no earlier month is outstanding. Closed months remain reachable only through the correction path (Rule-39) |
+| **Reverses** | **RQ-11's answer of 3 Aug 2026** ("hard stop kept, no grace period"), and with it OC-2, OC-6's severity, R-4's position, AC-19, V2.3 and V2.5 |
+| **Rule** | **Rule-36 amended.** Also M2.3/M2.6/M2.7, M5.2, V2.3/V2.5/V2.6/V2.7, AC-19/AC-42/AC-43, UN-30 |
+| **Grace has no clock** | No day limit, no configurable grace window, no countdown, no seventeenth setting. The grace lasts exactly as long as the month stays unclosed. The client considered and declined a configurable N-day window |
+| **Why it is safe** | Live figures belong to a period. An entry dated in the ended-but-unclosed month is already an entry against **that** period's figures. Only a current-month entry would mix into a period not yet snapshotted and zeroed — and that is what stays blocked |
+| **Schema consequence** | `periods.status` value `ended_locked` renamed **`awaiting_close`**; `member_period_totals` widened from "the current open period only" to "any not-yet-closed period". Both are documentation-only — no implementation exists yet |
+| **Multiple outstanding months** | Any outstanding month accepts entries, not merely the oldest. The client noted this situation will not arise in practice and chose the permissive behaviour for the hypothetical case. Figure-showing screens display the **oldest** outstanding month, and a month switcher is rendered **only** when more than one month is outstanding — so nothing new appears on screen in the ordinary case |
+
+#### CR-3 — "View full hierarchy" in a separate window
+
+| | |
+|---|---|
+| **Requested** | A "View Full Hierarchy" button on the Structure screen that opens a new window with the full hierarchy expanded, with the explicit constraint that *"our original software should not be affected by performance — it just opens new window with expanded full hierarchy with all data and forgets"* |
+| **Decided** | A separate, read-only window rooted always at the **top member**, drawing the whole structure once and never updating, carrying an "as at" timestamp. Zoom (down to 10%), fit-width, in-window search-and-highlight, and print. Gated above **60 descendants** by a confirmation naming the exact member count |
+| **Rule** | **Rule-45** (new). Also FR-10, M4.7, V4.5, AC-44, AC-45, UN-31, §5.3a |
+| **Root choice** | Always the top member, not the currently-viewed member — the client's explicit choice. A full view is a view of the network, not of a branch |
+| **Layout choice** | **Top-down chart, fully expanded**, chosen by the client over a width-stable indented outline after being shown that a top-down chart's width grows with leaf count and becomes tens of thousands of pixels wide at the 25,000-member ceiling. Recorded as **TR-7**, accepted, with the 10% zoom floor, fit-width, in-window search and the size gate as the agreed mitigations. The indented outline is the named fallback, listed under deferred scope |
+| **No new API** | `get_direct_children_chart` (API-11) already carried a `full_tree` parameter in the readiness spec but had lost it in [04](04-technical-architecture.md); the parameter is restored and put to work. The count for the gate and the draw itself are both cheap local reads — the cost of this feature is rendering, not fetching, which is exactly why the rendering happens somewhere else |
+| **Closes a standing gap** | The ">60 descendants confirm-before-render" gate had been specified in [03](03-functional-specification.md) §5.3 and [07](07-design-system.md) §8 but never built, and was tracked as untraced prototype behaviour. It now has a rule, a validation row and a home |
+
+**Prototype drift found and corrected during this work (build notes, not requirement changes):** the ">60 descendants" gate was documented but absent from `ui-prototype-v2.html`; the Structure screen's zoom, fit-width, collapse-all and search controls existed in the prototype but were documented nowhere; V2.5 stated the entry screen carries no date field while the prototype has always shown one. All three are now resolved in favour of the built behaviour, with V2.5 amended.
+
 ---
 
 ## 6. Do not re-raise
@@ -289,6 +332,10 @@ Each of these looks like an oversight on first encounter and is not. Each was co
 | **The external-medium backup copy is not enforced** | The internal retained copy is the real gate; the external copy is prompted and reminded, never blocking (RQ-6, RQ-19). Forcing the close to block on it would contradict a documented design decision. The residual single-medium risk is stated plainly (TR-4), not solved |
 | **No concurrency control** | Single-user, single-machine, single-session by client confirmation (BA-3, OC-1). SQLite's own file locking is sufficient. Do not add an optimistic/pessimistic locking scheme |
 | **Loss of credential *and* recovery codes is unrecoverable** | The direct, accepted cost of "nobody but the client can ever get in" with no vendor backdoor (ADR-008). Must be communicated plainly at setup, not buried in settings |
+| **The entry grace period has no time limit** | Deliberate (CR-2, 7 Aug 2026). A configurable "grace days" setting was offered and declined — the grace lasts exactly as long as the month stays unclosed. Do not add a countdown, a cutoff, or a seventeenth setting |
+| **The full hierarchy window is rooted at the top member, not the current one** | The client's explicit choice (CR-3). Do not "improve" it by rooting it where the user happens to be — a second action for that was offered and declined |
+| **The full hierarchy chart gets very wide on large networks** | Known, measured and accepted (TR-7). The width-stable indented outline was offered and the client chose the top-down chart. Do not silently switch layouts; if it becomes unusable in practice, raise it as a change, not as a bug fix |
+| **The full hierarchy window does not update while open** | The defining property of Rule-45, not an oversight. It is a point-in-time draw carrying its own timestamp. Do not add live refresh — it would reintroduce exactly the main-console cost the separate window exists to avoid |
 
 ---
 

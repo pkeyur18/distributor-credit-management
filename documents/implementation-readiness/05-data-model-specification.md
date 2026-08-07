@@ -29,7 +29,9 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 | `created_at` | TIMESTAMP | Yes | Auto-set | |
 
 **Relationships:** Self-referencing (`introducer_member_id` → `members.id`) forms the tree. One-to-many with `business_volume_entries`, `member_period_totals`, `monthly_snapshots`, `audit_log`.
-**Indexes:** PK on `id`; unique index on `phone`; index on `introducer_member_id` (chain-upward traversal, Rule-26); index on `name` (search, FR-1).
+**Indexes:** PK on `id`; unique index on `phone` (uniqueness under Rule-34 **and** the lookup index for phone search under Rule-44); index on `introducer_member_id` (chain-upward traversal, Rule-26); index on `name` (search, FR-1).
+
+**Phone as a search key (Rule-44, added 7 Aug 2026 — CR-1).** `phone` is now matched by `search_members`, not merely constrained. Matching is a substring comparison on the **canonical key** (digits, then an international prefix or trunk zero dropped) with a four-digit floor (V4.4), so the unique index accelerates an exact or prefix match while a mid-number match is a scan. At the NFR-2 ceiling of 25,000 rows that scan sits comfortably inside NFR-1's two-second budget. **Do not add a stored canonical-key shadow column speculatively** — if a real profile ever demands it, that is the cheapest fix, but it is not needed at this scale. The stored value keeps whatever formatting the administrator typed; normalisation happens only at comparison time.
 **Related requirements:** FR-1, FR-2, FR-3, FR-4, Rule-1, Rule-2, Rule-28, Rule-30, Rule-32, Rule-34, Rule-35, Rule-37, Rule-40.
 
 ---
@@ -47,7 +49,7 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 | `member_id` | INTEGER | Yes | FK → `members.id` | |
 | `amount` | INTEGER | Yes | CHECK `> 0` (Rule-16a), stored ×100 | Zero and negative both refused at entry |
 | `entry_date` | DATE | Yes | Must fall within `period_month`'s bounds | |
-| `period_month` | TEXT (YYYY-MM) | Yes | Fixed at creation, never changes | Rule-21 |
+| `period_month` | TEXT (YYYY-MM) | Yes | **Derived from `entry_date`** at creation, fixed thereafter, never changes | Rule-21. A figure belongs to the month its own date falls in — **never** to "the month being closed". This is the trap Rule-21's struck-through third bullet describes, and CR-2 made it reachable again |
 | `created_at` | TIMESTAMP | Yes | Auto-set | |
 | `updated_at` | TIMESTAMP | No | Set on `edit_entry` | |
 
@@ -79,9 +81,11 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 
 ## Entity: `member_period_totals`
 
-**Purpose:** The live cache of the current open period's figures per member — Business Volume, TBV, slab, differential, royalty, Rewards. Recomputed in place on every chain-upward recalculation (Rule-26).
-**Lifecycle:** One row per member per **currently-open** period only. Zeroed and effectively reset to a fresh row set at each monthly close (Rule-38) — the closing period's final state is preserved separately in `monthly_snapshots` first.
-**Retention:** Live/ephemeral — only the current period exists here; history lives in `monthly_snapshots`.
+**Purpose:** The live cache of each not-yet-closed period's figures per member — Business Volume, TBV, slab, differential, royalty, Rewards. Recomputed in place on every chain-upward recalculation (Rule-26).
+**Lifecycle:** One row per member per **not-yet-closed** period — that is, any period whose status is `open` or `awaiting_close`. Zeroed and cleared for **the closing period only** at each monthly close (Rule-38); other live periods are untouched. The closing period's final state is preserved in `monthly_snapshots` first.
+**Retention:** Live/ephemeral — only not-yet-closed periods exist here; history lives in `monthly_snapshots`.
+
+> **Amended 7 August 2026 (CR-2).** Previously *"one row per member per currently-open period only"*. Because a month that has ended but is not closed still accepts entries (Rule-36 as amended), more than one period can hold live figures simultaneously. **The composite primary key `(member_id, period_id)` already supports this — there is no schema change**, only a change to what the table is allowed to contain. A recalculation is confined to the period the triggering entry belongs to and must never touch another period's rows. In practice more than one live period is rare: it requires a month to have been left unclosed past the end of the next one. Where figures are shown without a period being chosen, the **oldest** not-yet-closed period is the one displayed.
 **Security sensitivity:** Medium.
 
 | Attribute | Type | Required | Constraints | Notes |
@@ -95,7 +99,7 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 | `royalty` | INTEGER | Yes | Stored ×100 | Rule-10 |
 | `rewards` | INTEGER | Yes | Stored ×100 | Rule-12 = differential + royalty |
 
-**Relationships:** Composite-keyed to `members` and `periods`. Read by M4 (member detail, chart) and written exclusively by M3 (calculation engine) as a side-effect of M2/M7 commands.
+**Relationships:** Composite-keyed to `members` and `periods` — one row set per not-yet-closed period. Read by M4 (member detail, chart) and written exclusively by M3 (calculation engine) as a side-effect of M2/M7 commands.
 **Indexes:** Composite PK `(member_id, period_id)`.
 **Related requirements:** Rule-5, Rule-6, Rule-7, Rule-8, Rule-9, Rule-10, Rule-11, Rule-12, Rule-13, Rule-26.
 
@@ -104,7 +108,9 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 ## Entity: `periods`
 
 **Purpose:** One row per calendar month, tracking its lifecycle status.
-**Lifecycle:** Created (implicitly, `status = open`) when the first entry of a new month is recorded, or explicitly at month-start; transitions `open → ended_locked` (when the calendar month elapses, Rule-36) `→ closed` (on successful `confirm_backup_and_close`, Rule-18).
+**Lifecycle:** Created (implicitly, `status = open`) when the first entry of a new month is recorded, or explicitly at month-start; transitions `open → awaiting_close` (when the calendar month elapses, Rule-36) `→ closed` (on successful `confirm_backup_and_close`, Rule-18).
+
+> **Status renamed 7 August 2026 (CR-2): `ended_locked` → `awaiting_close`.** The period is ended and **still accepting entries**, so the old name stated the opposite of the behaviour. Documentation-only rename — no implementation exists yet. A period that is `awaiting_close` accepts entries; a period that is `open` accepts entries only when no earlier period is `awaiting_close`.
 **Retention:** Permanent.
 **Security sensitivity:** Low.
 
@@ -112,14 +118,14 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 |---|---|---|---|---|
 | `id` | INTEGER | Yes | PK | |
 | `period_month` | TEXT (YYYY-MM) | Yes | UNIQUE | Rule-21 |
-| `status` | ENUM | Yes | `open` \| `ended_locked` \| `closed` | Rule-17, Rule-36, Rule-18 |
-| `ended_at` | TIMESTAMP | No | Set when the calendar month elapses | Triggers Rule-20's alert and Rule-36's entry lock |
+| `status` | ENUM | Yes | `open` \| `awaiting_close` \| `closed` | Rule-17, Rule-36 (amended), Rule-18 |
+| `ended_at` | TIMESTAMP | No | Set when the calendar month elapses | Triggers Rule-20's alert and blocks the **current** month for entry — not this one, which stays recordable until closed |
 | `closed_at` | TIMESTAMP | No | Set on successful close | |
 
-**Relationships:** One-to-many with `member_period_totals` (only while `open`), `monthly_snapshots`, `backups`.
+**Relationships:** One-to-many with `member_period_totals` (while `open` **or** `awaiting_close`), `monthly_snapshots`, `backups`.
 **Indexes:** PK on `id`; unique index on `period_month`; index on `status` (powers `get_outstanding_periods`, oldest-first ordering).
 **Related requirements:** Rule-17, Rule-18, Rule-20, Rule-21, Rule-36, Rule-38.
-**Notable business consequence:** A calendar month that elapses with zero entries (possible because entry is locked while a prior reset is outstanding) produces **no row transition to a snapshot** at all — it is excluded from yearly averaging, per the empty-month rule (RQ-16, see [03-business-rules.md](03-business-rules.md)).
+**Notable business consequence:** A calendar month that elapses with zero entries produces **no row transition to a snapshot** at all — it is excluded from yearly averaging, per the empty-month rule (RQ-16, see [03-business-rules.md](03-business-rules.md)). **Amended 7 Aug 2026 (CR-2):** this used to be a likely outcome, since entry was locked entirely while a prior reset was outstanding. It is now unlikely — an outstanding month keeps accepting entries throughout — but the rule is unchanged and must still be built. A genuinely empty month remains possible whenever nothing was recorded, for any reason.
 
 ---
 

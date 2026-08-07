@@ -8,7 +8,7 @@
 | **Solution Architect / Developer** | Keyur Patel |
 | **Status** | **Build reference — supersedes all source documents** |
 | **Compiled** | 7 August 2026 |
-| **Baseline** | All requirements client-confirmed. Last decision: RQ-23, 7 August 2026. |
+| **Baseline** | All requirements client-confirmed. Last decisions: **CR-1, CR-2, CR-3, 7 August 2026** (phone search; entry into an unclosed month; full hierarchy window) — see [06](06-decision-log-and-open-items.md) §5. |
 | **Repository state** | Documentation-only. Zero application code exists. |
 
 ---
@@ -29,13 +29,13 @@ Where a source document is cited, it is cited as *provenance* — evidence of wh
 |---|---|---|
 | **[00-master-index.md](00-master-index.md)** *(this file)* | Reading order, ID namespaces, source precedence, change control | First, once |
 | **[01-product-and-scope.md](01-product-and-scope.md)** | Purpose, users, glossary, scope boundary, vocabulary constraint, all 16 NFRs, constraints, risks | Before anything else — it defines the words everything else uses |
-| **[02-business-rules.md](02-business-rules.md)** | All 44 business rules in corrected form, the calculation model, five worked scenarios, the 16-row settings inventory | Building M1, M2, M3, M5, M6, M7 — the heart of the system |
-| **[03-functional-specification.md](03-functional-specification.md)** | FR-1–9, UN-01–28, RQ-1–23 coverage; screen-by-screen specification of every view, modal and flow | Building any UI |
+| **[02-business-rules.md](02-business-rules.md)** | All 46 business rules in corrected form, the calculation model, five worked scenarios, the 16-row settings inventory | Building M1, M2, M3, M5, M6, M7 — the heart of the system |
+| **[03-functional-specification.md](03-functional-specification.md)** | FR-1–10, UN-01–31, RQ-1–23 coverage; screen-by-screen specification of every view, modal, window and flow | Building any UI |
 | **[04-technical-architecture.md](04-technical-architecture.md)** | ADR-001–012, modules M1–M9, full DDL for 10 entities, all 40 IPC contracts, state machines, security, backup/restore | Building any backend |
-| **[05-quality-and-acceptance.md](05-quality-and-acceptance.md)** | 46 error/edge cases, test strategy, golden scenarios, AC-1–AC-39, SC-1–SC-8, Definition of Done | Before claiming any story done |
-| **[06-decision-log-and-open-items.md](06-decision-log-and-open-items.md)** | Every resolved conflict with its authority, the open-items register, superseded-decision history | When something looks wrong, contradictory, or missing |
-| **[07-design-system.md](07-design-system.md)** | Colour tokens (light/dark), typography scale, layout, elevation, shape rules, and every component's exact spec — buttons, pills, modals, the Structure Tree Node, Impact Summary, Restore Option List | Building any screen, alongside 03 |
-| **[delivery-plan.md](delivery-plan.md)** | 31 user stories, dependency graph, proposed PI and sprint breakdown | Planning and sequencing the build |
+| **[05-quality-and-acceptance.md](05-quality-and-acceptance.md)** | 63 error/edge cases, test strategy, golden scenarios, AC-1–AC-45, SC-1–SC-8, Definition of Done | Before claiming any story done |
+| **[06-decision-log-and-open-items.md](06-decision-log-and-open-items.md)** | Every resolved conflict with its authority, the open-items register, superseded-decision history, the CR-1/2/3 change requests | When something looks wrong, contradictory, or missing |
+| **[07-design-system.md](07-design-system.md)** | Colour tokens (light/dark), typography scale, layout, elevation, shape rules, and every component's exact spec — buttons, pills, modals, the Structure Tree Node, Full Hierarchy Window, Impact Summary, Restore Option List | Building any screen, alongside 03 |
+| **[delivery-plan.md](delivery-plan.md)** | 35 user stories, dependency graph, proposed PI and sprint breakdown | Planning and sequencing the build |
 
 ---
 
@@ -59,32 +59,35 @@ When two source documents disagree, the higher tier wins. This ordering was appl
 
 ## 4. ID namespaces — the complete map
 
-Seven identifier schemes are in use. **No new namespace is introduced by this set.** Every ID below appears in full somewhere in these documents.
+Identifier schemes in use. **One namespace was added on 7 August 2026 — `CR-N`, the client change requests.** Every other ID below appears in full somewhere in these documents.
 
 | Prefix | Range | Count | What it identifies | Defined in |
 |---|---|---|---|---|
-| `Rule-N` | Rule-1 … Rule-43, plus **Rule-16a** | **44** | A business rule | [02](02-business-rules.md) §3 |
-| `FR-N` | FR-1 … FR-9 | 9 | A functional requirement area | [03](03-functional-specification.md) §2 |
-| `UN-NN` | UN-01 … UN-28 | 28 | A user need | [03](03-functional-specification.md) §3 |
+| `Rule-N` | Rule-1 … Rule-45, plus **Rule-16a** | **46** | A business rule | [02](02-business-rules.md) §3 |
+| `FR-N` | FR-1 … FR-10 | 10 | A functional requirement area | [03](03-functional-specification.md) §2 |
+| `UN-NN` | UN-01 … UN-31 | 31 | A user need | [03](03-functional-specification.md) §3 |
 | `RQ-N` | RQ-1 … RQ-23 | 23 | A client-answered validation question | [03](03-functional-specification.md) §4 |
+| `CR-N` | CR-1 … CR-3 | 3 | A client change request raised after this set was approved | [06](06-decision-log-and-open-items.md) §5 |
 | `NFR-N` | NFR-1 … NFR-16 | 16 | A non-functional requirement | [01](01-product-and-scope.md) §7 |
 | `ADR-NNN` | ADR-001 … ADR-012 | 12 | An architecture decision | [04](04-technical-architecture.md) §2 |
 | `API-NN` | API-01 … API-40 | **40** | A Tauri IPC command | [04](04-technical-architecture.md) §6 |
 | `M-N` | M1 … M9 | 9 | An application module | [04](04-technical-architecture.md) §3 |
-| `M-N.N` | M1.1 … M8.7 | 52 | A module function | [03](03-functional-specification.md) §1 |
-| `V-N.N` | V1.1 … V8.5 | 45 | A validation rule | [03](03-functional-specification.md) §6 |
-| `AC-NN` | AC-1 … AC-39 | 39 | An acceptance criterion | [05](05-quality-and-acceptance.md) §4 |
+| `M-N.N` | M1.1 … M8.7 | 56 | A module function | [03](03-functional-specification.md) §1 |
+| `V-N.N` | V1.1 … V8.5 | 49 | A validation rule | [03](03-functional-specification.md) §6 |
+| `AC-NN` | AC-1 … AC-45 | 45 | An acceptance criterion | [05](05-quality-and-acceptance.md) §4 |
 | `SC-N` | SC-1 … SC-8 | 8 | A success criterion | [05](05-quality-and-acceptance.md) §5 |
-| `US-*` | US-0.1 … US-M9.1 | **31** | A user story | [delivery-plan.md](delivery-plan.md) §3 |
+| `US-*` | US-0.1 … US-M9.1 | **35** | A user story | [delivery-plan.md](delivery-plan.md) §3 |
 | `OS-NN` | OS-1 … OS-15 | 15 | An out-of-scope item | [01](01-product-and-scope.md) §5 |
 | `R-N` | R-1 … R-14 | 14 | A business risk | [01](01-product-and-scope.md) §9 |
-| `TR-N` | TR-1 … TR-6 | 6 | A technical risk | [04](04-technical-architecture.md) §11 |
+| `TR-N` | TR-1 … TR-7 | 7 | A technical risk | [04](04-technical-architecture.md) §11 |
 | `BA-N` | BA-1 … BA-11 | 11 | A business assumption (all resolved) | [01](01-product-and-scope.md) §8 |
 | `INC-N` | INC-1 … INC-5 | 5 | A source-document contradiction (all closed) | [06](06-decision-log-and-open-items.md) §4 |
 | `C-N` | C1 … C8 | 8 | A conflict resolved by this set | [06](06-decision-log-and-open-items.md) §2 |
 | `O-N` | O1 … O5 | 5 | An item genuinely still open | [06](06-decision-log-and-open-items.md) §3 |
 
 `Rule-16a` is not a typo. It was inserted between Rule-16 and Rule-17 rather than renumbering 17–43, because those numbers are referenced across every other document.
+
+**Everything added on 7 August 2026 was appended, never renumbered** — Rule-44/45, FR-10, UN-29/30/31, M2.6/M2.7/M4.6/M4.7, V2.6/V2.7/V4.4/V4.5, AC-40–45, TR-7, US-M2.3/M2.4/M2.5/M4.3. **Rule-36, V2.3, V2.5, AC-19, OC-2, OC-6, R-4, US-M1.4, US-M2.1 and US-M5.3 were amended in place**, each carrying its superseded wording so the reversal is visible rather than silently overwritten. **No API command was added** — API-06, API-07, API-08 and API-11 were amended.
 
 ---
 
@@ -104,7 +107,7 @@ Full trees and derivations: [02](02-business-rules.md) §5. If any of these five
 
 ---
 
-## 6. The ten things most likely to be got wrong
+## 6. The thirteen things most likely to be got wrong
 
 Collected here because each one is a place where the obvious implementation is the wrong one.
 
@@ -118,6 +121,9 @@ Collected here because each one is a place where the obvious implementation is t
 8. **There is no recalculate button and there must never be one.** No command triggers a calculation. — Rule-26.
 9. **A month with no entries produces no snapshot at all** and is excluded from the yearly-average denominator. — RQ-16, Rule-23.
 10. **Backup verification gates the close transactionally.** Not a prompt, not a warning — nothing is zeroed until the internal retained copy is written *and* verified. — Rule-18.
+11. **An outstanding month is not locked for entry — the *current* month is.** Rule-36 was amended on 7 August 2026 and now blocks the opposite of what its earlier wording said. A figure dated in the ended-but-unclosed month must be accepted; a figure dated in the current month must be refused while that older month waits. Any document, comment or variable name still describing a total entry lock is stale. The schema value is `awaiting_close`, not `ended_locked`, for exactly this reason. — Rule-36, [06](06-decision-log-and-open-items.md) §5 CR-2.
+12. **An entry belongs to the month its own date falls in** — never to "the month currently being closed". `period_month` is derived from `entry_date` and fixed there. This is the trap Rule-21's struck-through third bullet describes, and it became reachable again when Rule-36 was narrowed. — Rule-21, Rule-36.
+13. **Showing more of the tree never means showing more per node.** The full hierarchy window (FR-10) expands every branch, and each node still shows exactly name, ID and own Business Volume — never Total Business Volume. FR-2's constraint belongs to the node component, not to the screen. — FR-2, Rule-45.
 
 ---
 
@@ -138,6 +144,7 @@ Collected here because each one is a place where the obvious implementation is t
 This set is the build reference, so it must not drift.
 
 - **A client decision changes something.** Update the affected file, add a dated row to [06](06-decision-log-and-open-items.md) §5, and update the source-document reference. Never edit a source document to match — sources are the historical record.
+- **A client change request arrives after approval.** Give it the next `CR-N`, record it in [06](06-decision-log-and-open-items.md) §5 with what was asked, what was decided and what it reverses, then propagate. **Append new IDs; amend existing ones in place, keeping the superseded wording visible.** Never renumber. The 7 August 2026 batch (CR-1/2/3) is the worked example to copy. The tier-1 business documents get an appended, dated addendum — they are never rewritten.
 - **An open item (O1–O5) is answered.** Move it out of [06](06-decision-log-and-open-items.md) §3 into §2 with the answer, its date, and who gave it. Update every file that depends on it.
 - **An implementation detail changes a contract.** Update [04](04-technical-architecture.md), then check [05](05-quality-and-acceptance.md) for the test that asserts it.
 - **Never** resolve a contradiction by picking whichever reading is easier to build. The precedence table in §3 decides it; if precedence does not settle it, it belongs in the open register, not in code.
