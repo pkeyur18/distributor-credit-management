@@ -283,6 +283,12 @@ Two further tiers exist below and above those two steps — not drift, but real 
 - **Style:** full-width card rows, 6px radius, 1px `--border`, 10px/12px padding, stacked with 8px gaps. Custom 15px round radio at the left, filled indigo when selected.
 - **Selection:** border shifts to indigo plus the 3px indigo-weak glow — **the same treatment as input focus**, deliberately reused rather than inventing a second selection language.
 - **Content:** a 13px/600 primary line naming the thing in the operator's own terms (the month a backup holds, not its filename), and an 11.5px muted line for provenance (version, whether it was corrected).
+- **Reused, not duplicated (7 August 2026):** the Settings "Restore" card lists whole-console backups in this exact component — a scheduled/manual backup's primary line names *when* it was taken ("Weekly — 3 Aug 2026, 6:02 PM") in place of a month, same provenance line underneath. One list component for every kind of backup, not a second one for the new kind. The voluntary first-run path (reached via a plain link on the setup screen, not a competing button) skips this list entirely and goes straight to a file-browse action — a brand-new machine has no local backups of its own to list yet, only the one the operator brings with them.
+
+### Restore confirmation (checklist)
+- **Purpose:** confirming a whole-console restore — replacing everything currently in the console — before it happens.
+- **Style:** reuses the month-close wizard's checklist pattern exactly: a `.modal-warn` note naming what will be replaced, one checklist checkbox ("I understand this overwrites all current data and cannot be undone"), Cancel first then a disabled-until-checked `.btn-danger` Restore action. No new confirmation pattern was introduced for this — this action earns the same weight already given to closing a month, not a heavier or lighter one.
+- **Safety net:** the console takes one more backup of its own current state immediately before overwriting it, on every restore path, regardless of entry point — stated here because it's a property of the action, not of this particular modal.
 
 ### Structure Tree Node (signature component)
 - **Shape:** 172px-wide card (190px for the root node), 8px radius, 1.5px border (heavier than the system's usual 1px, since these sit inside a busy diagram).

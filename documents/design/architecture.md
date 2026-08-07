@@ -424,6 +424,44 @@ responsible for telling the client when an update exists, since the system will 
 
 ---
 
+### ADR-012 — Whole-console backup generalizes the `backups` table rather than introducing a second one
+
+**Context.** A new client requirement (confirmed 7 August 2026, [RQ-23](../business/client-requirements-validation.md#rq-23--protecting-the-whole-console-not-just-one-month)
+in the validation document) asks for the entire console — not one month — backed up on a configurable
+schedule (off/daily/weekly/monthly) or on demand, and restorable on a different machine entirely, including a
+brand-new install with nothing set up yet. This sits alongside the month-close backup (ADR-006, §15.1–15.4),
+which must keep working exactly as designed — a corrected closed month's versioned backup chain is unrelated
+to whether the console as a whole is also being backed up on a schedule.
+
+**Options considered.**
+1. A second table (e.g. `console_backups`) parallel to `backups`, with its own checksum/versioning logic
+   duplicated from ADR-006.
+2. Generalize the existing `backups` table: make `period_id` nullable, add a `kind` column
+   (`period_close` / `scheduled` / `manual` / `pre_restore_safety`) and a `schedule_kind` column
+   (`daily`/`weekly`/`monthly`, set only when `kind = scheduled`).
+3. Export a bespoke archive format (e.g. a zip of CSVs) distinct from the raw encrypted file.
+
+**Decision.** Option 2. Every kind of whole-console backup is a verified copy of the single SQLCipher file
+(ADR-003) — the same artifact a month-close backup already is, just not scoped to one period — so it reuses
+the same `backups` table, the same checksum-and-verify write path, and the same `is_original`/`version`
+columns where they're meaningful. Option 3 is rejected outright: the file already contains everything
+(members, entries, snapshots, settings, slab table, audit log, and the `auth` credential row), so a bespoke
+export format would need to reconstruct that same completeness while adding real work and a second format to
+maintain, for no benefit — a raw file copy is both the simplest and the most complete option available.
+
+**Rationale.** A `kind = period_close` row is exactly today's row, unchanged. A `kind = scheduled|manual`
+row is the same file-copy-and-verify mechanism, just with `period_id NULL`. A `kind = pre_restore_safety` row
+(new, §15.5) is written automatically immediately before any restore overwrites the live file — cheap
+insurance that makes a restore itself one step back from irreversible. One table, one write path, one
+restore path, regardless of why the backup was taken.
+
+**Consequences.** Every query that currently assumes `backups.period_id` is non-null (e.g. `list_backups` in
+M6) must filter on `kind = 'period_close'` explicitly rather than relying on the column being populated.
+Restoring from *any* kind of backup uses the same underlying mechanism as the existing unauthenticated
+`restore_from_backup` (M8, §7) — this generalizes rather than replaces it; see §7 M7/M8 and §15.5.
+
+---
+
 ## 5. System Context
 
 ```mermaid
@@ -632,7 +670,13 @@ of that period only (not closed periods, which are immutable except via the expl
 — this is a deliberate, narrower recalculation trigger than M2's per-entry chain walk, since a threshold
 change can affect every member in the tree, not just one chain.
 
-**Commands**: `get_settings`, `update_settings`, `add_slab_row`, `remove_slab_row`, `update_slab_row`.
+**Commands**: `get_settings`, `update_settings`, `add_slab_row`, `remove_slab_row`, `update_slab_row`,
+`get_console_backup_settings`, `update_console_backup_settings`.
+
+> **Revised 7 August 2026.** The last two commands are new ([RQ-23](../business/client-requirements-validation.md#rq-23--protecting-the-whole-console-not-just-one-month),
+> M7.7): the schedule (off/daily/weekly/monthly) and retention count (default 10) for the whole-console
+> backup introduced by ADR-012. M7 owns the *setting*; M8 owns actually taking and restoring one — the same
+> division already in place between M7 (configures the scheme) and M3/M5 (act on it).
 
 ### M8 — Access & Alerts
 
@@ -644,7 +688,37 @@ process memory for the session's lifetime — the inactivity lock (§11.3) drops
 re-derivation (i.e. re-entry of the credential) to resume, rather than merely hiding the UI.
 
 **Commands**: `setup_first_run`, `login`, `lock_session`, `unlock_session`, `use_recovery_code`,
-`get_outstanding_alert`, `check_data_readable`, `list_restore_points`, `restore_from_backup`.
+`get_outstanding_alert`, `check_data_readable`, `list_restore_points`, `restore_from_backup`,
+`run_console_backup_now`, `restore_from_backup_file`.
+
+> **Added 7 August 2026 — whole-console backup and cross-device restore.** [RQ-23](../business/client-requirements-validation.md#rq-23--protecting-the-whole-console-not-just-one-month)
+> (M8.6/M8.7) extends this module's existing backup/restore mechanics (ADR-012) beyond one month:
+>
+> - **`run_console_backup_now`** — authenticated. Takes an immediate whole-console backup
+>   (`kind = manual`). The same function also runs the scheduled check: on every successful `login`, the
+>   session checks whether a backup is due per `settings.console_backup_schedule` and, if so, calls this
+>   internally (`kind = scheduled`, `schedule_kind` recorded) before returning control to the UI. There is no
+>   background service (§2, driver row 1) — this login-time check is the only point the schedule can fire
+>   from, and a missed day simply catches up at the next login. After writing, retention is enforced:
+>   `kind IN ('scheduled', 'manual')` rows beyond `settings.console_backup_retention_count` (oldest first) are
+>   deleted; `kind = 'period_close'` rows are never touched by this (Rule 31 permanence is unaffected).
+> - **`restore_from_backup_file`** — **unauthenticated**, new. Takes a file path the frontend obtained from a
+>   native file-open dialog (not a path the WebView constructs itself — consistent with §11.3's capability
+>   model), verifies its checksum, writes one `kind = pre_restore_safety` backup of the *current* live file,
+>   then replaces it. This single command backs three surfaces: a plain "Restore from a backup file instead"
+>   link on the ordinary first-run setup screen (no console exists yet — nothing to authenticate against —
+>   see the revised §17 note below), the same screen the db-error recovery path uses, reworded rather than
+>   duplicated for the voluntary case (heading/sub-copy and back-link change; the internal restore-points list
+>   is skipped since a brand-new machine has none of its own yet), and the authenticated Settings "Restore"
+>   card's "Restore from a file…" action (the frontend still requires the session's own checklist-confirm
+>   modal before calling it there — the command itself doesn't distinguish who's calling).
+> - **`list_restore_points`/`restore_from_backup`** are widened, not replaced: both now read every `kind` in
+>   `backups`, not only `period_close`, so the recovery screen's db-error path and the new Settings "Restore"
+>   card list from one merged, labelled set ("Weekly console backup — 3 Aug 2026" alongside "March 2026 —
+>   closed month") — the voluntary first-run path does not use this list at all (see above).
+> - Every restore path — `restore_from_backup` or `restore_from_backup_file` — drops any authenticated
+>   session immediately afterward and routes to `login`: the restored file may carry a different credential
+>   (ADR-008's key is derived from whatever is now on disk), so re-authentication is mandatory, not optional.
 
 > **Added 6 August 2026 — data recovery at launch.** Nothing in the source documents said what should
 > happen if the encrypted database cannot be opened at startup. Left undefined, the operator would see
@@ -786,18 +860,20 @@ erDiagram
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER PK | |
-| `period_id` | INTEGER NOT NULL, FK → periods.id | |
-| `version` | INTEGER NOT NULL | Matches the snapshot version it proves (RQ-20) |
-| `internal_retained_path` | TEXT NOT NULL | The actual gate (RQ-6) |
+| `period_id` | INTEGER NULL, FK → periods.id | NULL for every kind except `period_close` (ADR-012) |
+| `kind` | TEXT NOT NULL | `period_close` / `scheduled` / `manual` / `pre_restore_safety` (ADR-012) |
+| `schedule_kind` | TEXT NULL | `daily`/`weekly`/`monthly`; set only when `kind = 'scheduled'` |
+| `version` | INTEGER NOT NULL | Matches the snapshot version it proves, for `period_close` rows (RQ-20); `1` for every other kind |
+| `internal_retained_path` | TEXT NOT NULL | The actual gate for `period_close` (RQ-6); the retained copy for every other kind |
 | `external_medium_path` | TEXT NULL | User-chosen, physically separate (RQ-19) |
 | `checksum` | TEXT NOT NULL | Integrity verification |
-| `is_original` | BOOLEAN NOT NULL | `true` for version 1; never modified thereafter |
+| `is_original` | BOOLEAN NOT NULL | `true` for version 1 of a `period_close` row; never modified thereafter |
 | `created_at` | TEXT NOT NULL | |
 
 **`settings`** *(key/value)*
 | Column | Type | Notes |
 |---|---|---|
-| `key` | TEXT PK | e.g. `royalty_min_children`, `royalty_rate`, `hierarchy_depth`, `level_widths` (JSON), `reference_unit_value`, `yearly_cycle_start`, `yearly_cycle_end`, `low_contribution_threshold`, `default_export_columns` (JSON) |
+| `key` | TEXT PK | e.g. `royalty_min_children`, `royalty_rate`, `hierarchy_depth`, `level_widths` (JSON), `reference_unit_value`, `yearly_cycle_start`, `yearly_cycle_end`, `low_contribution_threshold`, `default_export_columns` (JSON), `console_backup_schedule`, `console_backup_retention_count`, `console_backup_folder` |
 | `value` | TEXT NOT NULL | Serialised; typed at the application boundary |
 
 **`auth`** *(single row)*
@@ -1022,7 +1098,7 @@ live system (RQ-8, RQ-22).
 | 11.10 Reporting | 3 extracts, spreadsheet format | M6, ADR-007 (Rust-side `.xlsx` generation) |
 | 11.11 Logging | Technical log distinct from audit log, never client-visible | M9 — separate rotating file, no UI surface |
 | 11.12 Monitoring | Declined by client — not built | Deliberately absent; noted here so it is not mistaken for an oversight |
-| 11.13 Backup & recovery | On-demand manual backup; two physically independent copies; versioned on correction | §15, ADR-006, `backups` table (§8) |
+| 11.13 Backup & recovery | On-demand manual backup; two physically independent copies; versioned on correction; whole-console scheduled/on-demand backup, restorable on any machine | §15 (§15.1–15.4 month-close, §15.5 whole-console), ADR-006, ADR-012, `backups` table (§8) |
 | 11.14 Hosting & deployment | Standalone offline desktop, no network | ADR-001, ADR-011 |
 | 11.15 Browser/device support | No browser, no phone/tablet | Tauri native desktop app (ADR-002) — no web deployment target exists |
 | 11.16 Data migration | None — starts empty | No import tooling built; `members`/related tables start empty at first run |
@@ -1130,6 +1206,44 @@ M5.8 (manual backup of the in-progress, not-yet-closed month) uses the same writ
 the close-time backup, but writes to a distinct file (clearly dated/labelled as an in-progress snapshot,
 not a period-close record) and does not affect `periods.status` or trigger any zeroing.
 
+### 15.5 Full-console backup & cross-device restore
+
+Per [RQ-23](../business/client-requirements-validation.md#rq-23--protecting-the-whole-console-not-just-one-month)
+(M7.7/M8.6/M8.7) and ADR-012 — a second, orthogonal backup mechanism to §15.1–15.4's month-close gate, not a
+replacement for it.
+
+**What's backed up.** The single encrypted SQLCipher file, in full — every table, the credential row
+included. A restored console needs no re-setup: the same PIN/password that unlocked the original machine
+unlocks the restored one, because it's the same file.
+
+**Schedule.** `settings.console_backup_schedule` (`off`/`daily`/`weekly`/`monthly`) is checked once, at every
+successful `login` — the only moment the process is reliably running, since the application has no
+background service while closed (driver row 1, §2). A due backup runs via `run_console_backup_now`
+(`kind = scheduled`) before the UI takes over; a day the client never opens the console simply catches up at
+the next login. `run_console_backup_now` is also callable directly for an on-demand backup (`kind = manual`).
+
+**Retention.** After every `scheduled`/`manual` write, rows of those two kinds beyond
+`settings.console_backup_retention_count` (default 10) are deleted, oldest first. `period_close` rows
+(Rule 31) and `pre_restore_safety` rows are never pruned by this rule — the former is permanent by client
+decision, the latter is rare enough that unbounded retention costs nothing in practice.
+
+**Restore, and its safety net.** `restore_from_backup_file` (unauthenticated) is the single mechanism behind
+three surfaces: a plain "Restore from a backup file instead" link on the ordinary first-run setup screen (a
+brand-new machine has no console to log into yet, and no local backups of its own to choose from, so this
+path skips straight to the file picker), the same recovery screen the db-error path uses — reworded, not
+duplicated, for the voluntary case — and the authenticated Settings "Restore" card's "Restore from a file…"
+action (gated behind the frontend's own checklist-confirm modal before the command is ever called). Every
+restore path — this one or the existing `restore_from_backup` — writes one `kind = pre_restore_safety` backup
+of whatever is currently live
+*before* overwriting it, so a restore is never a true one-way door, and drops any live session immediately
+after completing, since the restored file may hold a different credential than the one that was just
+authenticated.
+
+**What this doesn't change.** The month-close backup gate (§15.1), correction versioning (§15.2), and the
+single-machine caveat (§15.3) all continue to apply to `period_close` rows exactly as before — a
+whole-console restore rolls back *everything*, including which months are closed, but does not alter how a
+month is closed or corrected.
+
 ---
 
 ## 16. Testing & Verification Strategy
@@ -1167,9 +1281,12 @@ not a period-close record) and does not affect `periods.status` or trigger any z
 - **No auto-update**: consistent with the no-network constraint; version upgrades are a new installer, run
   manually. The maintainer is responsible for proactively notifying the client of an available update, since
   the application will never check for one itself.
-- **First-run setup**: on first launch, the application detects no existing encrypted database, runs the
+- **First-run setup**: on first launch, the application detects no existing encrypted database and runs the
   setup wizard (create PIN/password, generate and display recovery codes once, create the root member,
-  review default settings) rather than presenting an empty, unexplained main screen.
+  review default settings) — unconditionally, exactly as it did before the whole-console backup requirement
+  existed. A plain "Restore from a backup file instead" link on that same screen (§7 M8, RQ-23) is the only
+  addition: it leads to `restore_from_backup_file`, reusing the recovery screen already built for the
+  db-error case rather than a competing setup choice — see §15.5's "Restore, and its safety net."
 - **Install footprint**: ~10–20MB installer (Tauri baseline), no bundled browser runtime.
 
 ---
@@ -1317,7 +1434,9 @@ CREATE TABLE monthly_snapshots (
 
 CREATE TABLE backups (
     id                       INTEGER PRIMARY KEY,
-    period_id                INTEGER NOT NULL REFERENCES periods(id),
+    period_id                INTEGER NULL REFERENCES periods(id),
+    kind                      TEXT NOT NULL CHECK (kind IN ('period_close','scheduled','manual','pre_restore_safety')),
+    schedule_kind             TEXT NULL CHECK (schedule_kind IN ('daily','weekly','monthly')),
     version                  INTEGER NOT NULL,
     internal_retained_path    TEXT NOT NULL,
     external_medium_path      TEXT NULL,
@@ -1370,6 +1489,9 @@ CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id);
 | 11 | Low-contribution threshold | 100 | Rule 24 |
 | 12 | Default export columns | name, ID, phone, Business Volume | Rule 33 |
 | 13 | Session inactivity timeout | — (set at setup) | §11.3 |
+| 14 | Whole-console backup schedule | Off | RQ-23, M7.7 |
+| 15 | Whole-console backup retention count | 10 | RQ-23, M7.7 |
+| 16 | Whole-console backup folder | App-data `backups/` subfolder | RQ-23, M7.7 |
 
 ---
 
@@ -1399,23 +1521,33 @@ CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id);
 | M6 | `list_backups` / `redownload_backup` | Rule 31 |
 | M7 | `get_settings` / `update_settings` | Rule 4/14 |
 | M7 | `add_slab_row` / `remove_slab_row` / `update_slab_row` | Rule 27 |
+| M7 | `get_console_backup_settings` / `update_console_backup_settings` | RQ-23, M7.7 |
 | M8 | `setup_first_run` | ADR-008 |
 | M8 | `login` / `lock_session` / `unlock_session` | Rule 29 |
 | M8 | `use_recovery_code` | RQ-10 |
 | M8 | `get_outstanding_alert` | Rule 20 |
 | M8 | `check_data_readable` | Launch pre-flight — **unauthenticated** |
-| M8 | `list_restore_points` | Retained backups available to restore — **unauthenticated** |
-| M8 | `restore_from_backup` | Checksum-verified restore — **unauthenticated, destructive** |
+| M8 | `list_restore_points` | Retained backups available to restore, every `kind` (ADR-012) — **unauthenticated** |
+| M8 | `restore_from_backup` | Checksum-verified restore, any `kind` — **unauthenticated, destructive** |
+| M8 | `run_console_backup_now` | RQ-23, M8.6 — scheduled check (at login) and manual trigger alike |
+| M8 | `restore_from_backup_file` | RQ-23, M8.7 — restore from a user-picked file path — **unauthenticated, destructive** |
 | M9 | `get_audit_log` | RQ-9, read-only |
 
 Every command above is the **only** way its module's data can be reached from the UI — there is no
 general-purpose query or filesystem command exposed, consistent with §6 and §11.3.
 
-**Authentication.** All commands require an authenticated session except six: `setup_first_run`, `login`,
-`use_recovery_code`, and the three pre-flight/recovery commands. That set is closed — see §M8 for why the
-recovery three cannot be authenticated, and `06-security-authorization-matrix.md` §3 for the exposure it
-creates. A seventh unauthenticated command should not be added without revisiting both.
+**Authentication.** All commands require an authenticated session except seven: `setup_first_run`, `login`,
+`use_recovery_code`, `restore_from_backup_file`, and the three pre-flight/recovery commands. That set is
+closed — see §M8 for why the recovery three (and now `restore_from_backup_file`) cannot be authenticated, and
+`06-security-authorization-matrix.md` §3 for the exposure it creates. An eighth unauthenticated command
+should not be added without revisiting both.
 
+> **Appendix revised 7 August 2026.** `get_console_backup_settings`/`update_console_backup_settings` (M7),
+> `run_console_backup_now` and `restore_from_backup_file` (M8) added — RQ-23/ADR-012, the whole-console
+> backup and cross-device restore requirement. `restore_from_backup_file` joins the unauthenticated set for
+> the same reason the original three do: it exists precisely for when there is nothing to authenticate
+> against yet (a brand-new install) or the database can't be opened at all.
+>
 > **Appendix revised 6 August 2026.** `reverse_entry` removed (§M2); `preview_settings_impact` added (§M3);
 > the three pre-flight/recovery commands added (§M8). Each change has its rationale recorded inline in the
 > module section rather than applied silently. Full per-command contracts — request, response, validation,

@@ -404,7 +404,7 @@ written), M6 (the record is the source of all reporting).
 | **Rule 18** | The close is gated: no confirmed backup, no close. A failed or cancelled backup abandons the close with nothing cleared |
 | **Rule 20** | An undismissable alert appears as a banner on every screen and as a notification entry, naming the outstanding month. It clears only on a completed close. Where several are outstanding, all are listed and only the oldest can be closed; each keeps its own backup and its own record |
 | **Rule 21** | A period is a calendar month. The close closes whichever month it belongs to — pressed on 5 September, it closes August. The confirmation screen names that month explicitly |
-| **Rule 31** | Each backup is downloaded to your computer **and** retained permanently inside the system. Nothing is ever deleted automatically. 🟢 **Resolved 4 August 2026** ([RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected)): the downloaded copy also goes to a physically separate medium, per [RQ-19](#rq-19--backup-independence-on-a-single-machine). If a closed month is later corrected, the **original backup for that month is never touched** — a new, separately dated backup **version** is created instead, and every backup version is retained permanently (extends M5.7). Going forward, the software uses the latest version |
+| **Rule 31** | Each backup is downloaded to your computer **and** retained permanently inside the system. Nothing is ever deleted automatically. 🟢 **Resolved 4 August 2026** ([RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected)): the downloaded copy also goes to a physically separate medium, per [RQ-19](#rq-19--backup-independence-on-a-single-machine). If a closed month is later corrected, the **original backup for that month is never touched** — a new, separately dated backup **version** is created instead, and every backup version is retained permanently (extends M5.7). Going forward, the software uses the latest version. 🟢 **Extended 7 August 2026** ([RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month)): this same mechanism now also produces a backup of the **entire console**, not only a closing month — see M8.6/M8.7. The two remain one mechanism at different scope, not two separate systems |
 | **Rule 36** | Recording is locked from the moment a month ends until that month is closed |
 | **Rule 38** | The close clears **everything** — Business Volume, Total Business Volume, Rewards and royalty. Before anything is cleared, a permanent record is written per member capturing Business Volume, Total Business Volume, band percentage, Rewards, royalty earned and active/inactive status. All yearly reporting reads from these records only |
 
@@ -480,6 +480,7 @@ low-contribution report. Plus retrieval of any past backup.
 | M7.4 | Set the yearly cycle and the low-contribution threshold |
 | M7.5 | Set the reference unit value |
 | M7.6 | Set which columns are ticked by default on extracts |
+| M7.7 | 🟢 **New, confirmed 7 August 2026** ([RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month)). Set the whole-console backup schedule (off/daily/weekly/monthly) and how many recent backups to keep (default 10) — the actual backing-up and restoring is M8.6/M8.7 |
 
 **Dependencies.** M3 and M6 both read from here.
 
@@ -537,6 +538,8 @@ low-contribution report. Plus retrieval of any past backup.
 | M8.3 | Show the outstanding-month banner on every screen |
 | M8.4 | Keep a notification list |
 | M8.5 | 🟢 **New, confirmed 4 August 2026.** Support a PIN and a complex password configured **at the same time**, not just one or the other. If both are set, a login succeeds with **either** credential, giving a self-managed backup on top of the recovery codes (RQ-10) |
+| M8.6 | 🟢 **New, confirmed 7 August 2026** ([RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month)). Back up the **entire console** — every member, entry, monthly record and setting, not one month — on a schedule you set (off/daily/weekly/monthly) or on demand at any time. The most recent backups are kept, a count you can change (default 10), older ones pruned automatically |
+| M8.7 | 🟢 **New, confirmed 7 August 2026** ([RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month)). Restore the console from any such backup file — including on a different computer, with nothing set up yet — bringing it back to exactly the state it held at that backup. Always states plainly what will be replaced and requires deliberate confirmation; the console takes one more backup of its own current state immediately beforehand, so a restore is itself never a one-way door |
 
 **Dependencies.** M5 raises the alerts this module displays.
 
@@ -555,8 +558,9 @@ low-contribution report. Plus retrieval of any past backup.
 | V8.2 | The alert cannot be dismissed by navigating away, logging out, or acknowledging it | — |
 | 🟢 V8.3 | **Resolved:** recovery codes, issued at setup and kept safe by you, are the route back in after a lockout or forgotten credential | [RQ-10](#rq-10--continuity-of-your-single-login) — confirmed 3 August 2026 |
 | 🟢 V8.4 | **New, resolved:** setting a password does not require removing the PIN, and vice versa; either credential set unlocks the account | M8.5 — confirmed 4 August 2026 |
+| 🟢 V8.5 | **New, resolved:** restoring the console always names what will be replaced and requires a deliberate confirmation, never a single stray click; the console backs up its own current state immediately before overwriting it | M8.6/M8.7 — [RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month), confirmed 7 August 2026 |
 
-**Expected outputs.** An authenticated session; a persistent alert while any month is outstanding.
+**Expected outputs.** An authenticated session; a persistent alert while any month is outstanding; a restored console, on request, matching exactly the state its backup was taken from.
 
 ### 6.9 Module dependency map
 
@@ -1292,6 +1296,39 @@ Add Member screen, as described. Closes [R-14](#9-identified-risks-).
 
 ---
 
+#### RQ-23 — Protecting the whole console, not just one month
+
+**What we need to know.** Everything settled so far about backups — Rule 31, [RQ-19](#rq-19--backup-independence-on-a-single-machine),
+[RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected) — protects one month at
+the moment it closes. You separately asked for something wider: the entire installation backed up on its own
+schedule, and the ability to install the software on a different desktop or laptop entirely and have it come
+back to exactly the state the old one was in. Three things needed settling: what such a backup should
+contain, how a schedule can run given the software has no background process while it's closed, and how a
+restore — which is more consequential than anything else in the system, since it replaces everything currently
+in the console — should be gated.
+
+**Why it matters.** The existing backups protect against losing a month's figures. They do nothing for the
+console itself between closes, and nothing today lets it move to a new machine at all — the single point of
+failure is still the one machine it's installed on. Without this, replacing a damaged or lost computer would
+mean starting the whole record over.
+
+**Our recommendation.** Because the console already keeps every table — members, entries, monthly records,
+settings and the login credential — in one single encrypted file, the backup is simply a verified copy of
+that file; nothing needs re-entering after a restore, credentials included. The schedule (off/daily/weekly/
+monthly) is checked once each time you log in, since that is the only moment the software is reliably running;
+a due backup runs quietly in the background. The most recent backups are kept, a count you can change
+(default 10), older ones pruned automatically. Restoring — whether from Settings on a running console, or via
+a link on the first-run screen of a brand-new install — always states plainly what it will replace and needs
+a deliberate confirmation, and the console takes one more backup of its own current state immediately
+beforehand, so even a restore can be stepped back from.
+
+🟢 **Confirmed by the client, 7 August 2026 — agreed with our recommendation.** The whole encrypted file is the
+backup, schedule checked at login, keep-last-10 default and adjustable, checklist-style restore confirmation
+with an automatic safety backup first. A brand-new install offers restoring from a backup file as an explicit
+alternative to first-time setup. See M8.6/M8.7, M7.7, and Rule 31 (extended).
+
+---
+
 ### 10.3 Carried forward from earlier
 
 | Item | Status | Impact |
@@ -1323,7 +1360,7 @@ rather than invent a target.**
 | **11.10** | **Reporting** | Three extracts fully specified: monthly, yearly average, low contribution. All in spreadsheet format | 🟢 **Addressed** by Rules 19, 23, 24, 33 |
 | **11.11** | **Logging** | Nothing stated | 🟢 **Confirmed by the client, 3 August 2026.** Technical logging exists, distinct from the audit log, and is never visible to you |
 | **11.12** | **Monitoring** | Nothing stated. Notably, nothing monitors whether the permanent monthly record was actually written | 🔶 **Declined by the client, 3 August 2026** — not named directly, but covered by "any other NFR not required." To be precise about the consequence: we recommended this specifically as the safeguard that would catch a close silently failing to write its record or backup, which is the mechanism behind [R-1](#9-identified-risks-)'s Critical impact. Without it, such a failure would only be discovered when the record is actually needed |
-| **11.13** | **Backup & recovery** | Monthly backups are downloaded and retained permanently. Nothing stated about backing up the live system itself | 🟢 **Fully resolved, 4 August 2026.** Manual backup of the current (in-progress) month's data on demand (M5.8), the two Rule 31 backup copies now confirmed physically independent ([RQ-19](#rq-19--backup-independence-on-a-single-machine)), and a corrected closed month now creates a new, dated backup version rather than touching the original ([RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected), M5.10) |
+| **11.13** | **Backup & recovery** | Monthly backups are downloaded and retained permanently. Nothing stated about backing up the live system itself | 🟢 **Fully resolved, 4 August 2026,** for one month at a time: manual backup of the current (in-progress) month's data on demand (M5.8), the two Rule 31 backup copies now confirmed physically independent ([RQ-19](#rq-19--backup-independence-on-a-single-machine)), and a corrected closed month now creates a new, dated backup version rather than touching the original ([RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected), M5.10). 🟢 **Extended 7 August 2026** to the whole console — scheduled or on-demand backup of the entire installation, restorable on any machine, including a brand-new install ([RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month), M7.7, M8.6, M8.7) |
 | **11.14** | **Hosting & deployment** | Nothing stated originally. Listed as not covered | 🟢 **Resolved 3 August 2026 — major decision.** A standalone desktop application only. Fully offline: no network, no server, no internet dependency of any kind |
 | **11.15** | **Browser and device support** | Nothing stated | 🟢 **Resolved 3 August 2026 — "No."** No browser is used (native desktop application); no phone or tablet support. Consistent with 11.14 and [BA-5](#8-business-assumptions-) |
 | **11.16** | **Data migration** | Nothing stated | 🟢 **Resolved 3 August 2026 — "No."** No existing data to bring in; the system starts empty. Confirms [BA-2](#8-business-assumptions-) |
@@ -1421,6 +1458,14 @@ the scheme self-limiting.
 | **AC-34** | Exactly one login exists. There is no member login and no second account |
 | **AC-35** | Repeated failed attempts lock the account |
 | **AC-36** | No excluded term appears in any screen label, button, column heading, extract filename, error message or tooltip |
+
+### 13.7 Console backup & restore
+
+| # | Criterion |
+|---|---|
+| **AC-37** | The whole console — every member, entry, monthly record and setting — can be backed up on a schedule (off/daily/weekly/monthly) or on demand, and the most recent backups (default 10, adjustable) are kept with older ones pruned automatically |
+| **AC-38** | Installing on a different computer and restoring from a backup file brings it to exactly the state the original held, with no separate setup step and the same login credential working unchanged |
+| **AC-39** | Restoring always names what will be replaced and requires deliberate confirmation, and the console backs up its own current state immediately beforehand |
 
 ---
 
@@ -1529,6 +1574,7 @@ specification appears here, grouped by module.
 | C-40 | The reference unit value stays on the settings screen, appears nowhere else, and takes no part in any calculation | Rule 14 | ☐ | ☐ |
 | C-41 | Band rows can be added and removed; the top band is always the highest-percentage row | Rule 27 | ☐ | ☐ |
 | C-42 | The full settings inventory in [§6.7](#67-module-m7--settings--configuration) is complete and correct | §7 of the specification | ☐ | ☐ |
+| C-85 | 🔷 **New, confirmed 7 Aug 2026** — the whole-console backup schedule (off/daily/weekly/monthly) and how many recent backups to keep (default 10) are both settings you control | [RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month), M7.7 | ☑ | ☐ |
 
 ### 15.8 Access — Module M8
 
@@ -1537,6 +1583,8 @@ specification appears here, grouped by module.
 | C-43 | One administrator account, yours alone. No other accounts, no roles, no member access | Rule 29 | ☐ | ☐ |
 | C-44 | Failed-attempt lockout is built regardless of how many credentials are set | Rule 29 | ☑ | ☐ |
 | C-45 | 🔷 **Broader than proposed, confirmed 4 Aug 2026** — both a PIN and a complex password may be set at once; either one logs in | Rule 29, M8.5 | ☑ | ☐ |
+| C-86 | 🔷 **New, confirmed 7 Aug 2026** — the whole console (not just one month) can be backed up on schedule or on demand, kept as the whole encrypted file, credentials included | [RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month), M8.6 | ☑ | ☐ |
+| C-87 | 🔷 **New, confirmed 7 Aug 2026** — that backup can be restored on a different computer with nothing set up yet, or deliberately rolled back on a running console with confirmation and an automatic safety backup first | [RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month), M8.7 | ☑ | ☐ |
 
 ### 15.9 Language
 

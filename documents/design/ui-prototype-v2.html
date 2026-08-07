@@ -1050,7 +1050,7 @@ function pushAudit(entry) { AUDIT_LOG.unshift(Object.assign({ ts: isoToday(0) + 
    APP STATE
    ============================================================ */
 let APP = {
-  authPhase: 'setup',            // 'setup' | 'login' | 'locked' | 'db-error' | 'app'
+  authPhase: 'setup',            // 'setup' | 'login' | 'locked' | 'db-error' | 'restore' | 'app'
   dbRecovery: { selected: null },// restore point chosen on the data-recovery screen
   credentials: null,             // { pin, password, recoveryCode }
   failedAttempts: 0,
@@ -1059,6 +1059,17 @@ let APP = {
   pinBuffer: '',
   recovery: { step: 0, code: '', codeError: '', newMode: 'pin', pin: '', password: '', recoveryCode: '', confirmed: false },
   setupDraft: { step: 0, mode: 'pin', pin: '', password: '', recoveryCode: '', confirmed: false },
+  consoleBackup: {                // whole-console backup & restore (RQ-23) — separate from the per-month backups above
+    schedule: 'weekly',           // 'off' | 'daily' | 'weekly' | 'monthly'
+    retention: 10,
+    lastAt: '07 Aug 2026, 9:14 AM',
+    backups: [
+      { id: 'cb-3', label: 'Today, 9:14 AM', sub: 'Scheduled — weekly', kind: 'scheduled' },
+      { id: 'cb-2', label: '3 Aug 2026, 6:02 PM', sub: 'Manual', kind: 'manual' },
+      { id: 'cb-1', label: '27 Jul 2026, 8:47 AM', sub: 'Scheduled — weekly', kind: 'scheduled' },
+    ],
+  },
+  restoreConfirm: { active: false, source: null, targetId: null, checked: false }, // 'settings' | 'setup' | 'db-recovery'
   route: 'home',
   params: {},
   navStack: [],
@@ -1292,7 +1303,7 @@ function shell(contentHtml, head) {
    ============================================================ */
 function render() {
   const app = document.getElementById('app');
-  if (APP.authPhase === 'db-error') { app.innerHTML = renderDbRecovery(); return; }
+  if (APP.authPhase === 'db-error' || APP.authPhase === 'restore') { app.innerHTML = renderDbRecovery(); return; }
   if (APP.authPhase === 'setup') { app.innerHTML = renderSetup(); return; }
   if (APP.authPhase === 'login') { app.innerHTML = renderLogin(); return; }
   if (APP.authPhase === 'locked') { app.innerHTML = renderLockedScreen(); return; }
@@ -1408,7 +1419,8 @@ function renderSetup() {
           '<div class="field"><label for="setup-pw2">Confirm password</label>' + pwFieldHtml('setup-pw2', { placeholder: 'Re-type your password' }) + '</div>') +
       (d.error ? '<div class="field"><span class="err">' + esc(d.error) + '</span></div>' : '') +
       '<button class="btn btn-primary btn-block" onclick="P.setupContinue()">Continue</button>' +
-      '</div></div></div>';
+      '</div><div class="auth-foot"><a href="javascript:void(0)" onclick="P.goToRestoreFromSetup()">Restore from a backup file instead</a></div>' +
+      '</div></div>';
   }
   // step 1 — recovery code reveal
   return '<div class="auth-shell"><div class="auth-card">' +
@@ -1508,8 +1520,13 @@ function renderLockedScreen() {
 }
 
 /* ============================================================
-   DATA RECOVERY — shown at launch when the data cannot be opened.
-   Never reached in normal use; the prototype enters it via #db-recovery.
+   DATA RECOVERY / RESTORE — one shared screen, two entry reasons:
+   'db-error'  — the data genuinely could not be opened at launch (never reached in
+                 normal use; the prototype enters it via #db-recovery).
+   'restore'   — reached voluntarily, via the "Restore from a backup file instead"
+                 link on the first-run setup screen. Same restore mechanics, no
+                 internal restore-points list (a brand-new machine has none of its
+                 own yet), different heading and back-link.
    ============================================================ */
 function restorePoints() {
   return Object.keys(SNAPSHOTS).sort().reverse().slice(0, 3).map(function (ym) {
@@ -1518,7 +1535,8 @@ function restorePoints() {
   });
 }
 function renderDbRecovery() {
-  const points = restorePoints();
+  const isVoluntary = APP.authPhase === 'restore';
+  const points = isVoluntary ? [] : restorePoints();
   if (!APP.dbRecovery.selected && points.length) APP.dbRecovery.selected = points[0].ym;
   const sel = APP.dbRecovery.selected;
 
@@ -1531,20 +1549,43 @@ function renderDbRecovery() {
       '<span class="restore-sub">' + esc(sub) + '</span></span></button>';
   }).join('');
 
-  const body = points.length
-    ? '<div class="impact-heading">Restore from</div>' +
-      '<div class="restore-list">' + list + '</div>' +
-      '<button class="btn btn-primary btn-block" onclick="P.restoreFromBackup()">Restore from ' + esc(ymLabel(sel).split(' ')[0]) + '</button>' +
-      '<p class="hint" style="margin-top:10px;text-align:center">Anything recorded after that backup will need entering again.</p>'
-    : '<p class="hint" style="text-align:center">No backup has been taken yet, so there is nothing to restore from.</p>';
+  let body;
+  if (isVoluntary) {
+    body = '<button class="btn btn-primary btn-block" onclick="P.restoreFromFileAtDbRecovery()">Choose backup file…</button>' +
+      '<p class="hint" style="margin-top:10px;text-align:center">This console will come up in exactly the state that backup holds — the PIN or password from that backup will unlock it.</p>';
+  } else {
+    body = points.length
+      ? '<div class="impact-heading">Restore from</div>' +
+        '<div class="restore-list">' + list + '</div>' +
+        '<button class="btn btn-primary btn-block" onclick="P.restoreFromBackup()">Restore from ' + esc(ymLabel(sel).split(' ')[0]) + '</button>' +
+        '<p class="hint" style="margin-top:10px;text-align:center">Anything recorded after that backup will need entering again.</p>'
+      : '<p class="hint" style="text-align:center">No backup has been taken yet, so there is nothing to restore from.</p>';
+  }
+
+  const heading = isVoluntary
+    ? { icon: ICON.shield, cls: '', title: 'Restore from a backup file', sub: 'Bringing this console over from another computer? Choose the backup file you brought with you.' }
+    : { icon: ICON.alert, cls: 'danger', title: 'This console could not open its data', sub: 'Nothing has been lost. Every backup this console has taken is still here — choose one to go back to.' };
+  const footLink = isVoluntary
+    ? '<a href="javascript:void(0)" onclick="P.backToSetupFromRestore()">Back</a>'
+    : '<a href="javascript:void(0)" onclick="P.retryOpenData()">Try opening the data again</a>' +
+      ' · <a href="javascript:void(0)" onclick="P.restoreFromFileAtDbRecovery()">Browse a different backup file</a>';
 
   return '<div class="auth-shell"><div class="auth-card">' +
-    '<div class="auth-brand"><div class="wizard-icon-wrap danger" style="margin:0 auto">' + ICON.alert + '</div>' +
-    '<div class="auth-title" style="margin-top:14px">This console could not open its data</div>' +
-    '<div class="auth-sub">Nothing has been lost. Every backup this console has taken is still here — choose one to go back to.</div></div>' +
+    '<div class="auth-brand"><div class="wizard-icon-wrap ' + heading.cls + '" style="margin:0 auto">' + heading.icon + '</div>' +
+    '<div class="auth-title" style="margin-top:14px">' + esc(heading.title) + '</div>' +
+    '<div class="auth-sub">' + esc(heading.sub) + '</div></div>' +
     '<div class="auth-body">' + body + '</div>' +
-    '<div class="auth-foot"><a href="javascript:void(0)" onclick="P.retryOpenData()">Try opening the data again</a></div>' +
+    '<div class="auth-foot">' + footLink + '</div>' +
     '</div></div>';
+}
+function goToRestoreFromSetup() { APP.authPhase = 'restore'; render(); }
+function backToSetupFromRestore() { APP.authPhase = 'setup'; render(); }
+function restoreFromFileAtDbRecovery() {
+  // Mocked file-picker: a real build calls the native open-file dialog, then restore_from_backup_file.
+  if (location.hash === '#db-recovery') history.replaceState(null, '', location.pathname + location.search);
+  toast('Restored from the chosen backup file', 'success');
+  APP.authPhase = 'login'; // the restored file supplies its own credential, regardless of entry reason
+  render();
 }
 /* Adding the hash to an already-open page is a same-document navigation, so init() never
    re-runs. Without this the demo trigger silently does nothing unless the page is reloaded. */
@@ -2420,12 +2461,104 @@ function buildSessionCard() {
     '<button class="btn btn-primary mt-3" onclick="P.saveSessionTimeout()">Save</button></div>';
 }
 function saveSessionTimeout() { SETTINGS.sessionTimeoutMinutes = parseInt(val('session-timeout'), 10) || 1; toast('Saved', 'success'); }
+
+/* Whole-console backup & restore (RQ-23) — a second, orthogonal backup mechanism from the
+   per-month close backup above: schedule/retention here in Settings (M7.7), the actual
+   backing-up and restoring in M8 (M8.6/M8.7). See architecture.md ADR-012, §15.5. */
+const BACKUP_SCHEDULES = ['off', 'daily', 'weekly', 'monthly'];
+function buildBackupScheduleCard() {
+  const cb = APP.consoleBackup;
+  return '<div class="card section-anchor" id="settings-card-backup"><div class="card-title">Backup schedule</div>' +
+    '<div class="card-sub mb-3">Backs up the whole console — every member, entry, record and setting, not just one month</div>' +
+    '<div class="segmented mb-3">' + BACKUP_SCHEDULES.map(function (s) {
+      return '<button class="' + (cb.schedule === s ? 'active' : '') + '" onclick="P.setConsoleBackupSchedule(\'' + s + '\')">' + s.charAt(0).toUpperCase() + s.slice(1) + '</button>';
+    }).join('') + '</div>' +
+    '<div class="form-grid">' +
+    '<div class="field"><label for="backup-retention">Keep the most recent</label><input id="backup-retention" type="number" min="1" value="' + cb.retention + '"></div>' +
+    '</div>' +
+    '<div class="hint mb-3">Last backup: ' + esc(cb.lastAt) + '. Older backups beyond this count are removed automatically — closed-month backups are never affected.</div>' +
+    '<button class="btn btn-secondary" onclick="P.saveBackupRetention()">Save</button> ' +
+    '<button class="btn btn-primary" onclick="P.backupConsoleNow()">Back up now</button>' +
+    '</div>';
+}
+function setConsoleBackupSchedule(kind) {
+  APP.consoleBackup.schedule = kind;
+  pushAudit({ member: '—', field: 'Whole-console backup schedule', before: '—', after: kind === 'off' ? 'Off' : kind.charAt(0).toUpperCase() + kind.slice(1), cause: 'Settings changed by administrator' });
+  render(); toast('Backup schedule set to ' + kind, 'success');
+}
+function saveBackupRetention() {
+  APP.consoleBackup.retention = parseInt(val('backup-retention'), 10) || 1;
+  pushAudit({ member: '—', field: 'Whole-console backup retention', before: '—', after: APP.consoleBackup.retention + ' backups', cause: 'Settings changed by administrator' });
+  toast('Retention saved', 'success');
+}
+function backupConsoleNow() {
+  const cb = APP.consoleBackup;
+  const now = 'Just now';
+  cb.backups.unshift({ id: 'cb-' + Date.now(), label: now, sub: 'Manual', kind: 'manual' });
+  cb.lastAt = now;
+  // Illustrative retention: keep only the most recent N scheduled/manual backups (pre-restore-safety and closed-month backups live elsewhere and are never pruned this way).
+  if (cb.backups.length > cb.retention) cb.backups.length = cb.retention;
+  render(); toast('Console backed up', 'success');
+}
+
+function buildConsoleRestoreCard() {
+  const cb = APP.consoleBackup;
+  if (!cb.selectedId && cb.backups.length) cb.selectedId = cb.backups[0].id;
+  const list = cb.backups.map(function (b) {
+    const isSel = b.id === cb.selectedId;
+    return '<button class="restore-opt' + (isSel ? ' sel' : '') + '" onclick="P.selectConsoleBackupRow(\'' + b.id + '\')" aria-pressed="' + (isSel ? 'true' : 'false') + '">' +
+      '<span class="restore-radio"></span>' +
+      '<span><span class="restore-main">' + esc(b.label) + '</span><span class="restore-sub">' + esc(b.sub) + '</span></span></button>';
+  }).join('');
+  const selected = cb.backups.filter(function (b) { return b.id === cb.selectedId; })[0];
+  return '<div class="card section-anchor" id="settings-card-restore"><div class="card-title">Restore</div>' +
+    '<div class="card-sub mb-3">Overwrites everything currently in the console — cannot be undone</div>' +
+    (cb.backups.length
+      ? '<div class="restore-list">' + list + '</div>' +
+        '<button class="btn btn-secondary mb-2" onclick="P.openConsoleRestoreConfirm(\'settings-list\', \'' + (selected ? selected.id : '') + '\')">Restore from ' + esc(selected ? selected.label : 'selected backup') + '</button>'
+      : '<p class="hint">No whole-console backup has been taken yet.</p>') +
+    '<div><a href="javascript:void(0)" onclick="P.openConsoleRestoreConfirm(\'settings-file\', null)">Restore from a file…</a></div>' +
+    '</div>';
+}
+function selectConsoleBackupRow(id) { APP.consoleBackup.selectedId = id; render(); }
+
+function openConsoleRestoreConfirm(source, targetId) {
+  APP.restoreConfirm = { active: true, source: source, targetId: targetId, checked: false };
+  const cb = APP.consoleBackup;
+  const target = source === 'settings-list' ? cb.backups.filter(function (b) { return b.id === targetId; })[0] : null;
+  const named = target ? target.label : 'the file you choose';
+  openModal(
+    '<div class="modal-header"><h2>Restore from backup</h2><button class="modal-close" onclick="P.closeModal()">✕</button></div>' +
+    '<div class="modal-body">' +
+    '<div class="modal-warn"><div class="modal-warn-row">' + ICON.alert +
+    '<span class="modal-warn-text"><b>This replaces everything</b> currently in the console with the backup from <b>' + esc(named) + '</b>. Anything recorded after that moment will be lost unless it is in a newer backup.</span>' +
+    '</div></div>' +
+    '<label class="checkbox-row"><input type="checkbox" id="restore-confirm-check" onchange="document.getElementById(\'restore-confirm-btn\').disabled = !this.checked">' +
+    '<span>I understand this overwrites all current data and cannot be undone.</span></label>' +
+    '</div>' +
+    '<div class="modal-footer"><button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button>' +
+    '<button class="btn btn-danger" id="restore-confirm-btn" disabled onclick="P.confirmConsoleRestore()">Restore</button></div>',
+    { dismissable: true }
+  );
+}
+function confirmConsoleRestore() {
+  const rc = APP.restoreConfirm;
+  const cb = APP.consoleBackup;
+  closeModal();
+  // Safety net: the console backs up its own current state before any restore overwrites it (ADR-012).
+  cb.backups.unshift({ id: 'cb-safety-' + Date.now(), label: 'Just now', sub: 'Safety backup — taken automatically before this restore', kind: 'pre_restore_safety' });
+  APP.restoreConfirm = { active: false, source: null, targetId: null, checked: false };
+  APP.authPhase = 'login'; APP.route = 'home'; APP.params = {};
+  render();
+  toast(rc.source === 'settings-file' ? 'Restored from the chosen file — sign in again' : 'Console restored — sign in again', 'success');
+}
+
 VIEWS.settings = function () {
   const content = '<div class="settings-layout">' +
     '<div class="settings-nav">' +
-    ['slab:Slab table', 'royalty:Royalty', 'structure:Structure', 'reporting:Reporting', 'session:Session'].map(function (s) { const p = s.split(':'); return '<a class="nav-item" href="#settings-card-' + p[0] + '">' + esc(p[1]) + '</a>'; }).join('') +
+    ['slab:Slab table', 'royalty:Royalty', 'structure:Structure', 'reporting:Reporting', 'session:Session', 'backup:Backup schedule', 'restore:Restore'].map(function (s) { const p = s.split(':'); return '<a class="nav-item" href="#settings-card-' + p[0] + '">' + esc(p[1]) + '</a>'; }).join('') +
     '</div><div style="display:flex;flex-direction:column;gap:16px">' +
-    buildSlabCard() + buildRoyaltyCard() + buildStructureCard() + buildReportingCard() + buildSessionCard() +
+    buildSlabCard() + buildRoyaltyCard() + buildStructureCard() + buildReportingCard() + buildSessionCard() + buildBackupScheduleCard() + buildConsoleRestoreCard() +
     '</div></div>';
   return shell(content, { title: 'Settings', sub: 'Each section saves independently' });
 };
@@ -2678,6 +2811,7 @@ window.P = {
   nav: nav, back: back, toggleTheme: toggleTheme, lockSession: lockSession, signOut: signOut, closeModal: closeModal,
   togglePwField: togglePwField,
   startClose: startClose,
+  goToRestoreFromSetup: goToRestoreFromSetup, backToSetupFromRestore: backToSetupFromRestore,
   setSetupMode: setSetupMode, setSetupConfirmed: setSetupConfirmed, setupContinue: setupContinue, setupFinish: setupFinish,
   setLoginMode: setLoginMode, pinPress: pinPress, pinBackspace: pinBackspace, passwordSubmit: passwordSubmit,
   startRecovery: startRecovery, cancelRecovery: cancelRecovery, recoveryVerify: recoveryVerify, setRecoveryMode: setRecoveryMode,
@@ -2700,9 +2834,12 @@ window.P = {
   addSlabRow: addSlabRow, removeSlabRow: removeSlabRow, saveSlabTable: saveSlabTable, updateRoyaltyExample: updateRoyaltyExample,
   saveRoyalty: saveRoyalty, saveStructureGuidance: saveStructureGuidance, saveReporting: saveReporting,
   saveSessionTimeout: saveSessionTimeout,
+  setConsoleBackupSchedule: setConsoleBackupSchedule, saveBackupRetention: saveBackupRetention, backupConsoleNow: backupConsoleNow,
+  selectConsoleBackupRow: selectConsoleBackupRow, openConsoleRestoreConfirm: openConsoleRestoreConfirm, confirmConsoleRestore: confirmConsoleRestore,
   exportMonthly: exportMonthly, exportYearly: exportYearly, updateLowThreshold: updateLowThreshold, exportLow: exportLow, exportClosedSnapshot: exportClosedSnapshot,
   filterAudit: filterAudit,
   selectRestorePoint: selectRestorePoint, restoreFromBackup: restoreFromBackup, retryOpenData: retryOpenData,
+  restoreFromFileAtDbRecovery: restoreFromFileAtDbRecovery,
 };
 
 function init() {

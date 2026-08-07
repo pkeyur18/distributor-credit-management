@@ -689,11 +689,27 @@ but the system functions without it. **Could** — desirable, deferrable.
 
 ---
 
+### UN-28 — The whole console, safe and movable
+
+| | |
+|---|---|
+| **Need statement** | The client needs the entire console — every member, entry, monthly record and setting, not just one month — backed up on its own schedule, and able to be restored onto a different computer entirely, so a lost, damaged or replaced machine does not put the business's whole record at risk. |
+| **Reason** | UN-20 already protects a single month at the moment it closes, but nothing protects the console *between* closes, and nothing today lets it move to a new machine at all. This is a new, wider requirement, raised directly by the client: they want to install the software on another desktop or laptop and have it come up in exactly the state the old one was in — new client requirement, confirmed 7 August 2026. |
+| **Business value** | The business's entire record survives the loss of any single machine, and the client is never tied to one physical computer. |
+| **Priority** | 🟢 **Must** |
+| **Success criteria** | A fresh install, given only a backup file, comes up in exactly the state the original machine held at the moment that backup was taken — settings, structure, records and login alike. |
+| **Acceptance criteria** | A full backup can be scheduled off/daily/weekly/monthly, or taken on demand at any time. The most recent backups are kept — a client-adjustable count, default 10 — with older ones pruned automatically. Restoring always states plainly what will be replaced and requires a deliberate confirmation; the console takes one more backup of its own current state immediately beforehand, so a restore is itself never a one-way door. A brand-new install, with no console set up yet, offers restoring from a backup file as an explicit alternative to first-time setup. |
+| **Related requirements** | FR-7 — Monthly reset (extends the same backup-and-restore machinery to the whole console, not one month) |
+| **Business rules** | New — see RQ-23 and M8.6/M8.7 in the companion validation document |
+| **Dependencies** | UN-20 · confirmed 7 August 2026, does not alter UN-20's month-close mechanism |
+
+---
+
 ### 6.1 Needs by priority
 
 | Priority | Count | Needs |
 |---|---|---|
-| 🟢 **Must** | 23 | UN-01 to UN-15, UN-17 to UN-23, UN-25 to UN-27 |
+| 🟢 **Must** | 24 | UN-01 to UN-15, UN-17 to UN-23, UN-25 to UN-28 |
 | 🟢 **Should** | 2 | UN-16, UN-24 |
 | **Could** | 0 | — |
 
@@ -1282,6 +1298,7 @@ Add Member screen, as described.
 | **BO-3** | UN-19 Cannot skip a month | FR-5, FR-7 | Rule 20, Rule 36 |
 | **BO-3** | UN-20 Close cannot destroy | FR-7 | Rule 18, Rule 31 |
 | **BO-3** | UN-21 Permanent monthly record | FR-7, FR-8 | Rule 38 |
+| **BO-3** | UN-28 Whole console, safe and movable | FR-7 | New — RQ-23, M8.6/M8.7 |
 | **BO-4** Performance visibility | UN-15 Find a person | FR-1 | Rule 2 |
 | **BO-4** | UN-16 See the structure | FR-2 | Checklist Q11 |
 | **BO-4** | UN-17 Explain a member | FR-3 | Rule 6, Rule 12 |
@@ -1317,6 +1334,7 @@ flowchart LR
     N_CFG["UN-25<br/>Settings"]
     N_LANG["UN-27<br/>Vocabulary"]
     N_ACC["UN-26<br/>Access"]
+    N_BACKUP["UN-28<br/>Whole-console backup & restore"]
 
     F_ENTRY["FR-5 Business Volume entry"]
     F_MEMBER["FR-4 Add member"]
@@ -1331,6 +1349,7 @@ flowchart LR
     N_CALC --> F_DETAIL
     BO2 --> N_STRUCT --> F_MEMBER
     BO3 --> N_CLOSE --> F_RESET
+    BO3 --> N_BACKUP --> F_RESET
     BO4 --> N_VIEW --> F_SEARCH
     N_VIEW --> F_DETAIL
     BO4 --> N_REPORT --> F_EXPORT

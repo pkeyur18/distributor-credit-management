@@ -55,6 +55,7 @@ Design components are cited by module (M1–M9 per `architecture.md` §6/§7). A
 | — | Slab-table monotonicity is **not** software-validated | (accepted risk) | M7 | Settings (explicit on-screen disclaimer already in prototype) | `update_slab_row` | slab_table | TEST-EDGE-MONOTONIC | Fully traced (as an accepted, documented risk) | ADR-009: client explicitly declined the safeguard (3 Aug 2026). Not a gap — a deliberate choice, must not be silently "fixed" by a future developer. |
 | — | Settings change mid-period triggers recalculation of the **current open period only**, behind a pre-save warning | UN-25 | M7/M3 | Settings (warning modal) | `preview_settings_impact` (API-33), then `update_settings` / slab-row commands | member_period_totals | TEST-EDGE-SETTINGS | Fully traced | RQ-18/V7.6. Designed and built 6 Aug 2026 (variant C): names the open month, states closed months are unaffected, shows Rewards before → after, lists affected members. Fires on slab-table and royalty saves only. The preview needs its own command — the engine is Rust-side. See US-M7.3 in [09](09-implementation-backlog.md). |
 | — | Data recovery when the database cannot be opened at launch | (derived — P-1 "every recovery path must be self-evident from the screen") | M5/M8 | Data-recovery screen (pre-sign-in) | `check_data_readable`, `list_restore_points`, `restore_from_backup` (API-34–36, unauthenticated) | backups | TEST-RECOVERY-DB | Fully traced | Decided and built 6 Aug 2026 (LOW-3, design D). Not in any source document — a gap this analysis identified and the architect approved filling. |
+| Rule-43 | Whole-console backup on a configurable schedule (off/daily/weekly/monthly) or on demand; retained count client-adjustable (default 10); restorable on any machine, including a brand-new install | UN-28 | M7/M8 | Settings (Backup schedule, Restore cards), first-run setup screen's restore link, data-recovery screen (shared/reworded) | `get_console_backup_settings`/`update_console_backup_settings`, `run_console_backup_now`, `restore_from_backup_file` (API-37–40) | backups (`kind`/`schedule_kind`), settings | TEST-R43 | Fully traced | New client requirement, confirmed 7 Aug 2026 (RQ-23, M7.7/M8.6/M8.7). Generalizes the `backups` table (ADR-012) rather than adding a second one — orthogonal to, and does not alter, Rule-18's month-close gate or Rule-39's correction versioning. |
 | FR-7 / Rule-17 | Reset is manual only; prompted on the 1st, admin may act later | UN-18 | M5 | Monthly Close status page | `get_outstanding_periods` | periods | TEST-FR7 | Fully traced | |
 | Rule-18 | Reset flow: backup must be confirmed successful before anything is zeroed; failed/cancelled backup aborts, alert stays | UN-18, UN-19 | M5 | Monthly Close wizard | `begin_close`, `confirm_backup_and_close` | backups, monthly_snapshots, periods | TEST-R18 | Fully traced | |
 | Rule-20 | Persistent, undismissable alert (banner + notification) while a month is outstanding; multiple outstanding months close oldest-first, each with its own backup/snapshot | UN-18 | M5/M8 | Global banner, Monthly Close status page | `get_outstanding_alert`, `get_outstanding_periods` | periods | TEST-R20 | Fully traced | |
@@ -97,14 +98,14 @@ Design components are cited by module (M1–M9 per `architecture.md` §6/§7). A
 | NFR-10 Reporting | Three report types, Excel format | M6 | Fully traced | |
 | NFR-11 Logging | Audit log per NFR-5 | M9 | Fully traced | |
 | NFR-12 Monitoring | **Explicitly declined by the client** — no mechanism to detect a close silently failing to write its record/backup | — | Fully traced (as a documented non-requirement) | `architecture.md` §11.12: "Deliberately absent; noted here so it is not mistaken for an oversight." |
-| NFR-13 Backup & recovery | Internal retained copy is the actual close-gate; external medium is a reminded-but-not-enforced convenience layer | M5, ADR-007 | Fully traced | Single point of failure if the client never takes the external copy — stated plainly (TR-4), not solved. |
+| NFR-13 Backup & recovery | Internal retained copy is the actual close-gate; external medium is a reminded-but-not-enforced convenience layer. **Extended 7 Aug 2026:** whole-console backup on schedule or on demand, restorable on any machine | M5, ADR-007; M7/M8, ADR-012 (Rule-43) | Fully traced | Single point of failure if the client never takes the external copy — stated plainly (TR-4), not solved. The whole-console mechanism is additive, not a fix for that gap — it protects the console between closes and across machines, not the single-medium risk itself. |
 | NFR-14 Hosting/deployment | Standalone offline desktop app, Windows + macOS, no auto-update | ADR-011, §17 | Fully traced | |
 | NFR-15 Browser/device support | None — no browser, phone, or tablet use | (N/A by design) | Fully traced | |
 | NFR-16 Data migration | None — system starts empty, no import tooling | (out of scope, OC-11) | Fully traced | Closed box by design, not deferred. |
 
-## User Needs Coverage Checklist (UN-01 – UN-27)
+## User Needs Coverage Checklist (UN-01 – UN-28)
 
-All 27 user needs from `user-needs-document.md` trace to at least one Rule/FR/NFR row above. Full detail is not repeated per-need here to avoid duplicating the table above; this section exists to make the coverage check explicit and auditable.
+All 28 user needs from `user-needs-document.md` trace to at least one Rule/FR/NFR row above (UN-28 added 7 August 2026). Full detail is not repeated per-need here to avoid duplicating the table above; this section exists to make the coverage check explicit and auditable.
 
 | UN | Topic | Traced via |
 |---|---|---|
@@ -132,15 +133,16 @@ All 27 user needs from `user-needs-document.md` trace to at least one Rule/FR/NF
 | UN-25 | Every rate/threshold configurable | FR-6, Rule-4, Rule-27 |
 | UN-26 | Single-admin access, credential + lockout | FR-9, Rule-29, lockout row, recovery-codes row |
 | UN-27 | Vocabulary constraint enforced everywhere | (see §1.2 in `requirement-spec.md`; enforced across all UI/export rows above by convention, not a separate technical component) |
+| UN-28 | Whole console, safe and movable — scheduled/on-demand backup, cross-device restore | Rule-43, NFR-13 (extended) |
 
 ## Traceability Summary
 
 | Metric | Count |
 |---|---|
-| Total requirement-level items (Rules + FR + new items) | 47 |
+| Total requirement-level items (Rules + FR + new items) | 48 |
 | Non-functional requirements | 16 |
-| User needs | 27 |
-| **Fully traced** | 41 Rules/FR items, all 16 NFRs, all 27 UNs |
+| User needs | 28 |
+| **Fully traced** | 42 Rules/FR items, all 16 NFRs, all 28 UNs |
 | **Partially traced** (superseded wording retained for record) | 3 (Rule-21, Rule-31, Rule-38) |
 | **Conflicting (resolved)** (tier-1 document overrides tier-2 wording) | 4 (Rule-28, Rule-29, Rule-35, closed-month-snapshot export) |
 | **Missing** | 0 |
@@ -148,4 +150,6 @@ All 27 user needs from `user-needs-document.md` trace to at least one Rule/FR/NF
 
 Changes on 6 August 2026: **NFR-7** moved to Fully traced (retention/erasure settled as an explicit client requirement, now Rule-42) and so did the **settings mid-period warning** (built, variant C). Two rows were added — **Rule-42** and the **data-recovery screen** — taking the total from 45 to 47. The closed-month-snapshot export conflict is resolved in favour of `redownload_backup`.
 
-No orphan rows: every Rule 1–42, every FR-1–9, every UN-01–27, and every NFR has at least one entry above.
+Changes on 7 August 2026: **Rule-43** (whole-console backup and cross-device restore) and **UN-28** added, taking the total from 47 to 48 requirement-level items and user needs from 27 to 28. **NFR-13** extended to cover the new mechanism.
+
+No orphan rows: every Rule 1–43, every FR-1–9, every UN-01–28, and every NFR has at least one entry above.

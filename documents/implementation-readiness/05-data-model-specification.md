@@ -152,25 +152,27 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 
 ## Entity: `backups`
 
-**Purpose:** Metadata for every generated backup file — the actual gate that Rule-18's close flow depends on, plus manual and versioned-correction backups.
-**Lifecycle:** One row per backup event (`confirm_backup_and_close`, `manual_backup_current_period`, or a closed-month `edit_entry` correction). `is_original = true` only for a period's version-1 backup; never modified after creation (Rule-39).
-**Retention:** Permanent, nothing auto-deleted (Rule-31).
+**Purpose:** Metadata for every generated backup file. Originally the actual gate that Rule-18's close flow depends on, plus manual and versioned-correction backups; **generalized 7 August 2026 (Rule-43, ADR-012)** to also carry whole-console backups (scheduled, on-demand, or taken automatically as a safety net immediately before a restore), rather than adding a second table for them.
+**Lifecycle:** One row per backup event — `confirm_backup_and_close`, `manual_backup_current_period`, or a closed-month `edit_entry` correction (all `kind = period_close`); or `run_console_backup_now` (`kind = scheduled` on a login-triggered due backup, `kind = manual` on demand); or an automatic write immediately before any restore (`kind = pre_restore_safety`). `is_original = true` only for a `period_close` row's version-1 backup; never modified after creation (Rule-39).
+**Retention:** `period_close` rows are permanent, nothing auto-deleted (Rule-31). `scheduled`/`manual` rows are pruned to `settings.console_backup_retention_count` (default 10), oldest first, after every new one of either kind is written (Rule-43). `pre_restore_safety` rows are never auto-pruned.
 **Security sensitivity:** Medium — file paths, not member data directly, but points at files containing personal data.
 
 | Attribute | Type | Required | Constraints | Notes |
 |---|---|---|---|---|
 | `id` | INTEGER | Yes | PK | |
-| `period_id` | INTEGER | Yes | FK → `periods.id` | |
-| `version` | INTEGER | Yes | — | Mirrors `monthly_snapshots.version` for the same close/correction event |
-| `internal_retained_path` | TEXT | Yes | — | The actual gate for `confirm_backup_and_close` — write-verified before zeroing proceeds |
+| `period_id` | INTEGER | No (nullable) | FK → `periods.id` | NULL for every `kind` except `period_close` (Rule-43) |
+| `kind` | TEXT | Yes | One of `period_close`/`scheduled`/`manual`/`pre_restore_safety` | New 7 August 2026 (Rule-43) — see Lifecycle above |
+| `schedule_kind` | TEXT | No (nullable) | One of `daily`/`weekly`/`monthly` | Set only when `kind = scheduled` |
+| `version` | INTEGER | Yes | — | Mirrors `monthly_snapshots.version` for the same close/correction event when `kind = period_close`; `1` for every other kind |
+| `internal_retained_path` | TEXT | Yes | — | The actual gate for `confirm_backup_and_close` when `kind = period_close` — write-verified before zeroing proceeds; the retained copy for every other kind |
 | `external_medium_path` | TEXT | No (nullable) | — | Prompted for at the same time; **failure does not block the close** — reminded, not enforced (Rule-31 extension, physically-separate-medium requirement) |
 | `checksum` | TEXT | Yes | — | Verified on write, and re-verifiable on demand |
-| `is_original` | BOOLEAN | Yes | True only for version 1 | Rule-39 — never modified once set |
+| `is_original` | BOOLEAN | Yes | True only for version 1 of a `period_close` row | Rule-39 — never modified once set |
 
-**Relationships:** Many-to-one with `periods`.
-**Indexes:** PK on `id`; index on `(period_id, version DESC)`.
-**Related requirements:** Rule-18, Rule-31, Rule-39, LOW-3 (data recovery).
-**Read pre-authentication.** This is the one table consulted before any session exists: the data-recovery screen (LOW-3) lists restore points and restores from them while the main database is unreadable, so no credential can be verified. `checksum` is what makes that safe — it is the difference between a backup being *available* and being *trustworthy*, and a restore must refuse on mismatch rather than overwrite one corrupt file with another. See API-34–36 in [04-api-specification.md](04-api-specification.md).
+**Relationships:** Many-to-one with `periods` (nullable — only meaningful for `kind = period_close`).
+**Indexes:** PK on `id`; index on `(period_id, version DESC)`; index on `(kind, created_at DESC)` for the retention prune and the widened restore-points listing.
+**Related requirements:** Rule-18, Rule-31, Rule-39, Rule-43, LOW-3 (data recovery).
+**Read pre-authentication.** This is the one table consulted before any session exists: the data-recovery screen (LOW-3) — reached automatically when the database can't be opened, or voluntarily via a plain link on the ordinary first-run setup screen, same screen either way with reworded copy — lists restore points and restores from them without a credential to verify against. `checksum` is what makes that safe — it is the difference between a backup being *available* and being *trustworthy*, and a restore must refuse on mismatch rather than overwrite one corrupt file with another. See API-34–36 and API-39–40 in [04-api-specification.md](04-api-specification.md).
 
 ---
 
@@ -183,10 +185,10 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 
 | Attribute | Type | Required | Constraints | Notes |
 |---|---|---|---|---|
-| `key` | TEXT | Yes | PK | e.g. `royalty_min_children`, `royalty_rate`, `hierarchy_depth`, `level_widths` (JSON), `reference_unit_value`, `yearly_cycle_start`/`yearly_cycle_end`, `low_contribution_threshold`, `default_export_columns` (JSON) |
+| `key` | TEXT | Yes | PK | e.g. `royalty_min_children`, `royalty_rate`, `hierarchy_depth`, `level_widths` (JSON), `reference_unit_value`, `yearly_cycle_start`/`yearly_cycle_end`, `low_contribution_threshold`, `default_export_columns` (JSON), `console_backup_schedule`, `console_backup_retention_count`, `console_backup_folder` |
 | `value` | TEXT/JSON | Yes | Type-checked per key at the application layer | |
 
-**Related requirements:** FR-6, Rule-4, Rule-14, Rule-23, Rule-24, Rule-27, §7 Settings Inventory (all 13 items).
+**Related requirements:** FR-6, Rule-4, Rule-14, Rule-23, Rule-24, Rule-27, Rule-43, §7 Settings Inventory (originally 13 items, +3 for whole-console backup, 7 August 2026).
 
 ---
 
@@ -239,6 +241,6 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 
 **Migrations:** None required at launch — the system starts empty (NFR-16, OC-11), no import/migration tooling is in scope.
 
-**Seed/reference data:** 7 default slab rows (Appendix B item 1–2), 13 default settings values (Appendix B), no member data (root is created interactively at first-run, not seeded).
+**Seed/reference data:** 7 default slab rows (Appendix B item 1–2), 16 default settings values (Appendix B — 13 original + 3 for whole-console backup, 7 August 2026), no member data (root is created interactively at first-run, not seeded).
 
-**Data validation summary:** Enforced at both the DB layer (CHECK constraints: `business_volume_entries.amount > 0`, UNIQUE on `members.phone`/`slab_table.threshold`/`periods.period_month`) and the application layer (Rule-1/Rule-32 advisory warnings, which are UI/API-layer only — deliberately **not** DB constraints, since they must never block a save).
+**Data validation summary:** Enforced at both the DB layer (CHECK constraints: `business_volume_entries.amount > 0`, UNIQUE on `members.phone`/`slab_table.threshold`/`periods.period_month`, `backups.kind IN (...)`/`backups.schedule_kind IN (...)`) and the application layer (Rule-1/Rule-32 advisory warnings, which are UI/API-layer only — deliberately **not** DB constraints, since they must never block a save).

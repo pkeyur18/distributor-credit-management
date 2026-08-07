@@ -162,6 +162,10 @@ No dedicated UI or IPC surface (see [04-api-specification.md](04-api-specificati
   - *Technical note:* the preview reuses the live Total Business Volume — slab and royalty settings never feed `rollupTBV` — and re-runs `computeRewards` alone against a temporarily-swapped `SETTINGS`, restored in a `finally` block.
   - *Remaining for the real build:* port this behaviour to the Rust/React implementation of M7. **This depends on a new IPC command** — `preview_settings_impact` (API-33) — because the calculation engine is Rust-side and the frontend cannot dry-run it. The prototype hid this: everything there runs in one JavaScript scope. Build the command before the UI.
   - *Dependencies:* API-33; M3 (engine) must exist first.
+- **US-M7.4** Whole-console backup schedule and retention setting. **✅ Designed and prototyped 7 Aug 2026.**
+  - *Requirement refs:* Rule-43, RQ-23.
+  - *Acceptance criteria:* Given the Backup schedule card, When the admin picks off/daily/weekly/monthly, Then the setting is saved immediately (no separate Save step, matching the segmented-control pattern elsewhere). Given a new retention count, When saved, Then it takes effect on the next prune (existing excess backups beyond the new count are pruned then, not immediately). Given "Back up now", When clicked, Then a `manual` backup is taken and appears at the top of the Restore card's list.
+  - *Dependencies:* API-37/38; the `backups` table generalization (§8 architecture.md, ADR-012) must land first.
 
 ---
 
@@ -180,6 +184,16 @@ No dedicated UI or IPC surface (see [04-api-specification.md](04-api-specificati
   - *Requirement refs:* Rule-29, ADR-008.
   - *Acceptance criteria:* Given a valid, unused recovery code, When used to set a new credential, Then all prior recovery codes are invalidated and a fresh set is issued.
 
+**Feature M8.2 — Whole-console backup & cross-device restore** *(new 7 Aug 2026, Rule-43/RQ-23, ADR-012)*
+- **US-M8.5** Take a whole-console backup, scheduled or on demand. **✅ Designed and prototyped 7 Aug 2026.**
+  - *Requirement refs:* Rule-43, M8.6.
+  - *Acceptance criteria:* Given a due schedule (per `settings.console_backup_schedule`) at successful login, When login completes, Then a `scheduled` backup is taken silently before the UI takes over. Given "Back up now" in Settings, When clicked, Then a `manual` backup is taken immediately. Either way, retention (`settings.console_backup_retention_count`) is enforced afterward, oldest `scheduled`/`manual` row first — `period_close` and `pre_restore_safety` rows are never pruned by this.
+  - *Dependencies:* API-39; the `backups` table generalization must land first; no background service exists while the app is closed, so the schedule can only be checked at login — this is a design constraint, not a gap to "fix" with a background timer.
+- **US-M8.6** Restore the console from a backup file — running console or brand-new install alike. **✅ Designed and prototyped 7 Aug 2026.**
+  - *Requirement refs:* Rule-43, M8.7.
+  - *Acceptance criteria:* Given the ordinary first-run setup screen (shown unconditionally, no separate welcome/choice screen), When "Restore from a backup file instead" (a plain link, not a competing button) is chosen, Then the operator lands on the same recovery screen the db-error path uses — reworded for this reason ("Restore from a backup file" heading, no internal restore-points list since a brand-new machine has none of its own yet) — and choosing a file there opens a picker; a successful restore lands on the sign-in screen using that file's own credential. Given an already-running, authenticated console, When "Restore from a file…" or a listed backup is chosen in Settings, Then a checklist-confirm modal (checkbox + Restore button, same pattern as the month-close wizard) must be completed before anything happens. Given any restore completes, When it finishes, Then a `pre_restore_safety` backup of the prior live state was written first, and any authenticated session is dropped, requiring fresh sign-in.
+  - *Dependencies:* API-40; API-35/36 widened to read every `backups.kind`, not only `period_close`.
+
 ---
 
 ## Epic M9 — Audit Log
@@ -191,15 +205,16 @@ No dedicated UI or IPC surface (see [04-api-specification.md](04-api-specificati
 
 ---
 
-## Backlog items arising directly from this analysis — all resolved 6 Aug 2026
+## Backlog items arising directly from this analysis — all resolved 6–7 Aug 2026
 
-Every item raised by the readiness analysis has since been decided; the three UI ones are built in the approved prototype and now need porting to the real implementation like any other approved behaviour.
+Every item raised by the readiness analysis has since been decided; the UI ones are built in the approved prototype and now need porting to the real implementation like any other approved behaviour.
 
 - **US-BACKLOG-1** — ✅ Resolved. "Closed month snapshot" downloads a closed month as `.xlsx` and maps to `redownload_backup`; no new command. No longer gates M6.
 - **US-BACKLOG-2** — ✅ Closed, not applicable. The client requires that members are never removed and that all data persists throughout, including in exports. No erasure mechanism is to be built. No longer gates M1.
 - **US-M7.3** — ✅ Built in the prototype (variant C). Port to M7.
 - **US-BACKLOG-3** — ✅ Built. The last slab row cannot be removed: control disabled with an explanatory `aria-label` and hint, handler refuses with a named message. Port to M7.
 - **US-BACKLOG-4** — ✅ Built. Data-recovery screen at launch (design D), listing retained backups by the month they hold. Port to M5/M8. **Needs three new pre-flight commands** (API-34–36) which are, unavoidably, the only unauthenticated commands besides the auth trio — the database cannot be opened, so nothing can be authenticated against. `restore_from_backup` must verify the stored checksum before overwriting.
+- **US-BACKLOG-5** — ✅ Built 7 Aug 2026. New client requirement (RQ-23), not raised by the original readiness analysis: whole-console backup on a schedule or on demand, restorable on any machine including a brand-new install. See US-M7.4/US-M8.5/US-M8.6 above. **Needs four new commands** (API-37–40) and generalizes the `backups` table (`kind`/`schedule_kind`, nullable `period_id`) rather than adding a second table.
 
 ## Suggested sequencing
 
@@ -208,7 +223,8 @@ Every item raised by the readiness analysis has since been decided; the three UI
 3. Epic M3 (calculation engine) — depends on M1's data model, blocks M2/M4/M5/M6.
 4. Epic M2 (entry) — depends on M1 + M3.
 5. Epic M4 (detail/chart) — depends on M1 + M3.
-6. Epic M7 (settings) — can start early (low dependency), but US-M7.3 depends on M3 existing to know what triggers recalculation.
+6. Epic M7 (settings) — can start early (low dependency), but US-M7.3 depends on M3 existing to know what triggers recalculation; US-M7.4 depends only on the `backups` table generalization (ADR-012), not on M3.
 7. Epic M5 (monthly close) — depends on M2 + M3.
 8. Epic M6 (exports) — depends on M5 (needs snapshots to exist).
+9. US-M8.5/US-M8.6 (whole-console backup/restore) — depend on the `backups` table generalization and US-M7.4's schedule/retention setting; otherwise independent of M2–M6, so can proceed in parallel with them once M8's base auth (Feature M8.1) exists.
 9. Epic M9 (audit) — cross-cutting, should be wired into M1/M2/M5/M7 as they're built, not bolted on afterward.

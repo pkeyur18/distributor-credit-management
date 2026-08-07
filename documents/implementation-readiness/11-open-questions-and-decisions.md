@@ -2,7 +2,7 @@
 
 Consolidated register. Every item below also appears at its point of relevance in deliverables 01–10; this is the single place to check what remains outstanding.
 
-**Status as of 6 August 2026: all seven items raised by the readiness analysis are closed.** Nothing outstanding blocks or gates any module.
+**Status as of 6 August 2026: all seven items raised by the readiness analysis are closed.** Nothing outstanding blocks or gates any module. **7 August 2026:** a new client requirement (whole-console backup and cross-device restore) was raised, designed and closed the same day — see below.
 
 ---
 
@@ -49,6 +49,21 @@ Still not supplied by the client. **Deferred by decision, 6 Aug 2026** — perfo
 
 ---
 
+## New client requirement — 7 August 2026
+
+### NEW-1 — Whole-console backup and cross-device restore ✅ DESIGNED AND CLOSED 7 Aug 2026
+**Was raised as:** a new client requirement, outside the original readiness analysis and every source document up to 6 August 2026 — the client wants the entire console (not one month) backed up on a configurable schedule, and able to be restored on a different desktop or laptop entirely, ending up in exactly the state the original machine held.
+**Decisions (brainstormed and confirmed with the client the same day):**
+- The backup is a verified copy of the whole encrypted database file, nothing excluded — credentials included, so a restored machine needs no re-setup.
+- The schedule (off/daily/weekly/monthly) is checked once, at successful login — the only point the application is reliably running, since it has no background service while closed.
+- Retention: keep the most recent backups, default 10, client-adjustable count, oldest pruned automatically.
+- Restore is reachable from two places: a plain link on the ordinary first-run setup screen — no separate welcome/choice screen — leading to the same recovery screen the db-error case uses, reworded rather than duplicated (a brand-new install, nothing to log into yet, and no local backups of its own to list, so it goes straight to a file picker); and a new "Restore" card in Settings (a deliberate rollback on an already-running console).
+- Restore confirmation is a checklist modal (checkbox + Restore button) — the same weight already given to closing a month, not a heavier or lighter treatment — and the console automatically takes one more backup of its own current state immediately before any restore overwrites it.
+**Applied:** `client-requirements-validation.md` RQ-23 (M7.7/M8.6/M8.7), `user-needs-document.md` UN-28, `architecture.md` ADR-012/§15.5, `03-business-rules.md` Rule-43, `04-api-specification.md` API-37–40, `05-data-model-specification.md` (`backups` table generalized), `02-requirements-traceability-matrix.md`, `09-implementation-backlog.md` (US-M7.4/US-M8.5/US-M8.6), `06-security-authorization-matrix.md` §3, `PRODUCT.md`, `DESIGN.md`, and prototyped in `documents/design/ui-prototype-v2.html`.
+**Remaining work:** port the prototyped behaviour to the real Rust/React implementation, same as every other approved prototype feature — no further design decision is outstanding.
+
+---
+
 ## Technical decisions taken during analysis
 
 ### `reverse_entry` is dropped
@@ -88,5 +103,6 @@ Reads like an obvious gap on first encounter, but the client was offered this sa
 | LOW-2 | Built | None |
 | LOW-3 | Built (design D) | None |
 | LOW-4 | Deferred to the performance-testing phase | Sizing figure, when convenient |
+| NEW-1 | Designed and closed — whole-console backup & cross-device restore (Rule-43) | Port prototyped behaviour to the real implementation |
 
 **Nothing outstanding gates any module.** The conditions attached to the original "READY WITH CONDITIONS" verdict in [01-implementation-readiness-assessment.md](01-implementation-readiness-assessment.md) have all been met.
