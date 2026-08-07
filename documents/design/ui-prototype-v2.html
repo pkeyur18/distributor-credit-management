@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Member Rewards Console — Prototype</title>
+<link rel="icon" type="image/png" href="../../assets/logo-icon.png">
 <style>
 /* ============================================================
    TOKENS — verbatim from documents/design/ui-theme.md
@@ -105,8 +106,8 @@ a:hover { text-decoration: underline; }
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; }
 .brand-mark {
-  width: 26px; height: 26px; border-radius: var(--radius-sm); background: var(--accent);
-  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 13px; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: var(--radius-sm); flex-shrink: 0;
+  object-fit: cover;
 }
 .brand-name { font-weight: 600; font-size: 13.5px; letter-spacing: -0.01em; }
 .brand-sub { font-size: 11px; color: var(--text-muted); }
@@ -328,7 +329,8 @@ td.cell-primary { font-weight: 550; }
 .auth-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .auth-card { width: 100%; max-width: 380px; }
 .auth-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 28px; }
-.auth-brand .brand-mark { width: 40px; height: 40px; border-radius: 11px; font-size: 17px; }
+.auth-brand .brand-mark { width: 40px; height: 40px; border-radius: 11px; }
+.auth-hero-mark { display: block; width: 72px; height: 72px; border-radius: 16px; margin: 0 auto; object-fit: cover; }
 .auth-title { font-size: 18px; font-weight: 650; text-align: center; letter-spacing: -0.01em; }
 .auth-sub { font-size: 12.5px; color: var(--text-muted); text-align: center; margin-top: 5px; }
 .auth-body { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; margin-top: 20px; }
@@ -1260,7 +1262,7 @@ const NAV_ITEMS = [
   { view: 'audit', label: 'Audit log', icon: ICON.audit },
 ];
 function buildSidebar() {
-  let html = '<div class="brand"><div class="brand-mark">SP</div><div><div class="brand-name">Member Rewards Console</div><div class="brand-sub">Siddharth Patel</div></div></div>';
+  let html = '<div class="brand"><img class="brand-mark" src="../../assets/logo-icon.png" alt=""><div><div class="brand-name">Member Rewards Console</div><div class="brand-sub">Siddharth Patel</div></div></div>';
   html += '<nav class="sidebar-nav">';
   NAV_ITEMS.forEach(function (it) {
     if (it.group) { html += '<div class="nav-section-label">' + esc(it.group) + '</div>'; return; }
@@ -1409,7 +1411,7 @@ function renderSetup() {
   const d = APP.setupDraft;
   if (d.step === 0) {
     return '<div class="auth-shell"><div class="auth-card">' +
-      '<div class="auth-brand"><div class="brand-mark">SP</div><div class="auth-title">Set up the console</div><div class="auth-sub">Choose how you will unlock this console. This runs once, before the first sign-in.</div></div>' +
+      '<div class="auth-brand"><img class="auth-hero-mark" src="../../assets/logo-icon.png" alt=""><div class="auth-title">Set up the console</div><div class="auth-sub">Choose how you will unlock this console. This runs once, before the first sign-in.</div></div>' +
       '<div class="auth-body">' +
       '<div class="segmented mb-3"><button class="' + (d.mode === 'pin' ? 'active' : '') + '" onclick="P.setSetupMode(\'pin\')">PIN</button><button class="' + (d.mode === 'password' ? 'active' : '') + '" onclick="P.setSetupMode(\'password\')">Password</button></div>' +
       (d.mode === 'pin'
@@ -1463,7 +1465,7 @@ function renderLogin() {
       '<button class="btn btn-primary btn-block" onclick="P.passwordSubmit()">Unlock</button>';
   }
   return '<div class="auth-shell"><div class="auth-card">' +
-    '<div class="auth-brand"><div class="brand-mark">SP</div><div class="auth-title">Member Rewards Console</div><div class="auth-sub">Sign in to continue</div></div>' +
+    '<div class="auth-brand"><img class="auth-hero-mark" src="../../assets/logo-icon.png" alt=""><div class="auth-title">Member Rewards Console</div><div class="auth-sub">Sign in to continue</div></div>' +
     '<div class="auth-body">' +
     (lockedOut ? '' : '<div class="segmented mb-3" style="justify-content:center;display:flex"><button class="' + (APP.loginMode === 'pin' ? 'active' : '') + '" onclick="P.setLoginMode(\'pin\')">PIN</button><button class="' + (APP.loginMode === 'password' ? 'active' : '') + '" onclick="P.setLoginMode(\'password\')">Password</button></div>') +
     body +
@@ -1493,7 +1495,7 @@ function renderRecovery() {
       '<button class="btn btn-primary btn-block" ' + (r.confirmed ? '' : 'disabled') + ' onclick="P.recoveryFinish()">Sign in with new credential</button>';
   }
   return '<div class="auth-shell"><div class="auth-card">' +
-    '<div class="auth-brand"><div class="brand-mark">SP</div><div class="auth-title">' + esc(title) + '</div><div class="auth-sub">' + esc(sub) + '</div></div>' +
+    '<div class="auth-brand"><img class="brand-mark" src="../../assets/logo-icon.png" alt=""><div class="auth-title">' + esc(title) + '</div><div class="auth-sub">' + esc(sub) + '</div></div>' +
     '<div class="auth-body">' + body + '</div>' +
     (r.step === 0 ? '<div class="auth-foot"><a href="javascript:void(0)" onclick="P.cancelRecovery()">Back to sign in</a></div>' : '') +
     '</div></div>';

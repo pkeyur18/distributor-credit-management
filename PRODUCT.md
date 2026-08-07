@@ -52,7 +52,7 @@ Not a general-purpose network-marketing / MLM platform. It is a private, single-
 
 ## Brand Commitments
 
-No product name, logo, or branding surfaces anywhere in the UI — it is a private tool nobody outside the client's office ever sees. The only binding voice constraint is the restricted vocabulary: *member, Business Volume, Rewards, royalty, volume, slab, level, leg*. No other commercial/network-marketing terminology may appear in any screen label, button, column heading, extract filename, error message, or tooltip.
+No company name or commercial branding surfaces anywhere in the UI — it is a private tool nobody outside the client's office ever sees. A plain visual app icon/mark (window/tab icon, sidebar, sign-in and setup screens) is fine — it identifies the app, not a business. The only binding voice constraint is the restricted vocabulary: *member, Business Volume, Rewards, royalty, volume, slab, level, leg*. No other commercial/network-marketing terminology may appear in any screen label, button, column heading, extract filename, error message, or tooltip.
 
 ## Evidence on Hand
 
