@@ -35,6 +35,15 @@ There is no resource in this system with partial/conditional admin access — th
 
 **Recovery:** One-time recovery codes, generated once at first-run setup, shown once, stored hashed. This is the **sole** recovery path — there is no "forgot password" email flow (no network exists) and no vendor backdoor. Using a recovery code invalidates all prior codes and issues a fresh set.
 
+**Pre-authentication surface.** Six commands run without an authenticated session, and the list is closed: `login`, `setup_first_run`, `use_recovery_code`, and — added 6 August 2026 with the data-recovery screen (LOW-3) — `check_data_readable`, `list_restore_points`, `restore_from_backup`. The last three are unauthenticated of necessity, not convenience: the recovery screen exists precisely because the database cannot be opened, and the credential hashes live inside that database, so there is nothing available to authenticate against.
+
+What that exposes, stated plainly rather than left implicit:
+- `check_data_readable` and `list_restore_points` reveal only *that* backups exist and which months they cover — no member data, no figures.
+- `restore_from_backup` is the **only destructive unauthenticated command in the system**. Someone with physical access to an unlocked machine could roll the data back to an earlier month. This is accepted: it destroys no backup (every version is retained, Rule-31), reveals nothing, and physical device access is already out of scope in the threat model below. It must still verify the backup's checksum before overwriting, so a corrupt backup cannot be restored over a corrupt database.
+- The restored database is still encrypted, and still requires the credential to open. Restoring does not grant access to anything.
+
+This list must stay identical to the one in [04-api-specification.md](04-api-specification.md) §Command surface summary.
+
 **Failed-attempt lockout — mandatory, regardless of credential type.** `requirement-spec.md` itself states this is not optional: a 6-digit PIN is one million combinations and is trivially brute-forced without a limit, and this single account guards every member's personal data and phone number. Implementation: 5 failed attempts → timed lockout with exponential backoff (matches the prototype's 20-second countdown at the first threshold).
 
 ## 4. Data Protection
@@ -57,6 +66,7 @@ There is no resource in this system with partial/conditional admin access — th
 | Database file theft/copy | **Yes** | SQLCipher encryption at rest — file is useless without the credential |
 | Network-based attack (interception, remote exploit) | **N/A — no network exists** | Structural, not policy — no network capability is even declared in the Tauri config |
 | Device stolen or accessed while unlocked mid-session | **No — explicitly out of scope** | "Client's responsibility" per the documented threat table; no additional in-app safeguard beyond the configurable inactivity timeout |
+| Rollback via the unauthenticated recovery screen (physical access, database already unreadable) | **No — accepted, bounded** | Destroys no backup and reveals no data; the restored database still requires the credential to open. Falls under the same physical-access boundary as the row above. See §3. |
 | Loss of both credential and all recovery codes | **No — permanently unrecoverable by design** | No vendor backdoor exists; this is presented as an intentional trade-off of the offline-only, no-cloud architecture, not a gap to fix |
 | Slab-table misconfiguration producing an invalid (e.g. negative) differential | **No — explicitly declined by the client** | Rule-41 / ADR-009. Not a security issue but included here because it is the one place a stated business guarantee (Rule-9) is not defended in code, by explicit client choice |
 | SQLCipher build fragility / cross-platform crypto issues | Tracked as a technical risk (TR-1), not a security control gap | `architecture.md` §19 |

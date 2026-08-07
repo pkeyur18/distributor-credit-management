@@ -548,7 +548,12 @@ closed (M2.4); enforce the entry lock while any month is outstanding (Rule 36).
   ever represents the current open period) — it triggers an isolated recalculation of that historical
   period's chain and a new `monthly_snapshots` version (§9, §10).
 
-**Commands**: `record_entry`, `edit_entry`, `reverse_entry`, `get_period_lock_status`.
+**Commands**: `record_entry`, `edit_entry`, `get_period_lock_status`.
+
+> **Revised 6 August 2026.** `reverse_entry` has been removed. No requirement document ever described a
+> reversal that was functionally distinct from an edit — RQ-7 treats "edited or reversed" as the same
+> action — and the approved prototype implements only editing. `edit_entry`, append-only and fully
+> audited, is the complete correction mechanism for both open and closed periods.
 
 ### M3 — Calculation Engine
 
@@ -562,9 +567,20 @@ loading the chain, invoking the engine, and persisting the result inside one dat
 separation is what makes the engine unit-testable against the five worked scenarios without touching a
 database at all (§16).
 
-**Commands.** M3 exposes no direct commands — it is invoked internally by M2 and M5 on every write. This is
-deliberate: there is no "recalculate" button anywhere in the product (Rule 26), so there should be no
-command surface that could become one.
+**Commands**: `preview_settings_impact`.
+
+No command *triggers* a calculation. That remains deliberate: there is no "recalculate" button anywhere in
+the product (Rule 26), so there is no command surface that could become one — the engine runs only as an
+internal consequence of a write in M2, M5 or M7.
+
+> **Revised 6 August 2026.** This section previously stated that M3 exposed no commands at all. That held
+> while the only thing anyone could want from the engine was to *run* it. The settings pre-save warning
+> (RQ-18/V7.6) asks a different question — what the engine *would* produce under candidate settings,
+> without committing — and only the Rust side can answer it. Hence one read-only command,
+> `preview_settings_impact`, which persists nothing: it swaps the candidate settings in, recomputes, and
+> restores them in a `finally` block so a panic can never leave live settings holding uncommitted values.
+> Because slab and royalty settings never feed `rollupTBV`, the preview reuses the live Total Business
+> Volume and re-runs only the rewards computation. Full contract in `04-api-specification.md` (API-33).
 
 ### M4 — Search & Structure Visualisation
 
@@ -628,7 +644,24 @@ process memory for the session's lifetime — the inactivity lock (§11.3) drops
 re-derivation (i.e. re-entry of the credential) to resume, rather than merely hiding the UI.
 
 **Commands**: `setup_first_run`, `login`, `lock_session`, `unlock_session`, `use_recovery_code`,
-`get_outstanding_alert`.
+`get_outstanding_alert`, `check_data_readable`, `list_restore_points`, `restore_from_backup`.
+
+> **Added 6 August 2026 — data recovery at launch.** Nothing in the source documents said what should
+> happen if the encrypted database cannot be opened at startup. Left undefined, the operator would see
+> whatever the underlying database error produced, which for persona P-1 is indistinguishable from the
+> application being broken for good. The last three commands back a full-screen recovery state shown in
+> place of sign-in: a pre-flight readability check, the list of retained backups (labelled by the month
+> each holds), and the restore itself.
+>
+> These three are **unauthenticated of necessity, not convenience** — the screen exists precisely because
+> the database could not be opened, and the credential hashes live inside that database, so there is
+> nothing available to authenticate against. This is the only addition to §11.3's unauthenticated set
+> since it was written. What it exposes is bounded: the first two reveal only that backups exist and which
+> months they cover; `restore_from_backup` is the sole destructive unauthenticated command, but it
+> destroys no backup (every version is retained, Rule 31), reveals nothing, and the restored database
+> still requires the credential to open. It must verify the backup's stored checksum before overwriting —
+> restoring a corrupt file over a corrupt file helps nobody. Physical device access is already out of
+> scope in §11.5's threat model, which is the boundary this sits inside.
 
 ### M9 — Audit & Technical Logging *(architecture-introduced, cross-cutting)*
 
@@ -1351,9 +1384,9 @@ CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id);
 | M1 | `reactivate_member` | Rule 34 |
 | M1/M4 | `search_members` | Rule 2 |
 | M2 | `record_entry` | Rule 15/16; triggers §9 chain recalc |
-| M2 | `edit_entry` | M2.4; open or closed period |
-| M2 | `reverse_entry` | M2.4 |
+| M2 | `edit_entry` | M2.4; open or closed period — the only correction mechanism |
 | M2 | `get_period_lock_status` | Rule 36 |
+| M3 | `preview_settings_impact` | RQ-18/V7.6 dry run; read-only, persists nothing |
 | M4 | `get_member_detail` | RQ-13 breakdown |
 | M4 | `get_direct_children_chart` | Q11/UN-16 |
 | M5 | `get_outstanding_periods` | Rule 20 queue |
@@ -1370,10 +1403,24 @@ CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id);
 | M8 | `login` / `lock_session` / `unlock_session` | Rule 29 |
 | M8 | `use_recovery_code` | RQ-10 |
 | M8 | `get_outstanding_alert` | Rule 20 |
+| M8 | `check_data_readable` | Launch pre-flight — **unauthenticated** |
+| M8 | `list_restore_points` | Retained backups available to restore — **unauthenticated** |
+| M8 | `restore_from_backup` | Checksum-verified restore — **unauthenticated, destructive** |
 | M9 | `get_audit_log` | RQ-9, read-only |
 
 Every command above is the **only** way its module's data can be reached from the UI — there is no
 general-purpose query or filesystem command exposed, consistent with §6 and §11.3.
+
+**Authentication.** All commands require an authenticated session except six: `setup_first_run`, `login`,
+`use_recovery_code`, and the three pre-flight/recovery commands. That set is closed — see §M8 for why the
+recovery three cannot be authenticated, and `06-security-authorization-matrix.md` §3 for the exposure it
+creates. A seventh unauthenticated command should not be added without revisiting both.
+
+> **Appendix revised 6 August 2026.** `reverse_entry` removed (§M2); `preview_settings_impact` added (§M3);
+> the three pre-flight/recovery commands added (§M8). Each change has its rationale recorded inline in the
+> module section rather than applied silently. Full per-command contracts — request, response, validation,
+> transaction and audit requirements — are in `documents/implementation-readiness/04-api-specification.md`,
+> which this table summarises rather than duplicates.
 
 ---
 

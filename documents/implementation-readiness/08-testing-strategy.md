@@ -31,21 +31,30 @@ These five scenarios, plus `client-requirements-validation.md`'s AC-1–AC-36 (�
 - Inactive-member calculation neutrality (Rule-28, the corrected rule): deactivating a mid-tree member with active descendants must **not** change any ancestor's TBV/Rewards — this is the single highest-value regression test in the whole suite, since implementing the original (superseded) spec wording here would silently corrupt the ledger.
 - Zero/negative Business Volume refusal (Rule-16a).
 - Empty-month exclusion from yearly averaging (RQ-16).
+- **TEST-R42 — members are never removed, and never omitted.** Two assertions: no code path deletes a `members` row (there is no delete command to call), and every export includes deactivated members. This is a client requirement, so the test exists to stop a future change quietly introducing an erasure path or an "active only" export filter.
+- Last slab row cannot be removed (LOW-2): with one row remaining, the remove handler refuses and the row count is unchanged.
+- `preview_settings_impact` (API-33) leaves nothing behind: call it with candidate settings, then confirm the live settings and all live figures are byte-identical to before. The temporarily-swapped settings must be restored even when the computation throws — test that path deliberately by feeding it a candidate that panics the engine.
 
 ### Integration tests — Transactional correctness
 - Chain-upward recalculation (ADR-005): trigger a `record_entry` deep in a multi-level tree, confirm every ancestor up to root is recalculated **in one transaction**, and confirm that a sibling's differential term changes too when the parent's slab shifts (the specific detail `architecture.md` §9.2 calls out — re-scanning **all** direct children of an ancestor, not just the changed leaf).
 - Monthly close atomicity (Rule-18): simulate a backup-verification failure mid-close, confirm zero data is mutated (no partial zeroing, no orphaned snapshot row).
 - Closed-month correction versioning (Rule-39): edit an entry in a closed month, confirm a new `monthly_snapshots`/`backups` version is created, confirm the original version's row is byte-identical to before, confirm `redownload_backup` and `export_yearly_average` both read the new version.
 - Settings-change mid-period recalculation: change the royalty rate mid-month, confirm only the current open period recalculates and no closed-month snapshot is touched.
+- **The preview must equal what actually lands (MEDIUM-1).** The highest-value test of the settings warning, and already proven against the prototype: capture the Rewards figure the warning predicts, confirm the save, then re-open the warning with no further edits and confirm the settled "before" figure equals the earlier prediction exactly. A preview that can disagree with reality is worse than showing no preview at all, because the admin would have approved a change on the strength of a number that was never true.
+- Restore from backup (LOW-3): against a deliberately corrupted database file, confirm the app enters the recovery state rather than crashing; confirm a restore whose checksum fails is refused and leaves the corrupt file untouched; confirm a successful restore leaves the app at sign-in with the credential still required.
 
 ### API / contract tests — IPC command surface
-One test per command in [04-api-specification.md](04-api-specification.md) verifying: request/response shape, validation rules, authorization (every command except `login`/`setup_first_run`/`use_recovery_code` requires an authenticated session), and the documented error responses. Given there are 32 commands and no HTTP layer, these are Tauri command-invocation tests run against the Rust application container directly (no browser/network mocking needed).
+One test per command in [04-api-specification.md](04-api-specification.md) verifying: request/response shape, validation rules, authorization, and the documented error responses. Given there are 36 commands and no HTTP layer, these are Tauri command-invocation tests run against the Rust application container directly (no browser/network mocking needed).
+
+**Authorization is tested as a closed set, not per-command.** Exactly six commands may run unauthenticated — `login`, `setup_first_run`, `use_recovery_code`, `check_data_readable`, `list_restore_points`, `restore_from_backup`. The test asserts that list exactly: every other command must refuse without a session, and no seventh command may join the set without the test failing. That is the point — this is the assertion that catches an unauthenticated command being added by accident.
 
 ### E2E tests — Full user workflows, driven through the actual UI
 - First-run setup → root member creation → first Business Volume entry → visible Rewards on screen, no manual recalculation step anywhere (Rule-26).
 - Full monthly-close wizard: backup confirm → commit → figures zeroed → alert clears → (if applicable) next outstanding month's alert appears.
 - Entry-lock enforcement: let a month elapse without closing, confirm the BV Entry screen shows the locked empty state and the persistent banner appears with no dismiss control.
 - Closed-month correction end-to-end: correct an entry in a closed month via the "Correct a closed month" panel, confirm the warning copy is shown, confirm the toast, confirm the exported closed-month snapshot reflects the correction.
+- Settings warning end-to-end (MEDIUM-1): save the slab table → warning names the open month, shows Rewards before → after and the affected members → Cancel leaves both the settings and the admin's typed values untouched → re-save and confirm applies. Repeat for royalty, where the list shows members starting/stopping royalty instead. Confirm a duplicate threshold is refused outright, with no warning offered.
+- Data-recovery screen (LOW-3): launch against an unreadable database, confirm the recovery screen appears in place of sign-in, restore points are listed newest-first by the month each holds, and the screen states that anything recorded after the chosen backup will need entering again.
 - Phone-duplicate-on-inactive reactivation flow, end-to-end through the Add Member modal.
 - Auth: setup wizard (recovery-code reveal + mandatory "I have saved this" gate), login with each credential type, lockout countdown, recovery flow (old credential invalidated, new one issued).
 
@@ -53,7 +62,8 @@ One test per command in [04-api-specification.md](04-api-specification.md) verif
 - Lockout: exactly 5 failed attempts triggers lockout; countdown timing; attempts do not reset early.
 - Encryption at rest: confirm the raw `.sqlite` file is unreadable without the derived key (attempt to open with a plain SQLite client, expect failure).
 - Session key lifecycle: confirm the decryption key is not retrievable from process memory after `lock_session` (as far as testable without specialized memory-forensics tooling — at minimum, confirm re-authentication is required and cannot be bypassed by any command).
-- Filesystem capability allowlist: confirm the WebView cannot invoke any command outside the 32 documented ones (Tauri capability config test).
+- Filesystem capability allowlist: confirm the WebView cannot invoke any command outside the 36 documented ones (Tauri capability config test).
+- Pre-authentication surface: confirm `restore_from_backup` — the only destructive unauthenticated command — refuses a checksum mismatch, and that a restored database still requires the credential to open (restoring must not grant access to anything).
 
 ### Performance tests
 Targets per NFR-1: screens <2s, recalculation <2s, extracts <30s, at the 25,000-member/200,000-entries-per-year design ceiling (client's actual scale is 500–5,000 members — test at both the realistic scale and the design ceiling).
@@ -73,8 +83,13 @@ Per SC-1–SC-8/AC-1–AC-36 (`client-requirements-validation.md` §12–13): re
 | Entry/correction rules (Rules 16, 16a, 39) | Unit + E2E |
 | Monthly close/backup gate (Rules 17–20, 31, 38) | Integration (atomicity) + E2E (wizard) |
 | Member lifecycle/hierarchy integrity (Rules 28, 30, 34, 35, 37, 40) | Unit + E2E |
+| Members never removed, never omitted (Rule-42) | TEST-R42 — unit (no delete path) + integration (exports include deactivated members) |
 | Exports/reporting (Rules 19, 23, 24, 33) | Integration + E2E |
+| Settings pre-save warning (RQ-18/V7.6, MEDIUM-1) | Unit (`preview_settings_impact` leaves nothing behind) + integration (prediction equals what lands) + E2E (both sections, Cancel is a no-op) |
+| Slab table cannot be emptied (LOW-2) | Unit + E2E |
+| Data recovery at launch (LOW-3) | Integration (corrupt file, checksum refusal) + E2E (screen, restore, still requires credential) |
 | Auth/security (Rule-29, NFR-4) | Security tests + E2E |
+| Pre-authentication command set is exactly six | Contract test asserting the closed set |
 | Performance/scale (NFR-1, NFR-2) | Performance tests |
 | Accepted risks (Rule-41 monotonicity) | A deliberate **negative** test: confirm the system does *not* block a non-monotonic slab table save, and confirm the resulting (possibly negative) differential is computed and displayed as-is, not silently clamped — this proves the accepted-risk decision is correctly implemented as "no validation," not accidentally half-implemented. |
 

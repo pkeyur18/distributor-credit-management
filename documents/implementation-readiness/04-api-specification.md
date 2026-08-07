@@ -31,7 +31,17 @@ All commands run inside the security boundary described in `architecture.md` §1
 
 ## Module M3 — Calculation Engine
 
-**No commands are exposed.** Deliberate, per `architecture.md` line 565–567 — there is no "recalculate" button anywhere in the product (Rule-26), so nothing external ever needs to trigger this module directly. It runs exclusively as an internal side-effect of `record_entry`, `edit_entry`, `update_settings`, `add_slab_row`, `remove_slab_row`, and `update_slab_row`.
+**No command *triggers* a calculation.** Deliberate, per `architecture.md` line 565–567 — there is no "recalculate" button anywhere in the product (Rule-26), so nothing external ever needs to make this module run. Calculation happens exclusively as an internal side-effect of `record_entry`, `edit_entry`, `update_settings`, `add_slab_row`, `remove_slab_row`, and `update_slab_row`.
+
+**One read-only command is exposed**, added 6 August 2026 when the settings pre-save warning (MEDIUM-1, variant C) was approved. The original "M3 exposes nothing at all" position assumed the only thing anyone could want from the engine was to run it. The warning needs something different: to ask what the engine *would* produce, without committing. The frontend cannot answer that itself — the engine is Rust-side — so the question has to cross the IPC boundary.
+
+| API ID | Command | Purpose | Actor | Authorization | Request | Response | Validation | Business Rules | Success | Error(s) | Idempotency | Transaction | Audit |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| API-33 | `preview_settings_impact` | Dry run: what the open period's figures would become under candidate slab/royalty settings. Backs the pre-save warning. | Admin | Authenticated | candidate `slab_table` and/or `royalty_min_children`/`royalty_rate` | Rewards total before/after; members whose slab moves (from → to); members whose royalty eligibility starts/stops | Same shape checks as the settings commands, but nothing is persisted, so an invalid candidate simply produces a preview the admin can reject | RQ-18/V7.6 | 200-equivalent | Malformed candidate → refused | Idempotent — computes nothing durable | **None — must not write.** Implementation swaps the candidate settings in, recomputes, and restores in a `finally`; a panic must never leave live settings holding uncommitted values | Not audited — nothing changed |
+
+Two implementation notes carried over from the prototype's `previewRecalcImpact()`, both load-bearing:
+- **Total Business Volume cannot move.** `rollupTBV` reads only the business-volume map and the hierarchy; no slab or royalty setting feeds it. The preview reuses the live TBV and re-runs the rewards computation alone — it must not rebuild the tree.
+- **The preview must equal what a subsequent save actually produces.** A preview that can disagree with reality is worse than showing nothing. See the closed-loop test in [08-testing-strategy.md](08-testing-strategy.md).
 
 ## Module M4 — Member Detail & Hierarchy Chart
 
@@ -64,7 +74,7 @@ All commands run inside the security boundary described in `architecture.md` §1
 | API ID | Command | Purpose | Actor | Authorization | Request | Response | Validation | Business Rules | Success | Error(s) | Idempotency | Transaction | Audit |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | API-21 | `get_settings` | Fetch all current settings | Admin | Authenticated | — | Full settings payload (13 items, Appendix B) | — | FR-6 | 200-equivalent | — | Read-only | None | Not audited |
-| API-22 | `update_settings` | Update one or more non-slab-table settings | Admin | Authenticated | changed key/value pairs | Updated settings | Type/range checks per field | FR-6 | 200-equivalent | Invalid value → refused | Idempotent | One transaction: write setting(s) + **recalculate the current open period only** if the change affects live figures (royalty rate/min-children — see the settings-mid-period-warning gap in [11](11-open-questions-and-decisions.md)) | audit_log entry, cause=`settings_change` |
+| API-22 | `update_settings` | Update one or more non-slab-table settings | Admin | Authenticated | changed key/value pairs | Updated settings | Type/range checks per field | FR-6, RQ-18/V7.6 | 200-equivalent | Invalid value → refused | Idempotent | One transaction: write setting(s) + **recalculate the current open period only** if the change affects live figures (royalty rate/min-children). The caller is expected to have shown the pre-save warning first, sourced from `preview_settings_impact` (API-33) | audit_log entry, cause=`settings_change` |
 | API-23 | `add_slab_row` | Add a new slab threshold/percentage row | Admin | Authenticated | threshold, percentage | Updated slab table | Duplicate threshold rejected; **no monotonicity check** (Rule-41, deliberate) | Rule-27 | 200-equivalent | Duplicate threshold → refused | Idempotent | One transaction: insert row + recalculate current open period | audit_log entry |
 | API-24 | `remove_slab_row` | Remove a slab row | Admin | Authenticated | row_id | Updated slab table | Cannot remove the last remaining row (system must always have at least one slab, the implicit 0% base is separate/hardcoded) | Rule-27 | 200-equivalent | Would leave zero rows → refused | Idempotent | One transaction: delete row + recalculate current open period | audit_log entry |
 | API-25 | `update_slab_row` | Edit a slab row's threshold/percentage | Admin | Authenticated | row_id, new threshold/percentage | Updated slab table | Duplicate threshold rejected; no monotonicity check (Rule-41) | Rule-4, Rule-41 | 200-equivalent | Duplicate threshold → refused | Idempotent | One transaction: update row + recalculate current open period | audit_log entry |
@@ -80,6 +90,18 @@ All commands run inside the security boundary described in `architecture.md` §1
 | API-30 | `use_recovery_code` | Reset credential(s) using a one-time recovery code | Admin | Unauthenticated (recovery flow) | recovery_code, new pin/password | New recovery codes (old ones invalidated) | Recovery code must match an unused hashed code | Rule-29 | 200-equivalent | Invalid/used code → refused | Not idempotent (code is single-use, consumed on success) | One transaction: verify code, invalidate all old codes, set new credential, generate new codes | audit_log entry (credential recovery) |
 | API-31 | `get_outstanding_alert` | Fetch the current outstanding-month alert state for the persistent banner | Admin | Authenticated | — | `{months: [...]}` or empty | — | Rule-20 | 200-equivalent | — | Read-only | None | Not audited |
 
+## Pre-flight / Data Recovery
+
+Added 6 August 2026 with the data-recovery screen (LOW-3, design D). These three are **the only unauthenticated commands besides `login`, `setup_first_run` and `use_recovery_code`** — and unavoidably so: the screen exists precisely because the database could not be opened, and the credential hashes live inside that database, so there is nothing to authenticate against. See [06-security-authorization-matrix.md](06-security-authorization-matrix.md) §3 for the exposure this creates and why it is acceptable.
+
+| API ID | Command | Purpose | Actor | Authorization | Request | Response | Validation | Business Rules | Success | Error(s) | Idempotency | Transaction | Audit |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| API-34 | `check_data_readable` | Launch pre-flight: can the encrypted database be opened and read? Decides whether the app shows sign-in or the recovery screen. | Admin (pre-auth) | **Unauthenticated** | — | `{readable: bool}` | — | LOW-3 | 200-equivalent | — | Read-only | None | Not audited (runs before any session exists) |
+| API-35 | `list_restore_points` | Retained backups available to restore from, newest first, labelled by the month each one holds | Admin (pre-auth) | **Unauthenticated** | — | List of `{period_month, version, closed_on, is_corrected}` | — | Rule-31, LOW-3 | 200-equivalent | — | Read-only | None | Not audited |
+| API-36 | `restore_from_backup` | Replace the unreadable database with a retained backup | Admin (pre-auth) | **Unauthenticated** | period_month (+ version) | Result | **Must verify the backup's stored `checksum` before overwriting anything.** A backup that fails verification is refused, not restored — restoring a corrupt file over a corrupt file helps nobody | Rule-31, LOW-3 | 200-equivalent | Backup missing or checksum mismatch → refused, nothing overwritten | Not idempotent (each call performs a restore) | One transaction: verify → restore → leave the app at sign-in | audit_log entry once the restored database is readable, cause=`restore` |
+
+`restore_from_backup` is the only **destructive** unauthenticated command in the system. That is a deliberate, bounded exposure, not an oversight — see §5 of the security matrix.
+
 ## Module M9 — Audit Log
 
 | API ID | Command | Purpose | Actor | Authorization | Request | Response | Validation | Business Rules | Success | Error(s) | Idempotency | Transaction | Audit |
@@ -90,7 +112,9 @@ All commands run inside the security boundary described in `architecture.md` §1
 
 ## Command surface summary
 
-- **32 commands total** across 9 modules (M3 exposes none, by design).
+- **36 commands total** — 32 from the original analysis, plus `preview_settings_impact` (API-33) and the three pre-flight/recovery commands (API-34–36) added 6 August 2026 when variant C and design D were approved.
 - **`reverse_entry` removed** from the 26-command count in the raw architecture text (was double-counted with `edit_entry` for the same use case) — see the note at the top of this document.
+- **No delete command exists anywhere, for any entity.** Members, entries, snapshots and backups are never removed (Rule-28, Rule-42, Rule-31). This is a client requirement, not an omission — do not add one.
+- **Unauthenticated commands, complete list:** `login`, `setup_first_run`, `use_recovery_code`, `check_data_readable`, `list_restore_points`, `restore_from_backup`. Everything else requires an authenticated session. This list must stay identical to the one in [06-security-authorization-matrix.md](06-security-authorization-matrix.md) §3.
 - Every command that mutates data runs inside exactly one DB transaction and produces exactly one `audit_log` entry (or, for `record_entry`/`edit_entry`, one entry per changed field), consistent with NFR-5/M9.
 - Read-only commands (`search_members`, `get_member_detail`, `get_direct_children_chart`, export commands, `get_settings`, `list_backups`, `get_audit_log`, `get_outstanding_*`) are never audited — auditing tracks changes, not reads.

@@ -58,7 +58,12 @@ Full attribute-level detail: [05-data-model-specification.md](05-data-model-spec
 
 ## 7. API Summary
 
-32 Tauri IPC commands across 8 modules (M3 exposes none — internal only), fully specified in [04-api-specification.md](04-api-specification.md). Notable: `reverse_entry` from the raw architecture text was **dropped** — confirmed dead by the architect; `edit_entry` alone handles all corrections, including in closed months.
+36 Tauri IPC commands, fully specified in [04-api-specification.md](04-api-specification.md). Four things worth knowing before you touch the surface:
+
+- **`reverse_entry` was dropped** — confirmed dead by the architect; `edit_entry` alone handles all corrections, including in closed months.
+- **M3 (the calculation engine) exposes one command, not none.** No command *triggers* a calculation — there is no recalculate button (Rule-26) — but `preview_settings_impact` (API-33) asks what the engine *would* produce, without committing, to back the settings pre-save warning. The frontend cannot compute this itself.
+- **Six commands run unauthenticated**, and the set is closed: `login`, `setup_first_run`, `use_recovery_code`, `check_data_readable`, `list_restore_points`, `restore_from_backup`. The last three back the data-recovery screen and are unauthenticated of necessity — the credential hashes live in the database that could not be opened. `restore_from_backup` is the only destructive one; it must verify the backup's checksum first.
+- **No delete command exists for any entity**, by client requirement (Rule-42). Do not add one.
 
 ## 8. Authorization Summary
 

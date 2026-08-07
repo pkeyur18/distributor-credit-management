@@ -253,6 +253,37 @@ Two further tiers exist below and above those two steps — not drift, but real 
 - **Sidebar item:** 13.5px body weight, 6px radius, full-width hit target, icon at 16px/0.75 opacity. Hover shifts background to `--bg`; the active item gets the indigo-weak fill, indigo text, 600 weight, and full-opacity icon — the single strongest "you are here" signal in the system.
 - **Breadcrumb:** 12.5px muted trail with `›`-style separators at 0.5 opacity; only the current page is ink-colored and bold.
 
+### Modals
+- **Shape:** 480px max width (640px at `.wide`), 8px radius, `max-height: 88vh` with the body scrolling rather than the whole dialog.
+- **Elevation:** the one shadow in the system (`--shadow-modal`) — modals, toasts and the search dropdown are the only things that get it. Backdrop is ink at 50% with a 1px blur.
+- **Structure:** header (15px/650 title, hairline below, ✕ at the right), body at 18px/20px padding, footer with a hairline above and actions right-aligned — **Cancel first, then the action**, never reversed.
+- **Focus:** Cancel takes focus on open, never the confirming button. A destructive action should require a deliberate move to reach, not sit under a stray Enter press.
+- **Dismissal:** backdrop click and Escape both close a dismissable modal. Modals that must not be dismissed accidentally (add/edit member) opt out of both and can only be closed by Cancel or ✕.
+- **Motion:** 0.14s rise-and-settle (`translateY(6px) scale(0.98)` → none), clamped to nothing under `prefers-reduced-motion`.
+
+### Toasts
+- **Style:** ink fill with page-background text by default; `--success` fill for confirmations, `--danger` for refusals. 15px icon, 12.5px label, 6px radius, the modal shadow.
+- **Placement:** bottom-right stack, 8px gaps, `aria-live="polite"` so a confirmation is announced without stealing focus.
+- **Lifetime:** ~3.4s, then a 0.2s fade. Toasts confirm; they never carry information the operator must act on — anything actionable belongs in a banner or a modal, which do not disappear.
+
+### Alert notes (in-modal)
+- **Variants:** `.modal-warn` (amber — a consequence worth reading) and `.modal-danger-note` (red — a refusal or a risk).
+- **Style:** the **Blended Alert Border Rule** in component form — weak-tinted fill, border mixed 35% status colour into `--border`, 6px radius, 12.5px copy. Never a solid status-coloured border.
+- **Contrast:** copy on the amber variant uses `--warning-text` (`#92400e`), not `--warning` — the fill colour measures ≈3.2:1 on white and fails AA for body text.
+- **Composition:** 15px status-coloured icon, 9px gap, text with the consequence in **650** weight and the qualification in normal weight. The severe half of the sentence should be readable on its own.
+
+### Impact summary
+- **Purpose:** shows what a pending change would do, before it is committed — used by the settings pre-save warning.
+- **Style:** bordered 6px container, rows separated by hairlines, muted label left, value right.
+- **Before/after:** the old figure in muted normal weight, a muted arrow, the new figure in 650 — so the direction of travel reads at a glance without colour. Tabular numerals throughout, per the Tabular Rule.
+- **Unchanged state:** shows the single current figure followed by a muted "unchanged" rather than an identical pair either side of an arrow, which reads as a change that isn't one.
+
+### Restore option list
+- **Purpose:** picking one item from a small set of consequential choices (backups to restore from) where a native radio would be too small a target and too quiet.
+- **Style:** full-width card rows, 6px radius, 1px `--border`, 10px/12px padding, stacked with 8px gaps. Custom 15px round radio at the left, filled indigo when selected.
+- **Selection:** border shifts to indigo plus the 3px indigo-weak glow — **the same treatment as input focus**, deliberately reused rather than inventing a second selection language.
+- **Content:** a 13px/600 primary line naming the thing in the operator's own terms (the month a backup holds, not its filename), and an 11.5px muted line for provenance (version, whether it was corrected).
+
 ### Structure Tree Node (signature component)
 - **Shape:** 172px-wide card (190px for the root node), 8px radius, 1.5px border (heavier than the system's usual 1px, since these sit inside a busy diagram).
 - **Root distinction:** the root node alone gets an indigo border and indigo-weak fill — every other node is neutral until interacted with.

@@ -160,7 +160,8 @@ No dedicated UI or IPC surface (see [04-api-specification.md](04-api-specificati
     - Given a duplicate slab threshold, When the admin saves, Then the change is refused outright and no warning is offered.
     - Given a royalty change (which cannot move any slab), When the modal opens, Then it lists members who start or stop earning royalty, with a "Members earning royalty: before → after" row.
   - *Technical note:* the preview reuses the live Total Business Volume — slab and royalty settings never feed `rollupTBV` — and re-runs `computeRewards` alone against a temporarily-swapped `SETTINGS`, restored in a `finally` block.
-  - *Remaining for the real build:* port this behaviour to the Rust/React implementation of M7; the prototype now carries the approved reference behaviour.
+  - *Remaining for the real build:* port this behaviour to the Rust/React implementation of M7. **This depends on a new IPC command** — `preview_settings_impact` (API-33) — because the calculation engine is Rust-side and the frontend cannot dry-run it. The prototype hid this: everything there runs in one JavaScript scope. Build the command before the UI.
+  - *Dependencies:* API-33; M3 (engine) must exist first.
 
 ---
 
@@ -198,7 +199,7 @@ Every item raised by the readiness analysis has since been decided; the three UI
 - **US-BACKLOG-2** — ✅ Closed, not applicable. The client requires that members are never removed and that all data persists throughout, including in exports. No erasure mechanism is to be built. No longer gates M1.
 - **US-M7.3** — ✅ Built in the prototype (variant C). Port to M7.
 - **US-BACKLOG-3** — ✅ Built. The last slab row cannot be removed: control disabled with an explanatory `aria-label` and hint, handler refuses with a named message. Port to M7.
-- **US-BACKLOG-4** — ✅ Built. Data-recovery screen at launch (design D), listing retained backups by the month they hold. Port to M5/M8.
+- **US-BACKLOG-4** — ✅ Built. Data-recovery screen at launch (design D), listing retained backups by the month they hold. Port to M5/M8. **Needs three new pre-flight commands** (API-34–36) which are, unavoidably, the only unauthenticated commands besides the auth trio — the database cannot be opened, so nothing can be authenticated against. `restore_from_backup` must verify the stored checksum before overwriting.
 
 ## Suggested sequencing
 

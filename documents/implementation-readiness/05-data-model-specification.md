@@ -9,7 +9,7 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 ## Entity: `members`
 
 **Purpose:** One row per network member (root + all descendants). The hierarchy itself.
-**Lifecycle:** Created once via `add_member`/`create_root_member`; never hard-deleted (Rule-28); can be deactivated/reactivated indefinitely; most fields editable via `edit_member`; `introducer_member_id` is immutable after insert (Rule-37).
+**Lifecycle:** Created once via `add_member`/`create_root_member`; **never removed, under any circumstance** (Rule-28, Rule-42) — and never omitted from an export either; can be deactivated/reactivated indefinitely, deactivation being display-only with no calculation effect; most fields editable via `edit_member`; `introducer_member_id` is immutable after insert (Rule-37). There is no delete path in the schema, the API, or the UI, by client requirement.
 **Retention:** Permanent, no expiry.
 **Security sensitivity:** High — contains name, phone, address, email (personal data under DPDP Act 2023). Encrypted at rest via SQLCipher; never written to filenames or logs in plaintext.
 
@@ -169,7 +169,8 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 
 **Relationships:** Many-to-one with `periods`.
 **Indexes:** PK on `id`; index on `(period_id, version DESC)`.
-**Related requirements:** Rule-18, Rule-31, Rule-39.
+**Related requirements:** Rule-18, Rule-31, Rule-39, LOW-3 (data recovery).
+**Read pre-authentication.** This is the one table consulted before any session exists: the data-recovery screen (LOW-3) lists restore points and restores from them while the main database is unreadable, so no credential can be verified. `checksum` is what makes that safe — it is the difference between a backup being *available* and being *trustworthy*, and a restore must refuse on mismatch rather than overwrite one corrupt file with another. See API-34–36 in [04-api-specification.md](04-api-specification.md).
 
 ---
 
