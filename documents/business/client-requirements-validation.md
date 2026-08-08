@@ -85,7 +85,7 @@ A private, single-user dashboard that does five things:
 3. **Works everything out immediately.** The moment you save, every affected figure up to the top of the
    structure is correct — team totals, bands, differential rewards and royalty.
 4. **Closes each month safely.** You are alerted the moment a month ends. Figures dated in that month can
-   still be recorded; the new month waits until it is closed *(amended 7 Aug 2026 — see [§16](#16-change-requests--7-august-2026), CR-2)*.
+   still be recorded; the new month waits until it is closed *(amended 7 Aug 2026 — see [§18](#18-change-requests--7-august-2026), CR-2)*.
    Closing takes a backup first, refuses to proceed without one, writes a permanent record of the
    month, and only then clears the live figures.
 5. **Produces your reports.** The month's figures, yearly averages per member, and a list of members whose
@@ -1069,7 +1069,7 @@ the protection, since the month being closed is already fully determined.
 
 🟢 **Confirmed by the client, 3 August 2026 — the hard stop is kept, no grace period.**
 
-⚠️ **Reversed by the client, 7 August 2026 — see [§16 Change requests](#16-change-requests--7-august-2026), CR-2.** The
+⚠️ **Reversed by the client, 7 August 2026 — see [§18 Change requests](#18-change-requests--7-august-2026), CR-2.** The
 hard stop is narrowed: a month that has ended but is not closed keeps accepting figures dated within it, and
 only the **current** month is refused until that older month is closed. Note this is not the grace period our
 recommendation above offered — that version would have counted late figures into the *new* month, which would
@@ -1438,7 +1438,7 @@ the scheme self-limiting.
 | # | Criterion |
 |---|---|
 | **AC-18** | Once a month ends, an undismissable banner appears on every screen naming it, plus a notification entry |
-| **AC-19** | ⚠️ *Amended 7 Aug 2026, CR-2 — see [§16](#16-change-requests--7-august-2026).* While a month is outstanding, entries dated in **that** month are still accepted, and an entry dated in the current month is refused naming the month that must be closed first. The entry screen always names the month it is recording into. *(Originally: "all recording is locked while any month is outstanding, and the entry screen names the month waiting.")* |
+| **AC-19** | ⚠️ *Amended 7 Aug 2026, CR-2 — see [§18](#18-change-requests--7-august-2026).* While a month is outstanding, entries dated in **that** month are still accepted, and an entry dated in the current month is refused naming the month that must be closed first. The entry screen always names the month it is recording into. *(Originally: "all recording is locked while any month is outstanding, and the entry screen names the month waiting.")* |
 | **AC-20** | The alert clears only on a completed close — not on navigation, logout or acknowledgement |
 | **AC-21** | With several months outstanding, all are listed and only the oldest can be closed |
 | **AC-22** | A failed or cancelled backup abandons the close. Nothing is cleared and the alert stays up |
@@ -1526,7 +1526,7 @@ specification appears here, grouped by module.
 | C-09 | Find a member by name or number, then record against them | Rule 15 | ☐ | ☐ |
 | C-10 | Business Volume is the only thing entered, up to two decimal places. No currency field anywhere | Rule 16 | ☐ | ☐ |
 | C-11 | Two decimal places throughout; rounding only at display, never at an intermediate step | Rule 22 | ☐ | ☐ |
-| C-12 | ⚠️ *Superseded 7 August 2026 by CR-2 — see [§16](#16-change-requests--7-august-2026).* Now: recording of figures **dated in the ended month** continues until that month is closed; recording into the **current** month waits until it is. Originally: "all recording is locked from the moment a month ends until that month is closed" | Rule 36 (amended) | ☐ | ☐ |
+| C-12 | ⚠️ *Superseded 7 August 2026 by CR-2 — see [§18](#18-change-requests--7-august-2026).* Now: recording of figures **dated in the ended month** continues until that month is closed; recording into the **current** month waits until it is. Originally: "all recording is locked from the moment a month ends until that month is closed" | Rule 36 (amended) | ☐ | ☐ |
 
 ### 15.3 Calculation — Module M3
 
@@ -1765,7 +1765,7 @@ deliberate, confirmed decision with its mitigation attached:
 > mitigated by the backup gate, and RQ-6 confirms the retained in-system copy is what makes that gate real.
 > **One login**, now with a defined recovery route — RQ-10 confirms recovery codes issued at setup.
 > **No record of what changed** — RQ-9 confirms a recording log will be built.
-> **Recording changes shape** the instant a month ends: figures dated in that month can still be entered, while the current month waits until it is closed. ⚠️ Amended 7 August 2026 (CR-2) — it was previously a hard lock on all recording, which RQ-11 confirmed as deliberate on 3 August. See [§16](#16-change-requests--7-august-2026).
+> **Recording changes shape** the instant a month ends: figures dated in that month can still be entered, while the current month waits until it is closed. ⚠️ Amended 7 August 2026 (CR-2) — it was previously a hard lock on all recording, which RQ-11 confirmed as deliberate on 3 August. See [§18](#18-change-requests--7-august-2026).
 > **Deactivation's effect on the rollup** — RQ-2 confirms it has none; it is a display flag only.
 > **Correcting a wrong figure** — RQ-7 confirms this works in any month, open or closed.
 > **Backup independence on a single machine** — RQ-19 confirms the downloaded copy goes to a separate medium.
@@ -1820,9 +1820,15 @@ list to come back to. Every question raised across seven rounds of this review �
 twenty-one Round 2 questions, sixteen non-functional items, three sizing details and RQ-22 — is answered.
 This document and its companion are ready for the client approval section below.
 
+**Later addendum, not covered by the above.** [§18 Change requests](#18-change-requests--7-august-2026)
+records three changes the client raised after this recommendation and the approval below were signed. All
+three are designed and specified, but — unlike everything above — **not yet client-confirmed**: see §18's own
+confirmation table. CR-2 specifically reverses this document's own RQ-11 answer, so implementation should
+treat CR-1/CR-2/CR-3 as pending, not settled, until that table is ticked.
+
 ---
 
-## 16. Change requests — 7 August 2026
+## 18. Change requests — 7 August 2026
 
 Three changes raised by the client after this document and the full specification set were approved. They are
 recorded here as an addendum rather than by rewriting the sections above, so that what was originally agreed
@@ -1940,5 +1946,5 @@ information in it would be identical.
 *Prepared by Keyur Patel · 3 August 2026 · Version 1.0 · All open items confirmed by the client,
 4 August 2026 · Ready for architecture and design*
 
-*Addendum §16 — change requests CR-1, CR-2, CR-3 · 7 August 2026 · Version 1.1 · Awaiting client
+*Addendum §18 — change requests CR-1, CR-2, CR-3 · 7 August 2026 · Version 1.1 · Awaiting client
 confirmation of the three items above*

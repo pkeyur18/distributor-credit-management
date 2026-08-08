@@ -27,20 +27,36 @@
 >   hierarchy window (Rule-45, FR-10), which also gives the previously-untraced ">60 descendants" gate a home.
 >
 > Full reasoning: [../final/06-decision-log-and-open-items.md](../final/06-decision-log-and-open-items.md) §5.
+>
+> **CR-1/2/3 are specified, not yet client-confirmed.** The confirmation table in
+> [../business/client-requirements-validation.md](../business/client-requirements-validation.md) §18 still has
+> all three boxes unticked as of this writing. This does not block scaffolding, M1, M3, or the unaffected parts
+> of M2/M4, but CR-2's reversal of RQ-11 and CR-1/CR-3's Rule-44/45 should be treated as pending, not settled,
+> until that table is signed — get the tick before M2's entry-eligibility logic or M4's search/full-hierarchy
+> work ships.
+>
+> **Update — 8 August 2026.** Two further client change requests (**CR-4, CR-5**) were raised and specified
+> the same day, both confirmed by the client (not pending, unlike CR-1/2/3 above). **CR-4** adds Rule-46 — a
+> member's own Business Volume now also earns a reward, at their own slab, as a third additive term alongside
+> differential and royalty. The golden regression set moves from five scenarios to six (65 / 62 / 510 / 1,000
+> / 980 / 10); scenarios 4/5 are unchanged because the top member's own BV is 0 in both. **CR-5** adds a
+> "Rewards by slab" chart to Home, reusing the existing members-by-slab bar-list component. Neither changes
+> Differential (Rule-8) or Royalty (Rule-10). Full reasoning:
+> [../final/06-decision-log-and-open-items.md](../final/06-decision-log-and-open-items.md) §5.
 
 ## 1. Overall Status
 
 > ## READY WITH CONDITIONS — conditions now met (6 Aug 2026)
 
-The project is **not** blocked on any unresolved business-logic question — all 22 of the client's original questions (requirement-spec.md's Q-B/Q-I/Q-M set, sourced from `open-questions-checklist.md`'s Questions 1–22) are closed, and a second, later round of 22 questions raised specifically while drafting `client-requirements-validation.md` (RQ-1–22) is also closed. The calculation model (differential, royalty, slab lookup) is proven against five client-supplied worked examples and reproduces all five totals exactly (35 / 22 / 450 / 1,000 / 980). The architecture document is unusually mature for a pre-code phase: 11 ADRs, a full DDL, and a complete IPC command surface — and it already reflects nearly every late correction the client made during requirements validation, rather than lagging behind them.
+The project is **not** blocked on any unresolved business-logic question — all 22 of the client's original questions (requirement-spec.md's Q-B/Q-I/Q-M set, sourced from `open-questions-checklist.md`'s Questions 1–22) are closed, and a second, later round of 22 questions raised specifically while drafting `client-requirements-validation.md` (RQ-1–22) is also closed. The calculation model (differential, royalty, own-Business-Volume reward, slab lookup) is proven against six client-supplied worked examples and reproduces all six totals exactly (65 / 62 / 510 / 1,000 / 980 / 10 — recomputed 8 Aug 2026 for Rule-46/CR-4). The architecture document is unusually mature for a pre-code phase: 12 ADRs, a full DDL, and a complete IPC command surface — and it already reflects nearly every late correction the client made during requirements validation, rather than lagging behind them.
 
 The "conditions" are two HIGH-priority reconciliation items and one MEDIUM UI gap that should be closed **before the specific modules they touch are built** — they do not block starting the project, scaffolding the stack, or building the unaffected modules (member hierarchy, calculation engine, auth). See §7–8.
 
 ## 2. Confidence Level
 
 **High**, with two caveats:
-1. The repository contains **zero application code** — no scaffolding, no dependency manifests, no tests, no CI. Every module (M1–M9 per architecture.md) is greenfield work. This assessment evaluates documentation readiness, not code maturity, because there is no code yet.
-2. Confidence in the *business logic* is high (five independently re-derived worked scenarios all match). Confidence in the *architecture-to-requirements fit* is high but not total — the two HIGH items below (§7) are gaps discovered during this analysis, not previously flagged in any source document, and have not yet been through a client confirmation cycle.
+1. The repository contains **zero application code** — no scaffolding, no dependency manifests, no tests, no CI. Every module (M1–M9 per `../final/04-technical-architecture.md`) is greenfield work. This assessment evaluates documentation readiness, not code maturity, because there is no code yet.
+2. Confidence in the *business logic* is high (six independently re-derived worked scenarios all match). Confidence in the *architecture-to-requirements fit* is high but not total — the two HIGH items below (§7) are gaps discovered during this analysis, not previously flagged in any source document, and have not yet been through a client confirmation cycle.
 
 ## 3. Blocking Issues
 

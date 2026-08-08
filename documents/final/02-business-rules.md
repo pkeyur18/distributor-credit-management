@@ -1,6 +1,6 @@
 # 02 — Business Rules & Calculation Model
 
-All 46 business rules (Rule-1 … Rule-45, plus Rule-16a) in corrected form, the calculation model, all five worked scenarios re-derived, and the 16-row settings inventory. This is the heart of the system — modules M1, M2, M3, M5, M6, M7 are built directly from this file.
+All 47 business rules (Rule-1 … Rule-46, plus Rule-16a) in corrected form, the calculation model, all six worked scenarios re-derived, and the 16-row settings inventory. This is the heart of the system — modules M1, M2, M3, M5, M6, M7 are built directly from this file.
 
 Every rule below is stated in its **current, corrected** form. Where a rule was corrected or extended after `requirement-spec.md` was written, the correction is marked and the authority cited — see [06](06-decision-log-and-open-items.md) for the full reasoning behind each correction.
 
@@ -17,11 +17,11 @@ Every rule below is stated in its **current, corrected** form. Where a rule was 
 
 ## 2. The three quantities — read [01](01-product-and-scope.md) §2 first
 
-Business Volume (own, manual entry) → Total Business Volume (rolled up, one level deep, derived) → Slab % (looked up from Total Business Volume) → Rewards (Differential + Royalty, a separate ledger).
+Business Volume (own, manual entry) → Total Business Volume (rolled up, one level deep, derived) → Slab % (looked up from Total Business Volume) → Rewards (Differential + Royalty + own-Business-Volume reward, a separate ledger).
 
 ---
 
-## 3. The 46 rules
+## 3. The 47 rules
 
 ### Rule-1 — Level widths are advisory
 **Rule:** Level 2/3/4 width defaults (9/6/3) are informational only. Onboarding never rejects a member for exceeding them; the UI may show a soft warning.
@@ -70,14 +70,14 @@ One level deep only. Full-depth coverage is transitive — each child's figure i
 **Rule:** `slab%(x) = lookup(TotalBusinessVolume(x))`, never by the member's own Business Volume.
 **Applies to:** M3.
 **Implementation:** A member can show a small own-BV figure while sitting on a high slab — explicit, documented consequence (FR-2's chart-value note).
-**Test:** All five scenarios.
+**Test:** All six scenarios.
 
 ### Rule-8 — Differential earnings
 **Rule:**
 ```
 Differential(x) = Σ [(slab%(x) − slab%(c)) × TotalBusinessVolume(c)]   for every DIRECT child c of x
 ```
-Base is the child's **Total Business Volume**, not their own Business Volume. Only direct children contribute a term — grandchildren are already inside the child's TBV. A member earns **nothing** on their own Business Volume.
+Base is the child's **Total Business Volume**, not their own Business Volume. Only direct children contribute a term — grandchildren are already inside the child's TBV. A member earns **nothing on their own Business Volume through this term** — see Rule-46 for the separate term that does pay on it.
 **Applies to:** M3.
 **Implementation:** Grandchildren must never contribute a separate term.
 **Test:** Scenario 3 — the only scenario where child TBV ≠ child own-BV, so it disambiguates the base.
@@ -103,12 +103,12 @@ Direct children only, both for counting and for paying.
 **Rule:** If a child is on the top slab, the parent's TBV is at least the child's TBV, so the parent is on the top slab too, so that child's differential term is exactly 0 (Rule-9). Automatically disjoint — **no explicit exclusion logic is needed.**
 **Test:** AC-6 — explicit demonstration that royalty and differential recipients don't double-count.
 
-### Rule-12 — Rewards
-**Rule:** `Rewards(x) = Differential(x) + Royalty(x)`.
+### Rule-12 — Rewards **[AMENDED 8 Aug 2026, CR-4]**
+**Rule:** `Rewards(x) = Differential(x) + Royalty(x) + OwnReward(x)` (Rule-46, added 8 Aug 2026 — see §4.1/§5.6). Differential and Royalty are unchanged from the original formulas.
 
 ### Rule-13 — Rewards are a separate ledger
 **Rule:** Rewards are **never** added to any member's Business Volume. They do not raise the earner's own slab, do not enter any ancestor's TBV, and do not compound into the next period.
-**Implementation:** `member_period_totals.rewards`/`royalty` must never feed back into `business_volume`/`total_business_volume` for any member, including the earner.
+**Implementation:** `member_period_totals.rewards`/`royalty`/`own_reward` must never feed back into `business_volume`/`total_business_volume` for any member, including the earner.
 **Test:** After computing Rewards for a member, re-run recalculation and confirm their own TBV is unchanged.
 
 ### Rule-14 — Unit value (reference only)
@@ -309,6 +309,17 @@ Matching rules, applied together — a member matches when **any** clause holds:
 **Implementation:** A separate top-level window, so the main console's DOM, layout and paint budget are untouched. Node positions come from a single post-order layout pass and the connectors are emitted as one pre-computed path during that pass — never measured back out of the rendered DOM. Read-only means read-only: the window subscribes to nothing and holds no handle on live state.
 **Test:** Open the full view on a network of more than 60 members; the count is named before it opens, every branch is expanded, each node shows three fields, and the main console remains responsive throughout. Record an entry in the main console afterwards; the already-open window does not change, and its timestamp still names when it was drawn.
 
+### Rule-46 — Reward on own Business Volume **[NEW — client requirement, 8 Aug 2026, CR-4]**
+**Rule:**
+```
+OwnReward(x) = slab%(x) × BusinessVolume(x)
+```
+A member's own Business Volume now also earns, at the member's **own** slab (Rule-7 — still looked up from Total Business Volume, unchanged). This is a pure addition: Differential (Rule-8) and Royalty (Rule-10) are untouched, still computed exactly as before, still excluding the member's own Business Volume from their own base.
+**Source:** Client change request **CR-4**, 8 Aug 2026. Confirmed by the client, reversing the earlier confirmed position that a member earns nothing on their own Business Volume (3 Aug 2026, [06](06-decision-log-and-open-items.md) §5) — differential and royalty stay exactly as designed, this is a third, additive term.
+**Applies to:** M3.
+**Structural guarantee:** `OwnReward(x) ≥ 0` always — both factors are non-negative by construction, same as Rule-9's guarantee for the differential term.
+**Test:** Scenario 6 (§5.6) — the client's own worked example, own-BV reward = 4, total = 10.
+
 ---
 
 ## 4. The calculation model
@@ -320,14 +331,15 @@ TotalBusinessVolume(x) = BusinessVolume(x) + Σ TotalBusinessVolume(c)      for 
 slab%(x) = lookup(TotalBusinessVolume(x))                                    [highest threshold ≤ TBV]
 Differential(x) = Σ [(slab%(x) − slab%(c)) × TotalBusinessVolume(c)]         for every DIRECT child c
 Royalty(x) = Σ royalty_rate × TotalBusinessVolume(c)   if ≥ royalty_min_children direct children on top slab, else 0
-Rewards(x) = Differential(x) + Royalty(x)
+OwnReward(x) = slab%(x) × BusinessVolume(x)                                  [Rule-46, added 8 Aug 2026, CR-4]
+Rewards(x) = Differential(x) + Royalty(x) + OwnReward(x)
 ```
 
 ### 4.2 Structural guarantees
 
 - **Differential is never negative** — parent's TBV always ≥ child's, by construction (Rule-9), *unless* the slab table is misconfigured non-monotonically (Rule-41, an accepted risk).
 - **Royalty and differential never double-pay the same leg** (Rule-11) — automatically disjoint, no exclusion logic needed.
-- **A member earns nothing on their own Business Volume** — only on the gap to their children (Rule-8).
+- **A member earns nothing on their own Business Volume through the differential term** — only on the gap to their children (Rule-8) — but does earn separately through `OwnReward` (Rule-46), at their own slab, on their own Business Volume.
 - **Royalty stacks** — the same underlying volume can earn royalty at multiple levels of the same chain (Rule-25).
 - Recalculation is **immediate**, chain-upward only, inside one DB transaction (Rule-26, ADR-005).
 
@@ -350,7 +362,7 @@ The `>=` boundary rule is proved by the scenarios below: Scenario 2 places C on 
 
 ## 5. Worked scenarios — the golden regression set
 
-All five re-derived from Rules 6–12 alone (not from the client's stated answers) and all five reconcile. **These are the primary acceptance test.** See [00](00-master-index.md) §5.
+All six re-derived from Rules 6–12/46 alone (not from the client's stated answers) and all six reconcile. **These are the primary acceptance test.** See [00](00-master-index.md) §5. Scenarios 1–5 are the client's original five; Scenario 6 (§5.6) is the client's own worked example for Rule-46, added 8 Aug 2026 (CR-4).
 
 ### 5.1 Scenario 1 — basic differential
 
@@ -365,7 +377,11 @@ D has three direct children: A (BV 300), B (BV 50), C (BV 1,000). D's own BV = 5
 | C | 1,000 | 4% | 6% | 2% | **20** |
 | | | | | **Total** | **35** |
 
-Royalty: 0 direct children on the top slab → not eligible. **Rewards(D) = 35** ✅
+Royalty: 0 direct children on the top slab → not eligible.
+
+**Own-Business-Volume reward (Rule-46):** D's own BV = 500, at D's own slab (6%) → `OwnReward(D) = 6% × 500 = 30`.
+
+**Rewards(D) = 35 + 0 + 30 = 65** ✅
 
 ### 5.2 Scenario 2 — differential collapses to zero on an equal slab
 
@@ -380,7 +396,11 @@ Identical to Scenario 1 except C's Business Volume is 3,000.
 | C | 3,000 | 8% | 8% | 0% | **0** |
 | | | | | **Total** | **22** |
 
-Royalty: C is on 8% — not the top slab. 0 qualifying children → not eligible. **Rewards(D) = 22** ✅
+Royalty: C is on 8% — not the top slab. 0 qualifying children → not eligible.
+
+**Own-Business-Volume reward (Rule-46):** D's own BV = 500, at D's own slab (8%) → `OwnReward(D) = 8% × 500 = 40`.
+
+**Rewards(D) = 22 + 0 + 40 = 62** ✅
 
 ### 5.3 Scenario 3 — multi-depth rollup
 
@@ -395,7 +415,11 @@ A has six direct children B–G, each with TBV 1,250 (6% slab). D (one of the si
 
 **Key point:** p1, p2, p3 contribute **nothing** directly to A's earnings — already absorbed into D's TBV of 1,250, and A earns on D's TBV. This is what makes the differential model self-limiting.
 
-Royalty: no direct child on the top slab → not eligible. **Rewards(A) = 450** ✅
+Royalty: no direct child on the top slab → not eligible.
+
+**Own-Business-Volume reward (Rule-46):** A's own BV = 500 (derived, same figure as above), at A's own slab (12%) → `OwnReward(A) = 12% × 500 = 60`.
+
+**Rewards(A) = 450 + 0 + 60 = 510** ✅
 
 ### 5.4 Scenario 4 — pure royalty
 
@@ -415,7 +439,9 @@ P has four direct children A, B, C, D — TBV 10,000 / 20,000 / 30,000 / 40,000,
 | D | 40,000 | **400** |
 | | **Total** | **1,000** |
 
-**Rewards(P) = 0 + 1,000 = 1,000** ✅
+**Own-Business-Volume reward (Rule-46):** P's own BV = 0 here (the same write-up simplification noted above) → `OwnReward(P) = 14% × 0 = 0`. This scenario's total is unaffected by Rule-46 for that reason, not because the rule doesn't apply.
+
+**Rewards(P) = 0 + 1,000 + 0 = 1,000** ✅
 
 ### 5.5 Scenario 5 — differential and royalty together
 
@@ -435,25 +461,47 @@ P has seven direct children: A/B/C/D at 10,000 each (14%), E at 2,000 (6%), F at
 
 **Royalty:** A, B, C, D on top slab = 4 ≥ 3 → eligible. 1% × 10,000 = 100 each → **400**.
 
-**Rewards(P) = 580 + 400 = 980** ✅
+**Own-Business-Volume reward (Rule-46):** P's own BV = 0 here (the same write-up simplification as Scenario 4) → `OwnReward(P) = 14% × 0 = 0`.
+
+**Rewards(P) = 580 + 400 + 0 = 980** ✅
 
 This scenario proves royalty is a *consequence* of qualification, not a "zero differential" precondition — P earns a non-zero differential **and** royalty in the same period.
 
-### 5.6 Royalty stacking illustration (Rule-25)
+### 5.6 Scenario 6 — own Business Volume reward (Rule-46) **[NEW — client's own worked example, 8 Aug 2026, CR-4]**
+
+A has three direct children B, C, D, each with BV 100 (own BV, no children of their own — so TBV = own BV = 100, **2% slab**). A's own BV = 100.
+
+`TotalBusinessVolume(A) = 100 + 100 + 100 + 100 = 400` → **4% slab**.
+
+| Child | Child TBV | Child slab | A slab | Differential % | Rewards |
+|---|---|---|---|---|---|
+| B | 100 | 2% | 4% | 2% | **2** |
+| C | 100 | 2% | 4% | 2% | **2** |
+| D | 100 | 2% | 4% | 2% | **2** |
+| | | | | **Total** | **6** |
+
+Royalty: B/C/D are on 2% — not the top slab. 0 qualifying children → not eligible.
+
+**Own-Business-Volume reward (Rule-46):** A's own BV = 100, at A's own slab (4%) → `OwnReward(A) = 4% × 100 = 4`.
+
+**Rewards(A) = 6 + 0 + 4 = 10** ✅ — matches the client's own hand-worked figure exactly.
+
+### 5.7 Royalty stacking illustration (Rule-25)
 
 A, B, C each hold TBV 10,000 under P, all top slab. `TBV(P) = 30,000`, 3 top-slab children → **P collects 1% × 30,000 = 300**. P has two counterparts, Q and R, identical, under T. `TBV(T) = 90,000`, 3 top-slab children → **T collects 1% × 90,000 = 900**. Total paid across the chain: **1,800**. A's original 10,000 attracted royalty **twice** — once via P, once via T. Confirmed and accepted by the client (Rule-25).
 
-### 5.7 Verification
+### 5.8 Verification
 
-All five totals reconcile: **35 / 22 / 450 / 1,000 / 980**, matching the client's own hand-worked figures exactly.
+All six totals reconcile: **65 / 62 / 510 / 1,000 / 980 / 10**, matching the client's own hand-worked figures exactly (scenarios 4 and 5 are unchanged from before Rule-46 — the top member's own BV is 0 in both, a pre-existing write-up simplification, not a sign the rule is unimplemented).
 
-| Scenario | Differential | Royalty | Total | Match |
-|---|---|---|---|---|
-| 1 | 35 | 0 | 35 | ✅ |
-| 2 | 22 | 0 | 22 | ✅ |
-| 3 | 450 | 0 | 450 | ✅ |
-| 4 | 0 | 1,000 | 1,000 | ✅ |
-| 5 | 580 | 400 | 980 | ✅ |
+| Scenario | Differential | Royalty | OwnReward | Total | Match |
+|---|---|---|---|---|---|
+| 1 | 35 | 0 | 30 | 65 | ✅ |
+| 2 | 22 | 0 | 40 | 62 | ✅ |
+| 3 | 450 | 0 | 60 | 510 | ✅ |
+| 4 | 0 | 1,000 | 0 | 1,000 | ✅ |
+| 5 | 580 | 400 | 0 | 980 | ✅ |
+| 6 | 6 | 0 | 4 | 10 | ✅ |
 
 ---
 

@@ -81,7 +81,7 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 
 ## Entity: `member_period_totals`
 
-**Purpose:** The live cache of each not-yet-closed period's figures per member — Business Volume, TBV, slab, differential, royalty, Rewards. Recomputed in place on every chain-upward recalculation (Rule-26).
+**Purpose:** The live cache of each not-yet-closed period's figures per member — Business Volume, TBV, slab, differential, royalty, own-Business-Volume reward, Rewards. Recomputed in place on every chain-upward recalculation (Rule-26).
 **Lifecycle:** One row per member per **not-yet-closed** period — that is, any period whose status is `open` or `awaiting_close`. Zeroed and cleared for **the closing period only** at each monthly close (Rule-38); other live periods are untouched. The closing period's final state is preserved in `monthly_snapshots` first.
 **Retention:** Live/ephemeral — only not-yet-closed periods exist here; history lives in `monthly_snapshots`.
 
@@ -97,11 +97,12 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 | `slab_pct` | INTEGER | Yes | — | Rule-7 |
 | `differential` | INTEGER | Yes | Stored ×100 | Rule-8, never negative (Rule-9) |
 | `royalty` | INTEGER | Yes | Stored ×100 | Rule-10 |
-| `rewards` | INTEGER | Yes | Stored ×100 | Rule-12 = differential + royalty |
+| `own_reward` | INTEGER | Yes | Stored ×100 | Rule-46 (added 8 Aug 2026, CR-4), never negative |
+| `rewards` | INTEGER | Yes | Stored ×100 | Rule-12 = differential + royalty + own_reward |
 
 **Relationships:** Composite-keyed to `members` and `periods` — one row set per not-yet-closed period. Read by M4 (member detail, chart) and written exclusively by M3 (calculation engine) as a side-effect of M2/M7 commands.
 **Indexes:** Composite PK `(member_id, period_id)`.
-**Related requirements:** Rule-5, Rule-6, Rule-7, Rule-8, Rule-9, Rule-10, Rule-11, Rule-12, Rule-13, Rule-26.
+**Related requirements:** Rule-5, Rule-6, Rule-7, Rule-8, Rule-9, Rule-10, Rule-11, Rule-12, Rule-13, Rule-26, Rule-46.
 
 ---
 
@@ -145,13 +146,15 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 | `business_volume` | INTEGER | Yes | Stored ×100 | |
 | `total_business_volume` | INTEGER | Yes | Stored ×100 | |
 | `slab_pct` | INTEGER | Yes | — | |
-| `rewards` | INTEGER | Yes | Stored ×100 | |
-| `royalty` | INTEGER | Yes | Stored ×100 | |
+| `differential` | INTEGER | Yes | Stored ×100 | Rule-8 |
+| `royalty` | INTEGER | Yes | Stored ×100 | Rule-10 |
+| `own_reward` | INTEGER | Yes | Stored ×100 | Rule-46 (added 8 Aug 2026, CR-4) |
+| `rewards` | INTEGER | Yes | Stored ×100 | Rule-12 = differential + royalty + own_reward |
 | `is_active_status` | BOOLEAN | Yes | Snapshot of `members.is_active` at close time | So reports reflect who was live that month (Rule-38's field list) |
 
 **Relationships:** Many-to-one with `members` and `periods`.
 **Indexes:** PK on `id`; unique index on `(member_id, period_id, version)`; index on `(period_id, version DESC)` for "latest version" reads (Rule-39, `redownload_backup`).
-**Related requirements:** Rule-23, Rule-24, Rule-38, Rule-39.
+**Related requirements:** Rule-23, Rule-24, Rule-38, Rule-39, Rule-46.
 **Query convention:** All reporting (`export_yearly_average`, `export_low_contribution`, `redownload_backup`) must read `MAX(version)` per `(member_id, period_id)` — never assume version 1 is current.
 
 ---

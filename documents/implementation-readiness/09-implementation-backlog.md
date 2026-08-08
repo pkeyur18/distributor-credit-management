@@ -113,8 +113,8 @@ No `package.json`, `Cargo.toml`, `tsconfig.json`, or `src-tauri/` tree exists in
 No dedicated UI or IPC surface (see [04-api-specification.md](04-api-specification.md)) — this epic is pure backend logic, triggered as a side-effect of M2/M7 writes.
 
 **Feature M3.1 — Core calculation**
-- **US-M3.1** Implement TBV/slab/differential/royalty/Rewards computation per Rules 3, 6–13, 25.
-  - *Acceptance criteria:* Given the five client worked scenarios as input trees, When the calculation engine runs, Then it reproduces totals 35 / 22 / 450 / 1,000 / 980 exactly.
+- **US-M3.1** Implement TBV/slab/differential/royalty/own-Business-Volume-reward/Rewards computation per Rules 3, 6–13, 25, 46.
+  - *Acceptance criteria:* Given the six client worked scenarios as input trees, When the calculation engine runs, Then it reproduces totals 65 / 62 / 510 / 1,000 / 980 / 10 exactly.
   - *Dependencies:* US-0.2 (data model in place).
 - **US-M3.2** Chain-upward incremental recalculation (ADR-005).
   - *Requirement refs:* Rule-26.
@@ -127,11 +127,16 @@ No dedicated UI or IPC surface (see [04-api-specification.md](04-api-specificati
 
 **Feature M4.1 — Views**
 - **US-M4.1** Member detail view.
-  - *Requirement refs:* FR-3, UN-17.
-  - *Acceptance criteria:* Given a member, When their detail view opens, Then it shows contact info, full Rewards breakdown per direct child (with a "differential and royalty never pay on the same leg" note), direct children (1 depth), TBV, and leg count.
+  - *Requirement refs:* FR-3, UN-17, Rule-46.
+  - *Acceptance criteria:* Given a member, When their detail view opens, Then it shows contact info, full Rewards breakdown (own-Business-Volume reward line first, then per direct child, with a "differential and royalty never pay on the same leg" note), direct children (1 depth), TBV, and leg count.
 - **US-M4.2** Hierarchy chart.
   - *Requirement refs:* FR-2, UN-16.
   - *Acceptance criteria:* Given a member, When the chart is opened, Then each node shows exactly name, ID, and **own** Business Volume — never TBV.
+- **US-M4.4** *(new 8 Aug 2026, CR-5)* Rewards-by-slab chart on Home.
+  - *Requirement refs:* FR-1 (extended), Rule-46.
+  - *Acceptance criteria:* Given the Home screen, When it renders, Then a "Rewards by slab" bar chart appears directly below "Members by slab," one bar per slab row, each showing the total Rewards accumulated by members currently on that slab out of the total across all members, for the current live period — same visual pattern as the members-by-slab chart, no new component.
+  - *Technical considerations:* client-side aggregation of the same not-yet-closed `member_period_totals` rows the members-by-slab chart already reads. No new IPC command, matching the sibling chart's existing pattern.
+  - *Dependencies:* US-M3.1 (own_reward computed).
 
 **Feature M4.2 — Full hierarchy window** *(new 7 Aug 2026, CR-3)*
 - **US-M4.3** Full hierarchy view in a separate window.
@@ -269,6 +274,7 @@ Every item raised by the readiness analysis has since been decided; the UI ones 
 - **US-BACKLOG-5** — ✅ Built 7 Aug 2026. New client requirement (RQ-23), not raised by the original readiness analysis: whole-console backup on a schedule or on demand, restorable on any machine including a brand-new install. See US-M7.4/US-M8.5/US-M8.6 above. **Needs four new commands** (API-37–40) and generalizes the `backups` table (`kind`/`schedule_kind`, nullable `period_id`) rather than adding a second table.
 - **US-BACKLOG-6** — ✅ Specified 7 Aug 2026, **not yet built in the prototype at the time of writing**. Three client change requests raised after this document set was approved: **CR-1** phone as a search key, **CR-2** entry into an ended-but-unclosed month, **CR-3** the full hierarchy window. They land as US-M1.4 (amended), US-M2.3/M2.4/M2.5 (new), US-M4.3 (new) and US-M5.3 (amended). **No new IPC command** — API-06/07/08/11 are amended and the surface stays at 40. Full reasoning: [../final/06-decision-log-and-open-items.md](../final/06-decision-log-and-open-items.md) §5.
 - **US-BACKLOG-7** — ✅ Closed by CR-3. The hierarchy chart's ">60 descendants" confirm-before-render gate had stood since 6 Aug 2026 as prototype behaviour with no source rule and no traceability row (LOW-1). It now belongs to the full hierarchy window, backed by Rule-45 and V4.5. **There are no remaining untraced prototype behaviours.**
+- **US-BACKLOG-8** — ✅ Specified 8 Aug 2026, **not yet built in the prototype at the time of writing**. Two client change requests raised the day before implementation begins: **CR-4** own-Business-Volume reward, **CR-5** the Home "Rewards by slab" chart. They land as US-M3.1 (amended), US-M4.1 (amended) and US-M4.4 (new). **No new IPC command** — API-10 gains one response field, and the Home chart is client-side aggregation, same as its sibling chart. Full reasoning: [../final/06-decision-log-and-open-items.md](../final/06-decision-log-and-open-items.md) §5.
 
 ## Suggested sequencing
 

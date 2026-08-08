@@ -48,7 +48,7 @@ Every major decision below traces to one of these three.
 **Consequence:** The encryption key must be derived and managed by the application (ADR-008), not delegated to the OS.
 
 ### ADR-004 — Fixed-point integer arithmetic over floating point
-**Decision:** Every Business Volume, TBV, differential, royalty and Rewards figure is an `i64` integer representing hundredths of a unit (`×100`), end to end through storage and calculation. Conversion to a two-decimal display string happens only at the UI boundary.
+**Decision:** Every Business Volume, TBV, differential, royalty, own-Business-Volume reward and Rewards figure is an `i64` integer representing hundredths of a unit (`×100`), end to end through storage and calculation. Conversion to a two-decimal display string happens only at the UI boundary.
 **Rationale:** Floating point cannot exactly represent most decimal fractions; summing hundreds of terms across a deep hierarchy accumulates visible drift — exactly the "nearly right, which is worse than obviously wrong" failure UN-08 names. Fixed-point is exact under addition, subtraction, and the percentage multiplications this system performs.
 **Consequence:** Every percentage operation is integer multiply-then-divide with an explicit rounding rule (round-half-up, applied once, at the point a term is finalised — never on an intermediate sum).
 
@@ -121,7 +121,7 @@ External medium — user-chosen, physically separate from the install disk
 |---|---|---|
 | **M1 — Member & Structure** | Root creation (once), add/edit/deactivate/reactivate, all structural validation | `create_root_member`, `add_member`, `edit_member`, `deactivate_member`, `reactivate_member`, `search_members` |
 | **M2 — Business Volume Entry** | Record BV, edit/correct an entry in any period, decide which months are recordable (Rule-36 as amended) | `record_entry`, `edit_entry`, `get_period_lock_status` |
-| **M3 — Calculation Engine** | Bottom-up rollup, slab lookup, differential, royalty, Rewards. **Pure function set, no I/O.** | `preview_settings_impact` (the only command — see §3.2) |
+| **M3 — Calculation Engine** | Bottom-up rollup, slab lookup, differential, royalty, own-Business-Volume reward, Rewards. **Pure function set, no I/O.** | `preview_settings_impact` (the only command — see §3.2) |
 | **M4 — Search & Chart** | Home search (name/ID/phone), member detail, hierarchy chart, **full hierarchy window**, inactive-member colour coding | `search_members` (shared), `get_member_detail`, `get_direct_children_chart` (both one-depth and `full_tree`) |
 | **M5 — Monthly Close** | Alert lifecycle and entry eligibility, gated close flow, permanent snapshot writing, closed-month correction, on-demand backup | `get_outstanding_periods`, `begin_close`, `confirm_backup_and_close`, `manual_backup_current_period` |
 | **M6 — Reporting & Exports** | Three extracts, re-download of any past backup, inactive-row colouring | `export_monthly`, `export_yearly_average`, `export_low_contribution`, `list_backups`, `redownload_backup` |
@@ -131,7 +131,7 @@ External medium — user-chosen, physically separate from the install disk
 
 ### 3.2 M3 in detail — the pure calculation core
 
-M3 is deliberately a pure function set with no I/O: it takes the affected chain's current state plus current settings/slab table, and returns recomputed figures for every node on that chain. The calling code (M2's `record_entry`, M5's correction path) loads the chain, invokes the engine, and persists the result in one DB transaction. This is what makes the engine unit-testable against the five worked scenarios without touching a database.
+M3 is deliberately a pure function set with no I/O: it takes the affected chain's current state plus current settings/slab table, and returns recomputed figures for every node on that chain. The calling code (M2's `record_entry`, M5's correction path) loads the chain, invokes the engine, and persists the result in one DB transaction. This is what makes the engine unit-testable against the six worked scenarios without touching a database.
 
 **No command triggers a calculation.** There is no "recalculate" button anywhere (Rule-26), so there is no command surface that could become one. The engine runs only as an internal consequence of a write in M2, M5, or M7.
 
@@ -221,7 +221,8 @@ Index: `(member_id, period_month)` — hot path for entry display and monthly ex
 | `slab_pct` | INTEGER NOT NULL | Rule-3/7 |
 | `differential` | INTEGER NOT NULL | `×100`, Rule-8 |
 | `royalty` | INTEGER NOT NULL | `×100`, Rule-10 |
-| `rewards` | INTEGER NOT NULL | `×100`, Rule-12 |
+| `own_reward` | INTEGER NOT NULL | `×100`, Rule-46 (added 8 Aug 2026, CR-4) |
+| `rewards` | INTEGER NOT NULL | `×100`, Rule-12 = differential + royalty + own_reward |
 
 **`periods`**
 
@@ -246,6 +247,7 @@ Index: `(member_id, period_month)` — hot path for entry display and monthly ex
 | `slab_pct` | INTEGER NOT NULL | |
 | `differential` | INTEGER NOT NULL | |
 | `royalty` | INTEGER NOT NULL | |
+| `own_reward` | INTEGER NOT NULL | Rule-46 (added 8 Aug 2026, CR-4) |
 | `rewards` | INTEGER NOT NULL | |
 | `is_active_status` | BOOLEAN NOT NULL | Snapshot of `is_active` at close time |
 | `created_at` | TEXT NOT NULL | |
@@ -359,6 +361,7 @@ CREATE TABLE member_period_totals (
     slab_pct                INTEGER NOT NULL,
     differential             INTEGER NOT NULL,
     royalty                  INTEGER NOT NULL,
+    own_reward               INTEGER NOT NULL,
     rewards                  INTEGER NOT NULL,
     PRIMARY KEY (member_id, period_id)
 );
@@ -373,6 +376,7 @@ CREATE TABLE monthly_snapshots (
     slab_pct                 INTEGER NOT NULL,
     differential              INTEGER NOT NULL,
     royalty                   INTEGER NOT NULL,
+    own_reward                INTEGER NOT NULL,
     rewards                   INTEGER NOT NULL,
     is_active_status          INTEGER NOT NULL,
     created_at                TEXT NOT NULL,
@@ -461,12 +465,16 @@ On a Business Volume write against member X in the currently open period:
       else:
           royalty(N) ← 0
 
-   e. rewards(N) ← differential(N) + royalty(N)
+   e. own_reward(N) ← slab_pct(N) × business_volume(N)
+      // Rule-46 (CR-4, 8 Aug 2026): N's own Business Volume earns at N's own slab.
+      // Additive only — does not change differential(N) or royalty(N) above.
 
-   f. persist total_business_volume(N), slab_pct(N), differential(N), royalty(N), rewards(N)
+   f. rewards(N) ← differential(N) + royalty(N) + own_reward(N)
+
+   g. persist total_business_volume(N), slab_pct(N), differential(N), royalty(N), own_reward(N), rewards(N)
       to member_period_totals — never to business_volume, which changes only via entries.
 
-4. Steps 3a–3f run inside ONE database transaction — either the whole chain updates
+4. Steps 3a–3g run inside ONE database transaction — either the whole chain updates
    consistently or none of it does.
 ```
 
@@ -482,7 +490,7 @@ Reproducing [02](02-business-rules.md) §5.3 against this algorithm end to end. 
 
 1. At `p1`: leaf, no children — assume unchanged for this trace.
 2. At `D`: `TBV(D) = BV(D) + Σ TBV(children incl. p1..p3) = 1,250` → `slab_pct(D) = 6%`. `differential(D)` re-scans **all** of D's children (p1, p2, p3), not just p1.
-3. At `A`: `TBV(A) = BV(A) + Σ TBV(B..G) = 500 + 6×1,250 = 8,000` → `12%`. `differential(A)` re-scans **all six** of A's direct children B–G, each contributing `(12%−6%)×1,250 = 75`, total `450` — matches the golden value exactly. Royalty: no direct child of A is on the top slab → `royalty(A) = 0`. `rewards(A) = 450`. ✅
+3. At `A`: `TBV(A) = BV(A) + Σ TBV(B..G) = 500 + 6×1,250 = 8,000` → `12%`. `differential(A)` re-scans **all six** of A's direct children B–G, each contributing `(12%−6%)×1,250 = 75`, total `450`. Royalty: no direct child of A is on the top slab → `royalty(A) = 0`. `own_reward(A) = 12% × 500 = 60` (Rule-46, CR-4 — A's own Business Volume, not its TBV). `rewards(A) = 450 + 0 + 60 = 510` — matches the golden value exactly. ✅
 
 ### 5.4 Complexity and the 2-second target
 
@@ -529,7 +537,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-10 | `get_member_detail` | Full detail: contact, Rewards breakdown, direct children, TBV, leg count | Auth | member_id must exist | Read-only | Not audited |
+| API-10 | `get_member_detail` | Full detail: contact, Rewards breakdown (own-Business-Volume reward first, then per-leg differential, then royalty — Rule-46), direct children, TBV, leg count | Auth | member_id must exist | Read-only | Not audited |
 | API-11 | `get_direct_children_chart` | Chart node data. Request: `member_id`, `full_tree: bool`. With `full_tree: false` — the member and its direct children (FR-2). With `full_tree: true` — **the entire subtree**, which is what the full hierarchy window draws (FR-10, Rule-45) | Auth | member_id must exist | Read-only | Not audited |
 
 **On API-11's `full_tree` flag.** The parameter was always in the command's contract; it is now put to work by FR-10 and no new command is introduced for the full hierarchy view. Either value returns the same node shape — name, ID, own Business Volume, active flag, introducer link — so FR-2's three-field constraint holds identically in both modes. The main window calls it once to obtain the count for the size gate (V4.5); the full hierarchy window calls it once more to draw. Both are cheap local reads against SQLite; the cost of the full view is in *rendering*, not in fetching, which is exactly why the render happens in a separate window.
@@ -781,7 +789,7 @@ If the client never takes the external-medium backup, the internal copy and the 
 | **TR-2** | Argon2id cost parameters tuned for a fast dev machine feel sluggish on the client's actual hardware | Low | Medium (UX friction at login) | Tune against a deliberately modest baseline machine before handover |
 | **TR-3** | Tauri v2's plugin ecosystem is younger than Electron's; a needed capability may require a Rust command from scratch | Medium | Low (more dev time, not a design flaw) | Accepted trade-off of ADR-002; budget for it |
 | **TR-4** | Single-machine data loss if the client never takes the external-medium backup | Medium | Critical | Prompts and reminds at every close; ultimately a client process discipline, stated plainly |
-| **TR-5** | Fixed-point arithmetic bugs (an off-by-one in a ×100 conversion) are subtle and could silently misstate every downstream figure | Low (if the five-scenario suite is followed) | Critical | The five-scenario unit test suite exists specifically to catch this class of bug before any UI is built on top |
+| **TR-5** | Fixed-point arithmetic bugs (an off-by-one in a ×100 conversion) are subtle and could silently misstate every downstream figure | Low (if the six-scenario suite is followed) | Critical | The six-scenario unit test suite exists specifically to catch this class of bug before any UI is built on top |
 | **TR-6** | Solo maintainer, no second reviewer — a design flaw or security gap could ship unnoticed | Medium | Medium–High | This document set itself is the primary mitigation — decisions recorded with rationale for later re-examination |
 | **TR-7** | The full hierarchy view (FR-10, Rule-45) is a **top-down** chart, whose width grows with the number of leaves rather than with depth. At the NFR-2 ceiling of 25,000 members the canvas is tens of thousands of pixels wide; a print spans many pages, and the first draw takes noticeably longer than a normal screen | Medium (only at large network sizes) | Medium (usability of one view; no data risk) | **Chosen deliberately by the client on 7 Aug 2026** over a width-stable indented outline, because it matches the Structure screen's visual language. Mitigations agreed at the same time: a 10% zoom floor (far below the main chart's range), fit-width, search-and-scroll inside the window, and the >60-descendant confirmation naming the exact count before anything is drawn. Isolation in a separate window means the cost never lands on the main console. If the client later finds it unusable at scale, the fallback is the indented-outline layout, not a rewrite of the data path |
 

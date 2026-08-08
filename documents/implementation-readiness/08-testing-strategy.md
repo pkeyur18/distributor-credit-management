@@ -1,25 +1,29 @@
 # Testing Strategy
 
-## 1. Foundation: the five worked scenarios are the project's golden test set
+## 1. Foundation: the six worked scenarios are the project's golden test set
 
-`requirement-spec.md` §5 re-derives all five of the client's original worked examples independently from Rules 6–12 alone, with no reference to the draft's stated answers, and all five reconcile exactly:
+`requirement-spec.md` §5 re-derives all five of the client's original worked examples independently from Rules 6–12 alone, with no reference to the draft's stated answers, and all five reconcile exactly. A sixth was added 8 August 2026 (CR-4/Rule-46, the client's own worked example) — recomputing scenarios 1–3 and adding scenario 6:
 
-| Scenario | Differential | Royalty | Total | Golden value |
-|---|---|---|---|---|
-| 1 — basic differential | 35 | 0 | 35 | 35 |
-| 2 — differential collapses to zero on equal slab | 22 | 0 | 22 | 22 |
-| 3 — multi-depth rollup | 450 | 0 | 450 | 450 |
-| 4 — pure royalty | 0 | 1,000 | 1,000 | 1,000 |
-| 5 — differential and royalty together | 580 | 400 | 980 | 980 |
+| Scenario | Differential | Royalty | OwnReward | Total | Golden value |
+|---|---|---|---|---|---|
+| 1 — basic differential | 35 | 0 | 30 | 65 | 65 |
+| 2 — differential collapses to zero on equal slab | 22 | 0 | 40 | 62 | 62 |
+| 3 — multi-depth rollup | 450 | 0 | 60 | 510 | 510 |
+| 4 — pure royalty | 0 | 1,000 | 0 | 1,000 | 1,000 |
+| 5 — differential and royalty together | 580 | 400 | 0 | 980 | 980 |
+| 6 — own-Business-Volume reward | 6 | 0 | 4 | 10 | 10 |
 
-These five scenarios, plus `client-requirements-validation.md`'s AC-1–AC-36 (§13), are the primary acceptance-test source — not invented from scratch. Every critical requirement in this project already has at least one verification mechanism defined by the client/architect before this analysis phase began; this strategy organizes and extends that coverage.
+Scenarios 4 and 5 are unchanged by Rule-46 because the top member's own BV is 0 in both — a pre-existing write-up simplification, not evidence the rule is unimplemented.
+
+These six scenarios, plus `client-requirements-validation.md`'s AC-1–AC-47 (§13), are the primary acceptance-test source — not invented from scratch. Every critical requirement in this project already has at least one verification mechanism defined by the client/architect before this analysis phase began; this strategy organizes and extends that coverage.
 
 ## 2. Test levels
 
 ### Unit tests — Calculation engine (M3)
 - Slab lookup (Rule-3): boundary values exactly at a threshold land in the higher slab (Scenario 2's C at 3,000 → 8%; Scenario 4's A at 10,000 → 14%).
 - TBV rollup (Rule-6): one-level-deep sum, own-BV term never omitted even when derived (Scenario 3: A's own BV = 500).
-- Differential (Rule-8): base is child's TBV not own-BV; only direct children contribute; own BV never earns.
+- Differential (Rule-8): base is child's TBV not own-BV; only direct children contribute; own BV never earns through this term (it earns separately through OwnReward, Rule-46).
+- OwnReward (Rule-46): `slab%(x) × own BV(x)`, always non-negative; zero when own BV is zero (Scenarios 4/5); the client's own worked example (Scenario 6, total 10).
 - Differential non-negativity (Rule-9): property-based test — for any valid slab table and any tree, no differential term is ever negative (this test should explicitly document that it assumes a monotonic slab table, since Rule-41 removes that guarantee at the input layer — see the edge-case test below).
 - Royalty qualification (Rule-10, Rule-25): exactly `royalty_min_children` boundary (2 vs. 3 top-slab children); royalty stacking at multiple levels of the same chain (the P/Q/R worked illustration in requirement-spec.md §4.2, double-royalty on the same underlying volume).
 - Rewards ledger isolation (Rule-13): after computing Rewards, re-run and confirm the earner's own TBV/slab are unchanged by their own Rewards.
@@ -80,20 +84,21 @@ Targets per NFR-1: screens <2s, recalculation <2s, extracts <30s, at the 25,000-
 - Monthly export generation time at 25,000 members / a full year of entries.
 - **Full hierarchy draw time at 25,000 members**, measured in the separate window — **with the main console's responsiveness measured at the same time.** The second measurement is the one that gates: the draw itself is a known, accepted cost (TR-7), while any slowdown of the main console is a defect against the client's binding constraint on CR-3.
 
-### UAT — the five worked scenarios, reconciled by the client
-Per SC-1–SC-8/AC-1–AC-36 (`client-requirements-validation.md` §12–13): re-run all five scenarios through the actual built UI (not just the calculation engine in isolation) and have the client confirm the on-screen figures match their own hand-worked numbers. This is the single most important acceptance gate in the entire test strategy — it is the client's own stated bar for trusting the system ("recalculating the client's five worked examples reproduces their stated totals exactly").
+### UAT — the six worked scenarios, reconciled by the client
+Per SC-1–SC-8/AC-1–AC-47 (`client-requirements-validation.md` §12–13): re-run all six scenarios through the actual built UI (not just the calculation engine in isolation) and have the client confirm the on-screen figures match their own hand-worked numbers. This is the single most important acceptance gate in the entire test strategy — it is the client's own stated bar for trusting the system ("recalculating the client's worked examples reproduces their stated totals exactly").
 
 ## 3. Coverage mapping — every critical requirement has a verification mechanism
 
 | Requirement class | Verification |
 |---|---|
-| Calculation correctness (Rules 3–13, 25) | Unit tests + the five golden scenarios + UAT |
+| Calculation correctness (Rules 3–13, 25, 46) | Unit tests + the six golden scenarios + UAT |
 | Recalculation trigger/scope (Rule-26) | Integration tests (chain-upward, transactional) |
 | Entry/correction rules (Rules 16, 16a, 39) | Unit + E2E |
 | Monthly close/backup gate (Rules 17–20, 31, 38) | Integration (atomicity) + E2E (wizard) |
 | Entry eligibility by period (Rule-36 as amended) | TEST-R36 — unit (the state matrix) + integration (recalculation confined to one period) + E2E (late entry, current-month refusal, month switcher) |
 | Phone as a search key (Rule-44) | TEST-R44 — unit (digit normalisation, four-digit floor) + E2E (every search box) + performance (scan at 25,000) |
 | Full hierarchy view (Rule-45) | TEST-R45 — unit (layout pass) + E2E (size gate, draw, print, read-only) + performance (draw time **and** main-console responsiveness) |
+| Own-Business-Volume reward (Rule-46) | TEST-R46 — unit (formula, non-negativity, zero-BV case) + E2E (Reward detail's own-BV line, Home's Rewards-by-slab chart) + UAT (Scenario 6) |
 | Member lifecycle/hierarchy integrity (Rules 28, 30, 34, 35, 37, 40) | Unit + E2E |
 | Members never removed, never omitted (Rule-42) | TEST-R42 — unit (no delete path) + integration (exports include deactivated members) |
 | Exports/reporting (Rules 19, 23, 24, 33) | Integration + E2E |
@@ -101,7 +106,7 @@ Per SC-1–SC-8/AC-1–AC-36 (`client-requirements-validation.md` §12–13): re
 | Slab table cannot be emptied (LOW-2) | Unit + E2E |
 | Data recovery at launch (LOW-3) | Integration (corrupt file, checksum refusal) + E2E (screen, restore, still requires credential) |
 | Auth/security (Rule-29, NFR-4) | Security tests + E2E |
-| Pre-authentication command set is exactly six | Contract test asserting the closed set |
+| Pre-authentication command set is exactly seven | Contract test asserting the closed set |
 | Performance/scale (NFR-1, NFR-2) | Performance tests |
 | Accepted risks (Rule-41 monotonicity) | A deliberate **negative** test: confirm the system does *not* block a non-monotonic slab table save, and confirm the resulting (possibly negative) differential is computed and displayed as-is, not silently clamped — this proves the accepted-risk decision is correctly implemented as "no validation," not accidentally half-implemented. |
 

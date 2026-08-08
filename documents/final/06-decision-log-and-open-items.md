@@ -8,7 +8,7 @@ Three kinds of thing live here:
 - **§3 — Open items (O1–O5):** genuinely undecided. **No default has been invented for any of them.**
 - **§6 — Do not re-raise:** decisions that look like oversights and are not.
 
-**Change requests are recorded in §5, by date.** The most recent are **CR-1, CR-2 and CR-3 of 7 August 2026**, which amend Rule-36 and add Rule-44 and Rule-45. CR-2 in particular **reverses RQ-11's earlier answer** — if you find a document still describing a total entry lock when a month is outstanding, that document is stale and §5 is right.
+**Change requests are recorded in §5, by date.** The most recent are **CR-4 and CR-5 of 8 August 2026**, which add Rule-46 and amend Rule-12. CR-4 in particular **reverses the 3 August 2026 decision that a member earns nothing on their own Business Volume** — if you find a document still describing that as an absolute rule, or citing the pre-CR-4 golden totals (35/22/450/1,000/980), that document is stale and §5 is right. CR-1, CR-2 and CR-3 of 7 August 2026 (amending Rule-36, adding Rule-44 and Rule-45) remain in force alongside CR-4/CR-5.
 
 ---
 
@@ -312,6 +312,32 @@ Raised by the client after reviewing this approved set. All three change behavio
 | **Closes a standing gap** | The ">60 descendants confirm-before-render" gate had been specified in [03](03-functional-specification.md) §5.3 and [07](07-design-system.md) §8 but never built, and was tracked as untraced prototype behaviour. It now has a rule, a validation row and a home |
 
 **Prototype drift found and corrected during this work (build notes, not requirement changes):** the ">60 descendants" gate was documented but absent from `ui-prototype-v2.html`; the Structure screen's zoom, fit-width, collapse-all and search controls existed in the prototype but were documented nowhere; V2.5 stated the entry screen carries no date field while the prototype has always shown one. All three are now resolved in favour of the built behaviour, with V2.5 amended.
+
+### 8 August 2026 — CR-4, CR-5: two client change requests, raised the day before implementation starts
+
+Raised by the client just before implementation begins. CR-4 changes a calculation rule already frozen since 3 August 2026; CR-5 adds a new screen element. Both are recorded here in full, same format as CR-1/2/3.
+
+#### CR-4 — Reward on own Business Volume
+
+| | |
+|---|---|
+| **Requested** | A member's own Business Volume should also earn a reward, at the member's own slab — worked example supplied: A with children B, C, D each holding 100 Business Volume (2% slab), A's own Business Volume also 100. A's Total Business Volume becomes 400 (4% slab). Differential from B/C/D = 2 + 2 + 2 = 6 (unchanged formula). A's own 100 Business Volume, at A's own 4% slab, adds a further 4. Total Rewards for A = **10** |
+| **Decided** | A third, additive term: `OwnReward(x) = slab%(x) × BusinessVolume(x)` (own Business Volume only, own slab from Rule-7, unchanged). `Rewards(x) = Differential(x) + Royalty(x) + OwnReward(x)`. Differential (Rule-8) and Royalty (Rule-10) are **not redefined** — same formulas, same exclusions, same golden trees |
+| **Reverses** | The 3 August 2026 decision that **"a member earns nothing on their own Business Volume"** (§5 above). That decision is superseded specifically by this addition — it no longer holds as an absolute statement, only as a description of the differential term in isolation |
+| **Rule** | **Rule-46** (new). Rule-12 amended. Also M3.5 (new), V4.3 (amended), AC-46 |
+| **Golden regression set** | Scenarios 1–3's totals move (35→65, 22→62, 450→510 — each gains the top member's own-slab reward on their own Business Volume); Scenarios 4–5 are unchanged (1,000, 980) because the top member's own Business Volume is 0 in both, a pre-existing write-up simplification, not evidence the rule doesn't apply there. The client's own worked example above is added as **Scenario 6** (total 10) specifically because it is the only one of the six with a nonzero own-BV reward on a mid-tree member, giving Rule-46 real regression coverage |
+| **Reward-detail screen** | The own-Business-Volume reward line is shown **first**, before the per-leg differential rows, then royalty, then the total — "your own contribution, then your team's" |
+| **Notes** | No change to Rule-6 (TBV rollup), Rule-7 (slab lookup), Rule-9 (differential non-negativity), Rule-10/11 (royalty), or Rule-13 (Rewards stay a separate ledger, never feed back into Business Volume) |
+
+#### CR-5 — "Rewards by slab" chart on Home
+
+| | |
+|---|---|
+| **Requested** | Alongside the existing "Members by slab" chart on Home, a second chart showing total accumulated Rewards per slab — "how simplified format we can showcase this data... user friendly and easy to understand in one glance" |
+| **Decided** | Reuse the members-by-slab card's exact visual pattern (horizontal bar per slab row) rather than a new chart type — the client already reads that shape. Placed directly below the existing card. Each bar's value is the sum of Rewards (all three components) across every member currently on that slab; the label reads `<slab's Rewards total> / <Rewards total across all members>`, mirroring the existing `<count> / <total members>` label exactly. Current live period only, computed the same way the existing chart already is |
+| **Rule** | No new rule number — a display aggregation of already-defined figures, same as the members-by-slab chart itself has none. FR-1 (extended), V4.6 (new), AC-47 |
+| **Rejected alternative** | A single combined chart showing both member count and Rewards total per bar. Two simple, familiar charts read faster at a glance than one denser dual-value one — the client asked for "easy to understand in one glance," and reuse of an already-understood pattern serves that directly |
+| **No new API/data model change** | Computed from the same in-memory period figures the existing chart already reads; no dedicated backend command exists for either chart today, and none is being added for this one |
 
 ---
 

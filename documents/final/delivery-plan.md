@@ -1,6 +1,6 @@
 # Delivery Plan — Epics, Stories, PI & Sprint Breakdown
 
-35 user stories across Epic 0 and modules M1–M9, their dependency graph, and a proposed two-PI, eight-sprint sequence. **Four stories were added on 7 August 2026** by change requests CR-1/CR-2/CR-3 — US-M2.3, US-M2.4, US-M2.5 and US-M4.3 — and US-M1.4, US-M2.1 and US-M5.3 were amended (see [06](06-decision-log-and-open-items.md) §5). **Sprint boundaries are a starting proposal — adjust them freely. The dependency constraints are not optional** — a story cannot start before what it depends on is Done (per [05](05-quality-and-acceptance.md) §6.1).
+36 user stories across Epic 0 and modules M1–M9, their dependency graph, and a proposed two-PI, eight-sprint sequence. **Four stories were added on 7 August 2026** by change requests CR-1/CR-2/CR-3 — US-M2.3, US-M2.4, US-M2.5 and US-M4.3 — and US-M1.4, US-M2.1 and US-M5.3 were amended. **One more story was added on 8 August 2026** by CR-5 — US-M4.4 (Rewards-by-slab chart) — and US-M3.1/US-M4.1 were amended for CR-4 (own-Business-Volume reward, Rule-46) (see [06](06-decision-log-and-open-items.md) §5). **Sprint boundaries are a starting proposal — adjust them freely. The dependency constraints are not optional** — a story cannot start before what it depends on is Done (per [05](05-quality-and-acceptance.md) §6.1).
 
 Solo-maintainer project, two-week sprints assumed. Adjust cadence to actual availability; the sequencing logic holds regardless of sprint length.
 
@@ -16,7 +16,7 @@ One epic per architecture module, plus Sprint 0 for scaffolding.
 | **Epic M1** | Member Directory | US-M1.1 – US-M1.4 | Epic 0 |
 | **Epic M2** | Business Volume Entry | US-M2.1, US-M2.2 | M1, M3 |
 | **Epic M3** | Calculation Engine | US-M3.1, US-M3.2 | M1 (data model) |
-| **Epic M4** | Member Detail & Hierarchy Chart | US-M4.1, US-M4.2 | M1, M3 |
+| **Epic M4** | Member Detail & Hierarchy Chart | US-M4.1 – US-M4.4 | M1, M3 |
 | **Epic M5** | Monthly Close | US-M5.1 – US-M5.4 | M2, M3 |
 | **Epic M6** | Reports & Exports | US-M6.1 – US-M6.4 | M5 |
 | **Epic M7** | Settings | US-M7.1 – US-M7.4 | Low dependency; US-M7.3 needs M3, US-M7.4 needs the `backups` generalization |
@@ -55,7 +55,7 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 
 ---
 
-## 3. Stories — all 35, with acceptance criteria and dependencies
+## 3. Stories — all 36, with acceptance criteria and dependencies
 
 ### Epic 0 — Project Scaffolding
 
@@ -150,10 +150,10 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 
 ### Epic M3 — Calculation Engine
 
-**US-M3.1 — Implement TBV/slab/differential/royalty/Rewards computation.**
-*Requirement refs:* Rule-3, Rule-6–13, Rule-25.
+**US-M3.1 — Implement TBV/slab/differential/royalty/own-BV-reward/Rewards computation.**
+*Requirement refs:* Rule-3, Rule-6–13, Rule-25, Rule-46.
 *Dependencies:* US-0.2.
-*Acceptance criteria:* Given the five client worked scenarios as input trees, when the engine runs, then it reproduces totals **35 / 22 / 450 / 1,000 / 980** exactly.
+*Acceptance criteria:* Given the six client worked scenarios as input trees, when the engine runs, then it reproduces totals **65 / 62 / 510 / 1,000 / 980 / 10** exactly.
 
 **US-M3.2 — Chain-upward incremental recalculation.**
 *Requirement refs:* Rule-26, ADR-005.
@@ -164,7 +164,7 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 
 **US-M4.1 — Member detail view.**
 *Requirement refs:* FR-3, UN-17.
-*Acceptance criteria:* Given a member, when their detail view opens, then it shows contact info, full Rewards breakdown per direct child (with a note that differential and royalty never both pay on the same leg), direct children (1 depth), TBV, and leg count.
+*Acceptance criteria:* Given a member, when their detail view opens, then it shows contact info, full Rewards breakdown (own-Business-Volume reward line first, then per direct child, with a note that differential and royalty never both pay on the same leg), direct children (1 depth), TBV, and leg count.
 
 **US-M4.2 — Hierarchy chart.**
 *Requirement refs:* FR-2, UN-16.
@@ -183,6 +183,12 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 - Given the window is open, when the toolbar is used, then zoom (to 10% out, 150% in), fit-width, in-window member search with highlight-and-scroll, and Print all work.
 - Given the top member has nobody beneath them, when the window opens, then it shows the single root node and states plainly there is nothing beneath it — not an error.
 *Technical:* `get_direct_children_chart` with `full_tree: true`; no new command. Node positions come from a single post-order layout pass emitting connectors as one pre-computed path — never measured back out of the rendered DOM. The window subscribes to nothing and holds no handle on live console state.
+
+**US-M4.4 — Rewards-by-slab chart on Home.** *(new 8 Aug 2026, CR-5)*
+*Requirement refs:* FR-1 (extended), Rule-46, V4.6, AC-47.
+*Dependencies:* US-M3.1 (own_reward computed).
+*Acceptance criteria:* Given the Home screen, when it renders, then a "Rewards by slab" bar chart appears directly below "Members by slab," one bar per slab row, each showing the total Rewards accumulated by members currently on that slab out of the total across all members, for the current live period — same visual pattern as the members-by-slab chart, no new component.
+*Technical:* client-side aggregation of the same not-yet-closed `member_period_totals` rows the members-by-slab chart already reads. No new IPC command, matching the sibling chart's existing pattern.
 *Known accepted limit:* TR-7 — the top-down layout's width grows with leaf count; at 25,000 members the canvas is extremely wide and a print spans many pages. Chosen deliberately by the client over a width-stable outline; do not switch layouts unilaterally.
 
 ### Epic M5 — Monthly Close
@@ -290,18 +296,18 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 
 ## 4. Proposed PI & sprint breakdown
 
-**Two PIs, eight two-week sprints.** PI-1 delivers a working core (structure, calculation, entry, viewing) that can already reproduce the five golden scenarios end to end. PI-2 delivers everything that depends on the core being stable — close, reporting, full settings, console backup/restore, audit — plus hardening and UAT.
+**Two PIs, eight two-week sprints.** PI-1 delivers a working core (structure, calculation, entry, viewing) that can already reproduce the six golden scenarios end to end. PI-2 delivers everything that depends on the core being stable — close, reporting, full settings, console backup/restore, audit — plus hardening and UAT.
 
 ### PI-1 — Foundation & Core Calculation (Sprints 1–4)
 
-**Goal:** by the end of PI-1, an admin can set up the console, build a hierarchy, record activity, and see every figure calculate correctly on screen — reproducing all five golden scenarios through the real UI.
+**Goal:** by the end of PI-1, an admin can set up the console, build a hierarchy, record activity, and see every figure calculate correctly on screen — reproducing all six golden scenarios through the real UI.
 
 | Sprint | Stories | Focus |
 |---|---|---|
 | **Sprint 1** | US-0.1, US-0.2 | Tauri/React/Rust scaffolding; encrypted DB with full schema and seed data |
 | **Sprint 2** | US-M1.1, US-M1.2, US-M1.3, US-M1.4 · US-M8.1, US-M8.2, US-M8.3 | Member directory and base authentication **in parallel** — M8's base auth has no data dependency on M1 |
-| **Sprint 3** | US-M3.1, US-M3.2 | The calculation engine, pure and unit-tested against the five scenarios *before* anything else is built on top — this is the highest-value, highest-risk work in the project |
-| **Sprint 4** | US-M2.1, US-M2.2 · US-M4.1, US-M4.2, **US-M4.3** · US-M8.4 | Entry, correction, member detail, hierarchy chart, **full hierarchy window (CR-3)**, credential recovery. **Sprint 4 exit gate:** all five golden scenarios reproduce through the real UI |
+| **Sprint 3** | US-M3.1, US-M3.2 | The calculation engine, pure and unit-tested against the six scenarios *before* anything else is built on top — this is the highest-value, highest-risk work in the project |
+| **Sprint 4** | US-M2.1, US-M2.2 · US-M4.1, US-M4.2, **US-M4.3**, **US-M4.4** · US-M8.4 | Entry, correction, member detail, hierarchy chart, **full hierarchy window (CR-3)**, **Rewards-by-slab chart (CR-5)**, credential recovery. **Sprint 4 exit gate:** all six golden scenarios reproduce through the real UI |
 
 ### PI-2 — Configuration, Close, Reporting & Hardening (Sprints 5–8)
 
@@ -312,7 +318,7 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 | **Sprint 5** | US-M7.1, US-M7.2, US-M7.3 | Slab table, royalty, structure/reporting settings, and the mid-period recalculation warning — needs M3 (Sprint 3) done |
 | **Sprint 6** | US-M5.1, US-M5.2, US-M5.3, US-M5.4 · **US-M2.3, US-M2.4, US-M2.5** | Monthly close — the gated flow, alert, entry eligibility, empty-month handling — together with the entry side of the same contract (CR-2), which cannot be built or tested before the outstanding-period state exists. **This module carries the project's highest safety requirement** — the backup gate |
 | **Sprint 7** | US-M6.1, US-M6.2, US-M6.3, US-M6.4 · US-M7.4 · US-M9.1 (wired retroactively into M1/M2/M5/M7) | Reports/exports, console backup scheduling, and audit-log completion across everything built so far |
-| **Sprint 8** | US-M8.5, US-M8.6 · performance testing at 25,000-member ceiling · UAT prep and execution · vocabulary sweep, security tests | Cross-device restore, hardening, and the client's own reconciliation of the five scenarios — the actual acceptance gate |
+| **Sprint 8** | US-M8.5, US-M8.6 · performance testing at 25,000-member ceiling · UAT prep and execution · vocabulary sweep, security tests | Cross-device restore, hardening, and the client's own reconciliation of the six scenarios — the actual acceptance gate |
 
 ### Sizing note
 
@@ -321,7 +327,7 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 ### What must not move
 
 - **Sprint 3 cannot start before Sprint 1/2 are Done.** The calculation engine needs the schema and a member hierarchy to test against.
-- **Sprint 4's exit gate (all five scenarios reproducing through the real UI) is a genuine go/no-go**, not a nice-to-have — it is the client's own stated trust bar (R-9, SC-2).
+- **Sprint 4's exit gate (all six scenarios reproducing through the real UI) is a genuine go/no-go**, not a nice-to-have — it is the client's own stated trust bar (R-9, SC-2).
 - **US-M7.4 and US-M8.5/US-M8.6 cannot start before the `backups` table generalization (ADR-012) lands.** That generalization can happen any time from Sprint 1 onward (it's a schema decision, not a feature), but the three stories that build on it cannot ship before it exists.
 - **US-M9.1 is cross-cutting.** Wire the audit-log call into every mutating command *as it is built*, not as a bolt-on in Sprint 7 — Sprint 7's US-M9.1 line is a completeness check, not the first time audit logging is written.
 

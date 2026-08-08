@@ -63,10 +63,10 @@ Source: `requirement-spec.md` Rules 1–38, corrected/extended where `client-req
 **Source:** requirement-spec.md Rule 7. **[AS SPECIFIED]**
 **Applies to:** M3.
 **Implementation impact:** A member can show a small own-BV figure while sitting on a high slab (explicit, documented consequence — FR-2's chart-value note).
-**Test requirement:** All five scenarios.
+**Test requirement:** All six scenarios.
 
 ### Rule-8 — Differential earnings
-**Rule:** `Differential(x) = Σ [(slab%(x) − slab%(c)) × TotalBusinessVolume(c)]` for every direct child c. Base is the child's TBV, not their own BV; only direct children contribute; a member earns nothing on their own Business Volume.
+**Rule:** `Differential(x) = Σ [(slab%(x) − slab%(c)) × TotalBusinessVolume(c)]` for every direct child c. Base is the child's TBV, not their own BV; only direct children contribute; a member earns nothing on their own Business Volume **through this term** — see Rule-46 for the separate term that does pay on it.
 **Source:** requirement-spec.md Rule 8, confirmed 2026-08-03. **[AS SPECIFIED]**
 **Applies to:** M3.
 **Implementation impact:** Grandchildren must never contribute a separate term — they are already inside the child's TBV.
@@ -90,14 +90,14 @@ Source: `requirement-spec.md` Rules 1–38, corrected/extended where `client-req
 **Source:** requirement-spec.md Rule 11. **[AS SPECIFIED]**
 **Test requirement:** AC-6 in `client-requirements-validation.md` — explicit demonstration that royalty and differential recipients don't double-count.
 
-### Rule-12 — Rewards
-**Rule:** `Rewards(x) = Differential(x) + Royalty(x)`.
-**Source:** requirement-spec.md Rule 12. **[AS SPECIFIED]**
+### Rule-12 — Rewards **[AMENDED 8 Aug 2026, CR-4]**
+**Rule:** `Rewards(x) = Differential(x) + Royalty(x) + OwnReward(x)` (Rule-46, added 8 Aug 2026). Differential and Royalty are unchanged from the original formulas.
+**Source:** requirement-spec.md Rule 12, amended by client change request **CR-4**.
 
 ### Rule-13 — Rewards are a separate ledger
 **Rule:** Rewards are never added to any member's Business Volume. They do not raise the earner's own slab, do not enter any ancestor's TBV, and do not compound into the next period.
 **Source:** requirement-spec.md Rule 13. **[AS SPECIFIED]**
-**Implementation impact:** `member_period_totals.rewards`/`royalty` must never feed back into `business_volume` or `total_business_volume` columns for any member, including the earner.
+**Implementation impact:** `member_period_totals.rewards`/`royalty`/`own_reward` must never feed back into `business_volume` or `total_business_volume` columns for any member, including the earner.
 **Test requirement:** After Rewards are computed for a member, re-run the recalculation and confirm their own TBV is unchanged.
 
 ### Rule-14 — Unit value (reference only)
@@ -338,3 +338,11 @@ Two further rules were added on **7 August 2026** by client change requests CR-1
 - Toolbar: zoom 10%–150%, fit-width, in-window search with highlight-and-scroll, Print. Theme inherited at open time.
 **Known accepted limit (TR-7):** the top-down layout's width grows with leaf count, not depth; at the 25,000-member ceiling the canvas is tens of thousands of pixels wide and a print spans many pages. The client chose this layout over a width-stable indented outline knowing that. **Do not switch layouts unilaterally** — raise it as a change request.
 **Test requirement:** on a structure above 60 members the exact count is named before anything is drawn and Cancel opens nothing; the window draws every branch with three fields per node; recording an entry in the console afterwards leaves the open window unchanged and its timestamp intact; the main console stays responsive throughout.
+
+### Rule-46 — Reward on own Business Volume **[NEW — client requirement, CR-4]**
+**Rule:** `OwnReward(x) = slab%(x) × BusinessVolume(x)` — a member's own Business Volume now also earns, at the member's own slab (Rule-7, unchanged). A pure addition: Differential (Rule-8) and Royalty (Rule-10) are untouched, still excluding the member's own Business Volume from their own base.
+**Source:** Client change request **CR-4**, 8 August 2026 — reverses the earlier confirmed position ("a member earns nothing on their own Business Volume") specifically for this new term; Differential and Royalty keep that exclusion.
+**Applies to:** M3.
+**Structural guarantee:** `OwnReward(x) ≥ 0` always — both factors non-negative by construction, same guarantee shape as Rule-9.
+**Implementation impact:** `member_period_totals` gains `own_reward`; `rewards` = `differential + royalty + own_reward`. Reward-detail responses/screens show the own-Business-Volume line **first**, before per-leg differential rows.
+**Test requirement:** the client's own worked example — A with children B/C/D at 100 BV/2% each, A's own BV 100 → TBV(A) 400 (4% slab), differential 6, own reward 4, **total 10**.

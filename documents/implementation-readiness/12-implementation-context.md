@@ -2,7 +2,7 @@
 
 **Read this file first in any future Claude Code session picking up implementation work on this project.** It is a condensed summary, not a replacement for the source documents — every section links to the full deliverable or source artifact it was distilled from.
 
-> ⚠️ **Superseded by `documents/final/` (7 August 2026).** That set is the build reference; where this file disagrees with it, it is wrong. This file was written on 6 August and has been patched — not rewritten — for the three change requests of 7 August (**CR-1** phone search, **CR-2** entry into an ended-but-unclosed month, **CR-3** the full hierarchy window). **CR-2 in particular reverses a previously frozen rule**: recording is no longer locked outright when a month ends. Start at [../final/00-master-index.md](../final/00-master-index.md).
+> ⚠️ **Superseded by `documents/final/` (8 August 2026).** That set is the build reference; where this file disagrees with it, it is wrong. This file was written on 6 August and has been patched — not rewritten — for the three change requests of 7 August (**CR-1** phone search, **CR-2** entry into an ended-but-unclosed month, **CR-3** the full hierarchy window) and the two change requests of 8 August (**CR-4** own-Business-Volume reward/Rule-46, **CR-5** Rewards-by-slab chart). **CR-2 reverses a previously frozen rule**: recording is no longer locked outright when a month ends. **CR-4 adds a third additive term to Rewards** without changing Differential or Royalty. Start at [../final/00-master-index.md](../final/00-master-index.md).
 
 ---
 
@@ -26,7 +26,7 @@ Full narrative: `documents/business/project-confirmation-summary.html`.
 - **Packaging:** Native Tauri bundler, Windows (.msi/.exe) + macOS (.dmg/.app), no auto-update, ~10–20MB installer.
 - **Precision:** All volume/reward figures stored as fixed-point integers (× 100), never floats (ADR-004) — this is what makes "no intermediate rounding" (Rule-22) achievable.
 
-Full detail: `documents/design/architecture.md` (11 ADRs).
+Full detail: `../final/04-technical-architecture.md` (12 ADRs). (`documents/design/architecture.md` is an earlier draft, superseded — not used for implementation.)
 
 ## 4. Architecture
 
@@ -43,12 +43,13 @@ TotalBusinessVolume(x) = BusinessVolume(x) + Σ TotalBusinessVolume(c)   for eve
 slab%(x) = lookup(TotalBusinessVolume(x))                                 [highest threshold ≤ TBV]
 Differential(x) = Σ [(slab%(x) − slab%(c)) × TotalBusinessVolume(c)]      for every DIRECT child c
 Royalty(x) = Σ royalty_rate × TotalBusinessVolume(c)   if ≥3 direct children on the top slab, else 0
-Rewards(x) = Differential(x) + Royalty(x)
+OwnReward(x) = slab%(x) × BusinessVolume(x)                               [Rule-46, added 8 Aug 2026, CR-4]
+Rewards(x) = Differential(x) + Royalty(x) + OwnReward(x)
 ```
 
-Key structural guarantees: differential is never negative (parent's TBV always ≥ child's, by construction — Rule-9); royalty and differential never double-pay the same leg (Rule-11); a member earns nothing on their own Business Volume, only on the gap to their children (Rule-8); royalty **stacks** — the same underlying volume can earn royalty at multiple levels of the same chain (Rule-25). Recalculation is immediate on every entry, chain-upward only (only the ancestor chain recomputes, not the whole tree — ADR-005), inside one DB transaction.
+Key structural guarantees: differential is never negative (parent's TBV always ≥ child's, by construction — Rule-9); royalty and differential never double-pay the same leg (Rule-11); a member earns nothing on their own Business Volume through the differential term, only on the gap to their children (Rule-8) — but earns separately through OwnReward (Rule-46), at their own slab, on their own Business Volume; royalty **stacks** — the same underlying volume can earn royalty at multiple levels of the same chain (Rule-25). Recalculation is immediate on every entry, chain-upward only (only the ancestor chain recomputes, not the whole tree — ADR-005), inside one DB transaction.
 
-**Golden regression values** (reproduce exactly, always): Scenario 1 = 35, Scenario 2 = 22, Scenario 3 = 450, Scenario 4 = 1,000, Scenario 5 = 980. Full worked trees: `documents/draft/requirement-spec.md` §5.
+**Golden regression values** (reproduce exactly, always): Scenario 1 = 65, Scenario 2 = 62, Scenario 3 = 510, Scenario 4 = 1,000, Scenario 5 = 980, Scenario 6 = 10. Scenarios 1–3 and 6 recomputed/added 8 Aug 2026 for Rule-46/CR-4; 4–5 unchanged (own BV = 0 in both). Full worked trees: `documents/final/02-business-rules.md` §5.
 
 Full rule text: [03-business-rules.md](03-business-rules.md).
 
@@ -89,7 +90,7 @@ Full matrix: [07-error-edge-case-matrix.md](07-error-edge-case-matrix.md). Headl
 
 ## 12. Testing Strategy Summary
 
-The five worked scenarios are the project's golden regression set — any calculation-engine change must continue to reproduce 35/22/450/1,000/980 exactly. Full strategy across unit/integration/API/E2E/security/performance/UAT levels: [08-testing-strategy.md](08-testing-strategy.md).
+The six worked scenarios are the project's golden regression set — any calculation-engine change must continue to reproduce 65/62/510/1,000/980/10 exactly. Full strategy across unit/integration/API/E2E/security/performance/UAT levels: [08-testing-strategy.md](08-testing-strategy.md).
 
 ## 13. Project Conventions
 
@@ -136,4 +137,4 @@ See [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) "Re
 | "Is this thing I'm unsure about already answered?" | [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) |
 | "Is the project ready to build?" | [01-implementation-readiness-assessment.md](01-implementation-readiness-assessment.md) |
 
-When in doubt about a business rule, **`requirement-spec.md` Rules 1–41 (as corrected in [03-business-rules.md](03-business-rules.md)) are the canonical text** — everything else, including this file, is a derived summary.
+When in doubt about a business rule, **[03-business-rules.md](03-business-rules.md)'s full Rule-1…Rule-46 set (correcting and extending `requirement-spec.md`'s original Rules 1–38) is the canonical text** — everything else, including this file, is a derived summary.

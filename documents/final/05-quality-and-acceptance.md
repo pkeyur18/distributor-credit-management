@@ -1,20 +1,21 @@
 # 05 — Quality & Acceptance
 
-Every error/edge case, the full test strategy, the golden regression scenarios, all 45 acceptance criteria and 8 success criteria, and the Definition of Done. Nothing is claimed complete until it passes what is written here.
+Every error/edge case, the full test strategy, the golden regression scenarios, all 47 acceptance criteria and 8 success criteria, and the Definition of Done. Nothing is claimed complete until it passes what is written here.
 
 ---
 
-## 1. Golden regression set — reproduce these five totals exactly, always
+## 1. Golden regression set — reproduce these six totals exactly, always
 
-| Scenario | Differential | Royalty | **Total Rewards** |
-|---|---|---|---|
-| 1 — basic differential | 35 | 0 | **35** |
-| 2 — differential collapses on an equal slab | 22 | 0 | **22** |
-| 3 — multi-depth rollup | 450 | 0 | **450** |
-| 4 — pure royalty | 0 | 1,000 | **1,000** |
-| 5 — differential and royalty together | 580 | 400 | **980** |
+| Scenario | Differential | Royalty | OwnReward | **Total Rewards** |
+|---|---|---|---|---|
+| 1 — basic differential | 35 | 0 | 30 | **65** |
+| 2 — differential collapses on an equal slab | 22 | 0 | 40 | **62** |
+| 3 — multi-depth rollup | 450 | 0 | 60 | **510** |
+| 4 — pure royalty | 0 | 1,000 | 0 | **1,000** |
+| 5 — differential and royalty together | 580 | 400 | 0 | **980** |
+| 6 — own-Business-Volume reward | 6 | 0 | 4 | **10** |
 
-Full trees: [02](02-business-rules.md) §5. These are the client's own hand-worked numbers, re-derived independently from the rules and confirmed to match exactly. **If any total moves during development, a rule was implemented wrongly — stop and find it before continuing.**
+Full trees: [02](02-business-rules.md) §5. Scenarios 1–5 are the client's own hand-worked numbers, re-derived independently from the rules and confirmed to match exactly (recomputed 8 Aug 2026 for Rule-46/CR-4 — scenarios 4 and 5 don't move, since the top member's own BV is 0 in both). Scenario 6 is the client's own worked example for Rule-46. **If any total moves during development, a rule was implemented wrongly — stop and find it before continuing.**
 
 ---
 
@@ -129,13 +130,15 @@ Full trees: [02](02-business-rules.md) §5. These are the client's own hand-work
 **Unit — calculation engine (M3)**
 - Slab lookup boundary values exactly at a threshold land in the higher slab (Scenario 2's C at 3,000 → 8%; Scenario 4's A at 10,000 → 14%).
 - TBV rollup: one-level-deep sum, own-BV term never omitted even when derived (Scenario 3: A's own BV = 500).
-- Differential: base is child's TBV not own-BV; only direct children contribute; own BV never earns.
+- Differential: base is child's TBV not own-BV; only direct children contribute; own BV never earns through this term (it earns separately through OwnReward, Rule-46).
 - Differential non-negativity: property-based test — for any *monotonic* slab table and any tree, no differential term is ever negative. Explicitly document the monotonicity assumption, since Rule-41 removes that guarantee at the input layer.
-- Royalty qualification: exactly `royalty_min_children` boundary (2 vs 3 top-slab children); royalty stacking at multiple levels of the same chain (§5.6's P/Q/R illustration).
+- Royalty qualification: exactly `royalty_min_children` boundary (2 vs 3 top-slab children); royalty stacking at multiple levels of the same chain (§5.7's P/Q/R illustration).
+- OwnReward (Rule-46): `slab%(x) × own BV(x)`, always non-negative; zero when own BV is zero (Scenarios 4/5); the client's own worked example (Scenario 6, total 10).
 - Rewards ledger isolation: after computing Rewards, re-run and confirm the earner's own TBV/slab are unchanged.
 - Fixed-point precision: sum a column of ×100 integers, confirm no drift vs. hand calculation across a long chain.
 
 **Unit — other modules**
+- **Vocabulary grep (the mandatory check named in [01](01-product-and-scope.md) §3):** automated scan of every literal UI string — screen labels, buttons, column headings, toasts, tooltips, placeholder/empty-state copy, error messages, extract filenames, mock/test data — against the excluded-word list (*sale, purchase, order, cash, payment, commission, invoice*, and any equivalent). Fails the build on any hit; run pre-release and in CI once CI exists.
 - Member ID allocation: random, excludes 100000, never reuses a taken ID (including deactivated members').
 - Phone uniqueness + reactivation offer: duplicate against active → error; duplicate against inactive → reactivation payload, not an error.
 - **Inactive-member calculation neutrality — the single highest-value regression test in the suite.** Deactivating a mid-tree member with active descendants must **not** change any ancestor's TBV/Rewards. Implementing the superseded spec wording here silently corrupts the ledger.
@@ -190,8 +193,8 @@ Targets: screens < 2s, recalculation < 2s, extracts < 30s, at the **25,000-membe
 - Monthly export generation time at 25,000 members / a full year of entries.
 - **Full hierarchy draw time at 25,000 members**, measured in the separate window, with the main console's responsiveness measured *at the same time* — the second measurement is the one that matters, since the first is a known and accepted cost (TR-7).
 
-**UAT — the five worked scenarios, reconciled by the client**
-Re-run all five scenarios through the actual built UI (not just the isolated engine) and have the client confirm the on-screen figures match their own hand-worked numbers. **This is the single most important acceptance gate in the entire test strategy** — the client's own stated bar for trust (R-9).
+**UAT — the six worked scenarios, reconciled by the client**
+Re-run all six scenarios through the actual built UI (not just the isolated engine) and have the client confirm the on-screen figures match their own hand-worked numbers. **This is the single most important acceptance gate in the entire test strategy** — the client's own stated bar for trust (R-9).
 
 ### 3.2 What is explicitly not tested
 
@@ -207,7 +210,7 @@ Re-run all five scenarios through the actual built UI (not just the isolated eng
 
 | Requirement class | Verification |
 |---|---|
-| Calculation correctness (Rules 3–13, 25) | Unit + five golden scenarios + UAT |
+| Calculation correctness (Rules 3–13, 25, 46) | Unit + six golden scenarios + UAT |
 | Recalculation trigger/scope (Rule-26) | Integration (chain-upward, transactional) |
 | Entry/correction (Rules 16, 16a, 39) | Unit + E2E |
 | Monthly close/backup gate (Rules 17–20, 31, 38) | Integration (atomicity) + E2E (wizard) |
@@ -227,18 +230,19 @@ Re-run all five scenarios through the actual built UI (not just the isolated eng
 
 ---
 
-## 4. Acceptance criteria — AC-1 to AC-45
+## 4. Acceptance criteria — AC-1 to AC-47
 
-### 4.1 Calculation — the five worked examples
+### 4.1 Calculation — the six worked examples
 
 | # | Scenario | Total Rewards | Must match |
 |---|---|---|---|
-| **AC-1** | D with A, B, C beneath (300/50/1,000, D holds 500) | **35** | ✅ |
-| **AC-2** | As AC-1 but C holds 3,000 | **22** | ✅ |
-| **AC-3** | A with six people beneath at 1,250 each, three more beneath D | **450** | ✅ |
+| **AC-1** | D with A, B, C beneath (300/50/1,000, D holds 500) | **65** | ✅ |
+| **AC-2** | As AC-1 but C holds 3,000 | **62** | ✅ |
+| **AC-3** | A with six people beneath at 1,250 each, three more beneath D | **510** | ✅ |
 | **AC-4** | P with four people beneath, all top band | **1,000** | ✅ |
 | **AC-5** | P with seven beneath — four top band, three lower | **980** | ✅ |
 | **AC-6** | Scenario 3 also demonstrates the three people beneath D contribute **nothing directly** to A's reward — already inside D's team total | ✅ (this is what keeps the scheme self-limiting) |
+| **AC-46** | A with children B, C, D (100 BV / 2% each), A holds 100 own BV → own-Business-Volume reward of 4, total **10** (Rule-46, CR-4) | ✅ |
 
 ### 4.2 Structure and members
 
@@ -314,6 +318,14 @@ Re-run all five scenarios through the actual built UI (not just the isolated eng
 | **AC-44** | "View full hierarchy" opens a separate window showing the whole structure from the top member with every branch expanded, each node carrying name, member number and own Business Volume only; above 60 descendants the exact member count is named and confirmed before anything is drawn |
 | **AC-45** | The main console stays responsive while the full hierarchy window is open and while it is drawing; the window itself never updates after it is drawn, and closing it changes nothing in the console |
 
+### 4.9 The two change requests of 8 August 2026
+
+| # | Criterion |
+|---|---|
+| **AC-47** | Home shows a "Rewards by slab" chart directly below "Members by slab," same bar-per-slab pattern, each bar's value and label reflecting the total Rewards (differential + royalty + own-Business-Volume reward) accumulated by members currently on that slab, out of the total across all members, for the current live period |
+
+(AC-46, the own-Business-Volume reward golden scenario, is listed with the other five worked examples in §4.1.)
+
 ---
 
 ## 5. Success criteria — SC-1 to SC-8
@@ -323,7 +335,7 @@ How the client and architect jointly judge whether the system succeeded.
 | # | Criterion | How measured |
 |---|---|---|
 | **SC-1** | The client no longer performs any reward calculation by hand | Client's own confirmation after 3 months of live use |
-| **SC-2** | Every figure the system produces matches a hand-worked check | All five worked examples reproduce exactly, plus spot checks during the first live month |
+| **SC-2** | Every figure the system produces matches a hand-worked check | All six worked examples reproduce exactly, plus spot checks during the first live month |
 | **SC-3** | A member's question about their figure can be answered from one screen | Client demonstrates it, without leaving Member Detail |
 | **SC-4** | No month is ever lost | Every month since go-live holds a permanent record and a retained backup |
 | **SC-5** | Recording a figure takes under 15 seconds for a known member | Timed, during acceptance |
@@ -363,12 +375,12 @@ A module is **Done** only when, in addition to every story within it meeting the
 - Every rule attributed to that module ([02](02-business-rules.md) §7's map) shows a passing test, not just "documented."
 - Any open item in [06](06-decision-log-and-open-items.md) §3 attributed to that module is resolved — not merely noted and deferred. As of this consolidation, **O1 gates only M6**; O2–O5 are build decisions that should be taken deliberately before the module ships, not defaults slipped in silently.
 - The prototype-approved behaviours ported into that module — the settings recalculation warning, the last-slab-row refusal, the data-recovery screen, the console backup schedule/restore flows — match their approved reference behaviour exactly, not a re-interpretation.
-- The five worked scenarios still reproduce their golden totals through the real UI (not just a unit test) once M2/M3/M4 are all Done together.
+- The six worked scenarios still reproduce their golden totals through the real UI (not just a unit test) once M2/M3/M4 are all Done together.
 
 ### 6.3 Project-level (pre-handover)
 
 - All nine modules meet the module-level bar.
-- **Full UAT pass:** the client reconciles all five scenarios and confirms the on-screen figures match their own hand-worked numbers (SC-2).
+- **Full UAT pass:** the client reconciles all six scenarios and confirms the on-screen figures match their own hand-worked numbers (SC-2).
 - Performance targets verified at the **25,000-member design ceiling**, not only at the client's actual 500–5,000-member scale.
 - A full monthly-close cycle (backup → snapshot → zero → alert clears) exercised end-to-end at least once against realistic data volume.
 - Handover deliverables match [01](01-product-and-scope.md) §12 exactly: installable desktop app, three working exports, backups verified working before anything is cleared, a working recovery-code path, an audit log that can explain any figure.

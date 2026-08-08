@@ -46,7 +46,7 @@ The client should be able to say:
 | **Business Volume** | The figure the administrator records directly against **one** member. | Manual entry only. Zeroed at monthly close. |
 | **Total Business Volume** | A member's own Business Volume **plus the already-computed Total Business Volume of each direct child** — one level of addition only. Full-depth coverage follows transitively because each child's figure is itself complete. | Derived. Recomputed whenever any Business Volume beneath the member changes. |
 | **Slab %** | The percentage band a member falls into, looked up from their **Total Business Volume** — never from their own Business Volume. | Derived from Total Business Volume. |
-| **Rewards** | A member's score for the period = Differential + Royalty. | Derived. **A separate ledger** — never added to any volume figure (Rule-13). |
+| **Rewards** | A member's score for the period = Differential + Royalty + own-Business-Volume reward (Rule-46, added 8 Aug 2026, CR-4). | Derived. **A separate ledger** — never added to any volume figure (Rule-13). |
 
 ### 2.1 The rename of 3 August 2026 — read this before any older document
 
@@ -54,7 +54,7 @@ The client should be able to say:
 |---|---|---|
 | Individual Credit Points | **Business Volume** | What the administrator types in against one member |
 | Business Volume | **Total Business Volume** | That member's own figure **plus** their whole team below |
-| Earned Points | **Rewards** | The score = differential + royalty |
+| Earned Points | **Rewards** | The score = differential + royalty + own-Business-Volume reward |
 
 ⚠️ **"Business Volume" changed meaning.** It used to mean the rolled-up team figure; it now means a member's own directly-entered figure. Anyone holding a pre-3-August copy of any document will read every formula backwards.
 
@@ -310,7 +310,7 @@ Fourteen risks were identified. Eleven are closed, one is mitigated (R-4, by CR-
 | **R-6** | Personal data exposure — thousands of people's details behind one credential | Low | High | 🟢 **Closed.** Permanent retention agreed, mandatory lockout, consent capture (RQ-8, RQ-22) |
 | **R-7** | ~~Deactivation produces wrong figures~~ | — | — | 🟢 **Closed 4 Aug 2026.** Inactive is display-only, zero calculation effect (RQ-2) |
 | **R-8** | Royalty cost grows with depth — it stacks at every qualifying level with no cap | **Medium** | **Medium** | 🔶 **LIVE — understood and accepted.** Recommendation: review total royalty as a figure each month once live |
-| **R-9** | Confidence is lost in the first month — the client will check early figures by hand | Medium | High | Mitigation: reconcile all five worked scenarios with the client, in front of them, before handover |
+| **R-9** | Confidence is lost in the first month — the client will check early figures by hand | Medium | High | Mitigation: reconcile all six worked scenarios with the client, in front of them, before handover |
 | **R-10** | ~~Building from a superseded statement~~ | — | — | 🟢 **Closed 3 Aug 2026** (INC-1–INC-5). **This document set is the standing mitigation** |
 | **R-11** | ~~Extract columns drift into new capture requirements~~ | — | — | 🟢 **Closed 3 Aug 2026.** Joining date now captured automatically (RQ-15) |
 | **R-12** | ~~Single-machine backup independence~~ | — | — | 🟢 **Closed 4 Aug 2026.** The downloaded copy goes to a physically separate medium (RQ-19) |

@@ -739,7 +739,7 @@ function rollupTBV(bvMap) {
 }
 
 function computeRewards(bvMap, tbvMap) {
-  const rewards = new Map(); // id -> { differential, royalty, total, breakdown: [{childId, childSlab, diffPct, tbv, amount}], qualifying, royaltyChildren }
+  const rewards = new Map(); // id -> { differential, royalty, ownReward, total, breakdown: [{childId, childSlab, diffPct, tbv, amount}], qualifying, royaltyChildren }
   const top = topSlabPct();
   MEMBERS.forEach(function (m) {
     const ownSlab = slabFor(tbvMap.get(m.id) || 0);
@@ -761,8 +761,11 @@ function computeRewards(bvMap, tbvMap) {
     }
     differential = Math.round(differential * 100) / 100;
     royalty = Math.round(royalty * 100) / 100;
+    // Rule-46 (CR-4, 8 Aug 2026): own Business Volume also earns, at the member's own slab.
+    const ownReward = Math.round(ownSlab / 100 * (bvMap.get(m.id) || 0) * 100) / 100;
     rewards.set(m.id, {
-      ownSlab: ownSlab, differential: differential, royalty: royalty, total: Math.round((differential + royalty) * 100) / 100,
+      ownSlab: ownSlab, differential: differential, royalty: royalty, ownReward: ownReward,
+      total: Math.round((differential + royalty + ownReward) * 100) / 100,
       breakdown: breakdown, qualifyingCount: qualifyingKids.length, childCount: kids.length, royaltyOn: royaltyOn,
     });
   });
@@ -907,6 +910,8 @@ function allLiveEntriesFlat(ym) {
   const rew = computeRewards(bv, tbv);
   console.assert(rew.get(M).differential === fmtDiffCheck(4, 2, 150), 'self-check: mid differential');
   console.assert(rew.get(T).differential === fmtDiffCheck(6, 4, 450), 'self-check: top differential');
+  console.assert(rew.get(M).ownReward === fmtDiffCheck(4, 0, 300) && rew.get(M).ownReward === 12, 'self-check: mid own-BV reward (Rule-46)');
+  console.assert(rew.get(T).ownReward === fmtDiffCheck(6, 0, 2000) && rew.get(T).ownReward === 120, 'self-check: top own-BV reward (Rule-46)');
   function fmtDiffCheck(a, b, base) { return Math.round((a - b) / 100 * base * 100) / 100; }
   childrenOf = savedChildren; MEMBERS = savedMembers; membersById = savedById;
   console.assert(crc32('123456789') === 0xCBF43926, 'self-check: CRC32 table');
@@ -1725,6 +1730,13 @@ VIEWS.home = function () {
   const barsHtml = buckets.map(function (b) {
     return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="transform:scaleX(' + (maxCount ? b.count / maxCount : 0) + ')"></div></div><div class="bar-row-count bar-row-count-lg">' + b.count + '<span class="muted" style="font-weight:400"> / ' + totalMembers + '</span></div></div>';
   }).join('');
+  // CR-5 (8 Aug 2026): second chart, same bar-list pattern, summing Rewards per slab instead of counting members.
+  const rewardBuckets = sortedSlabTable().map(function (row) { return { pct: row.pct, total: MEMBERS.reduce(function (sum, m) { const r = liveRewards().get(m.id); return r.ownSlab === row.pct ? sum + r.total : sum; }, 0) }; });
+  const maxRewardBucket = Math.max.apply(null, rewardBuckets.map(function (b) { return b.total; }).concat([1]));
+  const totalRewards = rewardBuckets.reduce(function (sum, b) { return sum + b.total; }, 0);
+  const rewardBarsHtml = rewardBuckets.map(function (b) {
+    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="transform:scaleX(' + (maxRewardBucket ? b.total / maxRewardBucket : 0) + ')"></div></div><div class="bar-row-count bar-row-count-lg">' + fmt2(b.total) + '<span class="muted" style="font-weight:400"> / ' + fmt2(totalRewards) + '</span></div></div>';
+  }).join('');
   const content =
     '<div class="stat-row n3">' +
     '<div class="stat-card"><div class="stat-label">Members</div><div class="stat-value">' + fmtInt(MEMBERS.length) + '</div><div class="stat-foot">' + inactiveCount + ' inactive</div></div>' +
@@ -1733,7 +1745,8 @@ VIEWS.home = function () {
     '</div>' + monthSwitcherHtml() +
     '<div class="card"><div class="field" style="margin-bottom:0"><div class="search-input-wrap">' + ICON.search + '<input id="home-search" type="text" placeholder="Search by name, 6-digit member number or phone" oninput="P.homeSearchInput(this.value)"></div></div>' +
     '<div id="home-results" class="mt-3">' + homeResultsHtml('') + '</div></div>' +
-    '<div class="card mt-3"><div class="card-title">Members by slab</div><div class="card-sub" style="margin-bottom:20px">Current live figures across all ' + totalMembers + ' members</div><div class="bar-list bar-list-lg">' + barsHtml + '</div></div>';
+    '<div class="card mt-3"><div class="card-title">Members by slab</div><div class="card-sub" style="margin-bottom:20px">Current live figures across all ' + totalMembers + ' members</div><div class="bar-list bar-list-lg">' + barsHtml + '</div></div>' +
+    '<div class="card mt-3"><div class="card-title">Rewards by slab</div><div class="card-sub" style="margin-bottom:20px">Total Rewards accumulated this period, by slab</div><div class="bar-list bar-list-lg">' + rewardBarsHtml + '</div></div>';
   return shell(content, { title: 'Home', sub: 'Search any member, or scan today’s standing', actions: '<button class="btn btn-primary" onclick="P.openAddMember()">' + ICON.plus + ' Add member</button>' });
 };
 
@@ -1750,6 +1763,7 @@ VIEWS.member = function (params) {
   const kids = directChildren(m.id);
   const parent = m.refId ? membersById.get(m.refId) : null;
 
+  const ownRewardRow = '<tr><td colspan="3" class="cell-primary">Own Business Volume <span class="muted" style="font-weight:400">— ' + fmt2(bv) + ' at ' + pct(rew.ownSlab) + '</span></td><td></td><td class="num cell-primary">' + fmt2(rew.ownReward) + '</td></tr>';
   const breakdownRows = rew.breakdown.map(function (b) {
     const c = membersById.get(b.childId);
     return '<tr><td class="cell-primary">' + memberLink(b.childId) + '</td><td class="num">' + fmtInt(b.tbv) + '</td><td>' + pillSlab(b.childSlab) + '</td>' +
@@ -1780,11 +1794,12 @@ VIEWS.member = function (params) {
     '<div class="stat-card"><div class="stat-label">Rewards this period</div><div class="stat-value num">' + fmt2(rew.total) + '</div></div>' +
     '</div>' +
     '<div class="two-col">' +
-    '<div class="card"><div class="card-title">Rewards detail</div><div class="card-sub" style="margin-bottom:12px">Differential and royalty never pay on the same leg</div>' +
-    (rew.childCount === 0
-      ? '<div class="empty-state" style="padding:26px 12px">' + ICON.tree.replace('<svg ', '<svg style="width:26px;height:26px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No direct legs</div><div class="empty-state-sub">Rewards are earned on the gap to each direct leg’s slab.</div></div>'
-      : '<div class="table-wrap"><table><thead><tr><th>Leg</th><th class="num">Total Business Volume</th><th>Slab</th><th class="num">Gap</th><th class="num">Amount</th></tr></thead><tbody>' + breakdownRows + royaltyRow +
-        '<tr class="table-foot-row"><td colspan="4">Rewards total</td><td class="num">' + fmt2(rew.total) + '</td></tr></tbody></table></div>') +
+    '<div class="card"><div class="card-title">Rewards detail</div><div class="card-sub" style="margin-bottom:12px">Own Business Volume, differential and royalty — differential and royalty never pay on the same leg</div>' +
+    '<div class="table-wrap"><table><thead><tr><th>Leg</th><th class="num">Total Business Volume</th><th>Slab</th><th class="num">Gap</th><th class="num">Amount</th></tr></thead><tbody>' + ownRewardRow +
+      (rew.childCount === 0
+        ? '<tr><td colspan="4" class="muted">No direct legs — differential and royalty are earned on the gap to each direct leg’s slab</td><td class="num muted">0.00</td></tr>'
+        : breakdownRows + royaltyRow) +
+      '<tr class="table-foot-row"><td colspan="4">Rewards total</td><td class="num">' + fmt2(rew.total) + '</td></tr></tbody></table></div>' +
     '</div>' +
     '<div class="card"><div class="card-title">Details</div>' +
     '<div class="mt-3" style="font-size:13px;display:flex;flex-direction:column;gap:9px">' +

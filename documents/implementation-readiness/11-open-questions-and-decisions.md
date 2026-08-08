@@ -2,7 +2,7 @@
 
 Consolidated register. Every item below also appears at its point of relevance in deliverables 01–10; this is the single place to check what remains outstanding.
 
-**Status as of 6 August 2026: all seven items raised by the readiness analysis are closed.** Nothing outstanding blocks or gates any module. **7 August 2026:** a new client requirement (whole-console backup and cross-device restore) was raised, designed and closed the same day — see below. **Also 7 August 2026:** three further client change requests (**CR-1, CR-2, CR-3**) were raised after the `documents/final/` set was approved, designed and specified the same day — see the CR block at the end of this file. None is blocking.
+**Status as of 6 August 2026: all seven items raised by the readiness analysis are closed.** Nothing outstanding blocks or gates any module. **7 August 2026:** a new client requirement (whole-console backup and cross-device restore) was raised, designed and closed the same day — see below. **Also 7 August 2026:** three further client change requests (**CR-1, CR-2, CR-3**) were raised after the `documents/final/` set was approved, designed and specified the same day — see the CR block at the end of this file. **8 August 2026:** two more client change requests (**CR-4, CR-5**) were raised the day before implementation begins — see the CR-4/CR-5 block at the end of this file. None is blocking.
 
 > ⚠️ **This file was flagged stale on 7 August 2026** by [../final/00-master-index.md](../final/00-master-index.md) §3 — it carries figures that were correct on 6 August. Where it disagrees with `documents/final/`, the final set wins. The CR block below is current.
 
@@ -113,6 +113,8 @@ Reads like an obvious gap on first encounter, but the client was offered this sa
 | NEW-2 | Designed and closed 7 Aug 2026 — **CR-1**, phone number as a search key (Rule-44) | Build it |
 | NEW-3 | Designed and closed 7 Aug 2026 — **CR-2**, entry permitted into an ended-but-unclosed month (Rule-36 amended) | Build it. **Reverses RQ-11** — read the amended rule before touching M2 or M5 |
 | NEW-4 | Designed and closed 7 Aug 2026 — **CR-3**, the full hierarchy window (Rule-45, FR-10) | Build it |
+| NEW-5 | Designed and closed 8 Aug 2026 — **CR-4**, own-Business-Volume reward (Rule-46) | Build it. Golden regression set recomputed — see [08-testing-strategy.md](08-testing-strategy.md) |
+| NEW-6 | Designed and closed 8 Aug 2026 — **CR-5**, Home "Rewards by slab" chart | Build it. No new command |
 
 **Nothing outstanding gates any module.** The conditions attached to the original "READY WITH CONDITIONS" verdict in [01-implementation-readiness-assessment.md](01-implementation-readiness-assessment.md) have all been met.
 
@@ -141,3 +143,18 @@ Raised by the client after the `documents/final/` set was approved. Recorded her
 **Layout:** top-down chart, fully expanded — chosen by the client over a width-stable indented outline after being shown the width behaviour. Recorded as **TR-7**, accepted, with the zoom floor, fit-width, in-window search and the size gate as the agreed mitigations. The outline is the named fallback.
 **Lands as:** Rule-45, FR-10, M4.7, V4.5, AC-44/AC-45, UN-31, US-M4.3 (new), API-11 (amended — the pre-existing `full_tree` parameter, no new command).
 **Closes LOW-1**, which had stood since 6 Aug 2026 as untraced prototype behaviour that was not in fact present in the prototype.
+
+## Client change requests — 8 August 2026 (CR-4, CR-5)
+
+Raised by the client the day before implementation begins. The authoritative account is [../final/06-decision-log-and-open-items.md](../final/06-decision-log-and-open-items.md) §5.
+
+### NEW-5 / CR-4 — Reward on own Business Volume ✅ DESIGNED AND CLOSED 8 Aug 2026
+**Asked:** a member's own Business Volume should also earn a reward, at the member's own slab — worked example supplied (A with children B/C/D at 100 BV/2% each, A's own BV 100, A's TBV 400 at 4%, total Rewards = 6 + 4 = 10).
+**Decided:** a third, additive term — `OwnReward(x) = slab%(x) × BusinessVolume(x)`. Differential (Rule-8) and Royalty (Rule-10) are **not redefined**.
+**Reverses:** the 3 August 2026 decision that a member earns nothing on their own Business Volume — superseded specifically by this addition, not by a redefinition of the differential term.
+**Lands as:** Rule-46 (new), Rule-12 (amended), M3.5 (new), V4.3 (amended), AC-46, US-M3.1 (amended), US-M4.1 (amended). Golden regression set recomputed: scenarios 1–3 move (65/62/510), 4–5 unchanged (1,000/980 — own BV is 0 in both), scenario 6 added (the client's own worked example, total 10).
+
+### NEW-6 / CR-5 — "Rewards by slab" chart on Home ✅ DESIGNED AND CLOSED 8 Aug 2026
+**Asked:** alongside the existing "Members by slab" chart, a second chart showing total accumulated Rewards per slab, in as simple/user-friendly a form as possible.
+**Decided:** reuse the members-by-slab card's exact bar-list pattern, placed directly below it — same shape the client already reads, each bar summing Rewards instead of counting members, current live period only.
+**Lands as:** FR-1 (extended), V4.6 (new), AC-47, US-M4.4 (new). **No new API command** — client-side aggregation, matching the sibling chart's existing pattern.

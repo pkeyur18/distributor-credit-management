@@ -26,7 +26,7 @@ A story is **Done** only when all of the following are true:
 A module (M1–M9) is **Done** only when, in addition to every story within it meeting the per-story bar above:
 - Every Rule/FR/NFR row in [02-requirements-traceability-matrix.md](02-requirements-traceability-matrix.md) attributed to that module shows a passing test, not just "Fully traced."
 - Any open item in [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) attributed to that module is resolved — not merely noted and deferred. **As of 6 August 2026 none remain**: every item raised by the readiness analysis is closed, so no module is gated by one. The three that were built in the prototype (settings warning, last-slab-row refusal, data-recovery screen) count as approved reference behaviour and must be ported, like any other approved prototype behaviour, before M7 / M5 / M8 are Done.
-- The five worked scenarios (Scenario 1–5) still reproduce their golden totals through the real UI, not just in a unit test, once M2/M3/M4 are all Done together.
+- The six worked scenarios (Scenario 1–6) still reproduce their golden totals through the real UI, not just in a unit test, once M2/M3/M4 are all Done together.
 
 **Additional module gates from the 7 August 2026 change requests (CR-1/CR-2/CR-3):**
 - **M2 is not Done** until the full entry-eligibility matrix passes as a test, not merely as an implementation: an entry into an ended-but-unclosed month is accepted, a current-month entry is refused naming the blocking month, a closed-month entry is directed to the correction path, and a recalculation triggered in one live period leaves every other live period byte-identical (Rule-36 as amended, TEST-R36).
@@ -36,7 +36,7 @@ A module (M1–M9) is **Done** only when, in addition to every story within it m
 ## Project-level (pre-handover)
 
 - All nine modules meet the module-level bar above.
-- Full UAT pass: the client reconciles all five scenarios and confirms the on-screen figures match their own hand-worked numbers (per `client-requirements-validation.md`'s own stated success criterion).
+- Full UAT pass: the client reconciles all six scenarios and confirms the on-screen figures match their own hand-worked numbers (per `client-requirements-validation.md`'s own stated success criterion).
 - Performance targets verified at the 25,000-member design ceiling, not only at the client's actual 500–5,000-member scale.
 - A full monthly-close cycle (backup → snapshot → zero → alert clears) has been exercised end-to-end at least once against realistic data volume.
 - Handover deliverables match `project-confirmation-summary.html`'s "What you'll receive" section exactly: installable desktop app (no browser/internet dependency), three working exports, backups verified working before anything is cleared, a working recovery-code path, and an audit log that can explain any figure.

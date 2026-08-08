@@ -46,8 +46,9 @@ Eight functional modules (M1–M8) plus the architecture-introduced M9. Every fu
 | M3.2 | Assign each member's slab from their Total Business Volume | Rule-3, Rule-7 |
 | M3.3 | Work out the differential reward against each direct child | Rule-8, Rule-9 |
 | M3.4 | Assess royalty qualification and work out royalty where earned | Rule-10, Rule-11, Rule-25 |
-| M3.5 | Combine the two into Rewards, held in a separate record | Rule-12, Rule-13 |
-| M3.6 | Do all of the above immediately on every entry, updating only the affected chain | Rule-26 |
+| M3.5 | Work out the reward on the member's own Business Volume, at their own slab | Rule-46 |
+| M3.6 | Combine all three into Rewards, held in a separate record | Rule-12, Rule-13 |
+| M3.7 | Do all of the above immediately on every entry, updating only the affected chain | Rule-26 |
 
 ### M4 — Search & Structure Visualisation
 
@@ -246,6 +247,7 @@ This section describes screen *content* — what each screen shows and does. For
 - **Search results:** list of matching members with name, ID, **phone**, TBV, slab, status pill. Empty query → no results shown, not an error, not "all members" (V4.1). Matching follows Rule-44 — name substring, ID digits, or phone digits with a four-digit floor.
 - **Month switcher (only when more than one month is outstanding):** a compact month control in the stat row, defaulting to the oldest outstanding month. It is **not rendered at all** in the ordinary case where a single month is in play. Selecting a month changes which period's figures the screen shows.
 - **Members-by-slab card:** a horizontal bar per slab row, showing the count of members currently on that slab out of the total.
+- **Rewards-by-slab card (added 8 Aug 2026, CR-5):** a second horizontal bar chart, directly below the members-by-slab card, one bar per slab row, showing the total Rewards accumulated by members currently on that slab, out of the total Rewards across all members — same visual pattern as the members-by-slab card, current live period only.
 - Selecting a search result opens **Member Detail**.
 
 ### 5.2 Member Detail
@@ -255,7 +257,7 @@ This section describes screen *content* — what each screen shows and does. For
 - **Header:** member name, ID (monospace), status pill (Active/Inactive, colour + label).
 - **Contact block:** phone, address, email if present, introducer name/ID, joining date, consent date.
 - **Figures block:** own Business Volume, Total Business Volume, slab %, leg count (direct children).
-- **Reward detail (RQ-13's confirmed layout):** one row per direct child — name, ID, their Total Business Volume, their slab, this member's slab, the difference, the resulting differential amount — then royalty lines (if qualifying), then the Rewards total.
+- **Reward detail (RQ-13's confirmed layout, amended 8 Aug 2026 by CR-4):** an own-Business-Volume reward line first (this member's own Business Volume, their own slab, the resulting amount — Rule-46), then one row per direct child — name, ID, their Total Business Volume, their slab, this member's slab, the difference, the resulting differential amount — then royalty lines (if qualifying), then the Rewards total.
 - **Direct children list:** name, ID, own Business Volume, slab, status — one depth only (FR-3).
 - Action to open the **Structure** chart rooted at this member.
 - Action to record a Business Volume entry for this member — always available; it opens the entry screen, which names the month it will record into (Rule-36 as amended). It is never disabled by an outstanding month.
@@ -423,9 +425,10 @@ The complete set of 49, organised by module. "On failure" states the exact behav
 |---|---|---|
 | V4.1 | A search returning nothing says so clearly, not an empty screen | |
 | V4.2 | Member detail and home search show the direct team only, one level deep | Unaffected by FR-10, which is a separate window, not this screen |
-| V4.3 | Reward detail = one line per direct child (name, number, their team figure, their slab, this member's slab, the difference, the amount), then royalty lines, then the total | Per RQ-13 |
+| V4.3 | Reward detail = an own-Business-Volume reward line first, then one line per direct child (name, number, their team figure, their slab, this member's slab, the difference, the amount), then royalty lines, then the total | Per RQ-13, amended 8 Aug 2026 by CR-4 |
 | V4.4 | Phone matching engages only at 4 digits or more; below that only name and ID are matched | Not an error — the query simply does not match on phone (Rule-44) |
 | V4.5 | The full hierarchy view is gated behind a confirmation naming the member count above 60 descendants | Cancelling opens nothing at all (Rule-45) |
+| V4.6 | Home shows a rewards-by-slab chart alongside the members-by-slab chart, same visual pattern, current live period only | Rule-46, CR-5 |
 
 ### M5 — Monthly close
 

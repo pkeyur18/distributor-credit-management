@@ -220,6 +220,8 @@ Two further tiers exist below and above those two steps — not drift, but real 
 
 **The Half-Height Bar Rule.** Thin bar/track elements (the slab-distribution bar track and fill) round to half their own height, giving true pill end-caps at any thickness, rather than reusing `rounded.sm`/`rounded.lg`.
 
+**Reused, not duplicated (8 August 2026):** the Home "Rewards by slab" chart (CR-5) is the same bar-list/bar-row component as "Members by slab," reused verbatim — same track/fill/label shapes, just summing Rewards per slab bucket instead of counting members. No new chart component was introduced for it.
+
 ## Components
 
 ### Buttons
