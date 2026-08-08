@@ -18,7 +18,7 @@ No `package.json`, `Cargo.toml`, `tsconfig.json`, or `src-tauri/` tree exists in
 - **US-0.2** Wire up `rusqlite` with SQLCipher, implement the DDL from [05-data-model-specification.md](05-data-model-specification.md) (all 10 entities).
   - *Dependencies:* US-0.1.
   - *Acceptance criteria:*
-    - Given a fresh install with no database file, When the app launches, Then a new encrypted SQLite file is created with all 10 tables and the seed data (7 default slab rows, 13 default settings) from Appendix B.
+    - Given a fresh install with no database file, When the app launches, Then a new encrypted SQLite file is created with all 10 tables and the seed data (7 default slab rows, 16 default settings) from Appendix B.
     - Given the database file, When opened with a plain (non-SQLCipher-aware) SQLite client, Then the contents are unreadable.
   - *Related requirements:* ADR-003, all Rule-## via the entities they touch.
 

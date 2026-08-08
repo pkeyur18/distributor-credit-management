@@ -34,7 +34,7 @@ Three containers: **Presentation** (React/TS in WebView) → **Tauri IPC** (type
 
 Modules: M1 Member Directory, M2 Business Volume Entry, M3 Calculation Engine (no exposed commands — purely internal), M4 Member Detail & Chart, M5 Monthly Close, M6 Reports & Exports, M7 Settings, M8 Authentication, M9 Audit Log.
 
-Full detail: [05-data-model-specification.md](05-data-model-specification.md) (entities), [04-api-specification.md](04-api-specification.md) (32-command IPC surface).
+Full detail: [05-data-model-specification.md](05-data-model-specification.md) (entities), [04-api-specification.md](04-api-specification.md) (40-command IPC surface).
 
 ## 5. The Calculation Model — the project's core logic
 
@@ -54,17 +54,17 @@ Full rule text: [03-business-rules.md](03-business-rules.md).
 
 ## 6. Data Model Summary
 
-10 entities: `members` (the hierarchy, self-referencing via `introducer_member_id`; `phone` is unique **and** a search key since CR-1), `business_volume_entries` (append-only ledger; `period_month` derived from `entry_date`), `slab_table` (editable %-band config), `member_period_totals` (live cache — **any not-yet-closed period**, amended by CR-2; was "current open period only"), `periods` (**open/awaiting_close/closed** lifecycle — `ended_locked` renamed by CR-2), `monthly_snapshots` (permanent, **versioned** historical record — all yearly reporting reads this, never live values), `backups` (metadata, internal-retained-copy is the actual close-gate), `settings` (13 configurable items), `auth` (single-row credentials), `audit_log` (append-only who-changed-what).
+10 entities: `members` (the hierarchy, self-referencing via `introducer_member_id`; `phone` is unique **and** a search key since CR-1), `business_volume_entries` (append-only ledger; `period_month` derived from `entry_date`), `slab_table` (editable %-band config), `member_period_totals` (live cache — **any not-yet-closed period**, amended by CR-2; was "current open period only"), `periods` (**open/awaiting_close/closed** lifecycle — `ended_locked` renamed by CR-2), `monthly_snapshots` (permanent, **versioned** historical record — all yearly reporting reads this, never live values), `backups` (metadata, internal-retained-copy is the actual close-gate), `settings` (16 configurable items — 13 scheme settings plus 3 backup settings, Rule-43), `auth` (single-row credentials), `audit_log` (append-only who-changed-what).
 
 Full attribute-level detail: [05-data-model-specification.md](05-data-model-specification.md).
 
 ## 7. API Summary
 
-36 Tauri IPC commands, fully specified in [04-api-specification.md](04-api-specification.md). Four things worth knowing before you touch the surface:
+40 Tauri IPC commands, fully specified in [04-api-specification.md](04-api-specification.md). Four things worth knowing before you touch the surface:
 
 - **`reverse_entry` was dropped** — confirmed dead by the architect; `edit_entry` alone handles all corrections, including in closed months.
 - **M3 (the calculation engine) exposes one command, not none.** No command *triggers* a calculation — there is no recalculate button (Rule-26) — but `preview_settings_impact` (API-33) asks what the engine *would* produce, without committing, to back the settings pre-save warning. The frontend cannot compute this itself.
-- **Six commands run unauthenticated**, and the set is closed: `login`, `setup_first_run`, `use_recovery_code`, `check_data_readable`, `list_restore_points`, `restore_from_backup`. The last three back the data-recovery screen and are unauthenticated of necessity — the credential hashes live in the database that could not be opened. `restore_from_backup` is the only destructive one; it must verify the backup's checksum first.
+- **Seven commands run unauthenticated**, and the set is closed: `login`, `setup_first_run`, `use_recovery_code`, `check_data_readable`, `list_restore_points`, `restore_from_backup`, `restore_from_backup_file`. The last four back the data-recovery screen and whole-console restore, and are unauthenticated of necessity — the credential hashes live in the database that could not be opened, or the restore is bringing a database onto a machine with nothing set up yet. `restore_from_backup` and `restore_from_backup_file` are the only destructive ones; both must verify the backup's checksum first.
 - **No delete command exists for any entity**, by client requirement (Rule-42). Do not add one.
 
 ## 8. Authorization Summary

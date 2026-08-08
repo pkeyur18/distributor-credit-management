@@ -124,7 +124,7 @@ Raised by the client after the `documents/final/` set was approved. Recorded her
 
 ### NEW-2 / CR-1 — Phone number as a search key ✅ DESIGNED AND CLOSED 7 Aug 2026
 **Asked:** search by phone number as well as member ID and name, since a phone number is unique to a member.
-**Decided:** every search box in the console matches on phone. Digits-only comparison so formatting is irrelevant; the phone clause engages only at **four digits or more** so short queries do not sweep in unrelated members; results gain a **phone column**. One shared search function — behaviour must not differ between screens.
+**Decided:** every search box in the console matches on phone. Both sides are reduced to a canonical key (non-digits stripped, then a country prefix or trunk zero dropped) so formatting is irrelevant in either direction; the phone clause engages only at **four digits or more** so short queries do not sweep in unrelated members; results gain a **phone column**. One shared search function — behaviour must not differ between screens.
 **Lands as:** Rule-44, FR-1 (amended), M2.1/M4.6, V4.4, AC-40/AC-41, UN-29, US-M1.4 (amended), API-06 (amended). No schema change, no new command.
 
 ### NEW-3 / CR-2 — Entry into an ended-but-unclosed month ✅ DESIGNED AND CLOSED 7 Aug 2026

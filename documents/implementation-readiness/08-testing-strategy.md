@@ -48,9 +48,9 @@ These five scenarios, plus `client-requirements-validation.md`'s AC-1–AC-36 (�
 - Restore from backup (LOW-3): against a deliberately corrupted database file, confirm the app enters the recovery state rather than crashing; confirm a restore whose checksum fails is refused and leaves the corrupt file untouched; confirm a successful restore leaves the app at sign-in with the credential still required.
 
 ### API / contract tests — IPC command surface
-One test per command in [04-api-specification.md](04-api-specification.md) verifying: request/response shape, validation rules, authorization, and the documented error responses. Given there are 36 commands and no HTTP layer, these are Tauri command-invocation tests run against the Rust application container directly (no browser/network mocking needed).
+One test per command in [04-api-specification.md](04-api-specification.md) verifying: request/response shape, validation rules, authorization, and the documented error responses. Given there are 40 commands and no HTTP layer, these are Tauri command-invocation tests run against the Rust application container directly (no browser/network mocking needed).
 
-**Authorization is tested as a closed set, not per-command.** Exactly six commands may run unauthenticated — `login`, `setup_first_run`, `use_recovery_code`, `check_data_readable`, `list_restore_points`, `restore_from_backup`. The test asserts that list exactly: every other command must refuse without a session, and no seventh command may join the set without the test failing. That is the point — this is the assertion that catches an unauthenticated command being added by accident.
+**Authorization is tested as a closed set, not per-command.** Exactly seven commands may run unauthenticated — `login`, `setup_first_run`, `use_recovery_code`, `check_data_readable`, `list_restore_points`, `restore_from_backup`, `restore_from_backup_file`. The test asserts that list exactly: every other command must refuse without a session, and no eighth command may join the set without the test failing. That is the point — this is the assertion that catches an unauthenticated command being added by accident.
 
 ### E2E tests — Full user workflows, driven through the actual UI
 - First-run setup → root member creation → first Business Volume entry → visible Rewards on screen, no manual recalculation step anywhere (Rule-26).
@@ -70,7 +70,7 @@ One test per command in [04-api-specification.md](04-api-specification.md) verif
 - Lockout: exactly 5 failed attempts triggers lockout; countdown timing; attempts do not reset early.
 - Encryption at rest: confirm the raw `.sqlite` file is unreadable without the derived key (attempt to open with a plain SQLite client, expect failure).
 - Session key lifecycle: confirm the decryption key is not retrievable from process memory after `lock_session` (as far as testable without specialized memory-forensics tooling — at minimum, confirm re-authentication is required and cannot be bypassed by any command).
-- Filesystem capability allowlist: confirm the WebView cannot invoke any command outside the 36 documented ones (Tauri capability config test).
+- Filesystem capability allowlist: confirm the WebView cannot invoke any command outside the 40 documented ones (Tauri capability config test).
 - Pre-authentication surface: confirm `restore_from_backup` — the only destructive unauthenticated command — refuses a checksum mismatch, and that a restored database still requires the credential to open (restoring must not grant access to anything).
 
 ### Performance tests

@@ -281,7 +281,7 @@ Raised by the client after reviewing this approved set. All three change behavio
 | | |
 |---|---|
 | **Requested** | The home page should let the client search by phone number as well as by member ID and name, "since phone number is unique to member so it is easy to search member by mobile number" |
-| **Decided** | Every search box in the console accepts a phone number. Matching is on digits alone, so formatting is irrelevant, and the phone clause engages only from **four digits** upward so short queries do not sweep in unrelated members. Search results gain a **phone column** |
+| **Decided** | Every search box in the console accepts a phone number. Both sides are reduced to a canonical key (non-digits stripped, then a country prefix or trunk zero dropped) so a number is found however it was written, and the phone clause engages only from **four digits** upward so short queries do not sweep in unrelated members. Search results gain a **phone column** |
 | **Rule** | **Rule-44** (new). Also FR-1, M2.1, M4.6, V4.4, AC-40, AC-41, UN-29 |
 | **Notes** | Applied to *all* search boxes rather than only Home, because one shared search function serves them all — differing behaviour between screens would be a defect, not a feature. Phone is personal data under the DPDP Act 2023; it now appears on the landing screen, visible only to the single administrator role that already sees it on Member Detail and in exports. Recorded in [04](04-technical-architecture.md) §8.7 |
 | **Rejected alternative** | Home-only phone search, and "match on phone but do not display it". The client chose full scope and display |

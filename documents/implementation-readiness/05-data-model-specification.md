@@ -184,7 +184,7 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 
 ## Entity: `settings`
 
-**Purpose:** Key/value store for the 13 configurable items in Appendix B.
+**Purpose:** Key/value store for the 16 configurable items in Appendix B.
 **Lifecycle:** Seeded with defaults at first-run setup; updated freely via `update_settings`.
 **Retention:** Live configuration; changes are audited (`audit_log`), but the table itself holds only current values.
 **Security sensitivity:** Low.
