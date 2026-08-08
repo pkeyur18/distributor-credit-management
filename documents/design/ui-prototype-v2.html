@@ -400,12 +400,13 @@ td.cell-primary { font-weight: 550; }
 .bar-list { display: flex; flex-direction: column; gap: 9px; }
 .bar-row { display: grid; grid-template-columns: 46px 1fr 34px; align-items: center; gap: 10px; }
 .bar-row-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
-.bar-track { height: 9px; background: var(--bg); border-radius: 5px; overflow: hidden; }
+.bar-track { height: 9px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
 .bar-fill { height: 100%; width: 100%; background: var(--accent); border-radius: 5px; transform-origin: left; transition: transform 0.3s ease; }
 .bar-row-count { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
-.bar-list-lg { gap: 14px; }
-.bar-row-lg { grid-template-columns: 60px 1fr 90px; gap: 14px; }
-.bar-row-label-lg { font-size: 13.5px; font-weight: 650; color: var(--text); }
+.bar-top-badge { font-size: 10px; font-weight: 700; letter-spacing: .03em; color: var(--accent); margin-left: 6px; }
+.bar-list-lg { display: grid; grid-template-columns: minmax(60px, auto) 1fr 90px; align-items: center; gap: 14px; }
+.bar-row-lg { display: contents; }
+.bar-row-label-lg { font-size: 13.5px; font-weight: 650; color: var(--text); white-space: nowrap; }
 .bar-track-lg { height: 16px; border-radius: 8px; }
 .bar-track-lg .bar-fill { border-radius: 8px; }
 .bar-row-count-lg { font-size: 13.5px; font-weight: 650; color: var(--text); }
@@ -537,6 +538,7 @@ function fmt2(n) { return (Math.round((n + Number.EPSILON) * 100) / 100).toFixed
 function fmtInt(n) { return Math.round(n).toLocaleString('en-IN'); }
 function pct(n) { return fmt2(n) + '%'; }
 function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+function slabTint(i, n) { const p = n > 1 ? Math.round(28 + (i / (n - 1)) * 72) : 100; return 'color-mix(in oklch, var(--accent) ' + p + '%, var(--bg) ' + (100 - p) + '%)'; }
 
 function mulberry32(seed) {
   return function () {
@@ -1727,15 +1729,17 @@ VIEWS.home = function () {
   const buckets = sortedSlabTable().map(function (row) { return { pct: row.pct, count: MEMBERS.filter(function (m) { return liveRewards().get(m.id).ownSlab === row.pct; }).length }; });
   const maxCount = Math.max.apply(null, buckets.map(function (b) { return b.count; }).concat([1]));
   const totalMembers = MEMBERS.length;
-  const barsHtml = buckets.map(function (b) {
-    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="transform:scaleX(' + (maxCount ? b.count / maxCount : 0) + ')"></div></div><div class="bar-row-count bar-row-count-lg">' + b.count + '<span class="muted" style="font-weight:400"> / ' + totalMembers + '</span></div></div>';
+  const barsHtml = buckets.map(function (b, idx) {
+    const topBadge = idx === buckets.length - 1 ? '<span class="bar-top-badge">TOP</span>' : '';
+    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + topBadge + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="transform:scaleX(' + (maxCount ? b.count / maxCount : 0) + ');background:' + slabTint(idx, buckets.length) + '"></div></div><div class="bar-row-count bar-row-count-lg">' + b.count + '</div></div>';
   }).join('');
   // CR-5 (8 Aug 2026): second chart, same bar-list pattern, summing Rewards per slab instead of counting members.
   const rewardBuckets = sortedSlabTable().map(function (row) { return { pct: row.pct, total: MEMBERS.reduce(function (sum, m) { const r = liveRewards().get(m.id); return r.ownSlab === row.pct ? sum + r.total : sum; }, 0) }; });
   const maxRewardBucket = Math.max.apply(null, rewardBuckets.map(function (b) { return b.total; }).concat([1]));
   const totalRewards = rewardBuckets.reduce(function (sum, b) { return sum + b.total; }, 0);
-  const rewardBarsHtml = rewardBuckets.map(function (b) {
-    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="transform:scaleX(' + (maxRewardBucket ? b.total / maxRewardBucket : 0) + ')"></div></div><div class="bar-row-count bar-row-count-lg">' + fmt2(b.total) + '<span class="muted" style="font-weight:400"> / ' + fmt2(totalRewards) + '</span></div></div>';
+  const rewardBarsHtml = rewardBuckets.map(function (b, idx) {
+    const topBadge = idx === rewardBuckets.length - 1 ? '<span class="bar-top-badge">TOP</span>' : '';
+    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + topBadge + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="transform:scaleX(' + (maxRewardBucket ? b.total / maxRewardBucket : 0) + ');background:' + slabTint(idx, rewardBuckets.length) + '"></div></div><div class="bar-row-count bar-row-count-lg">' + fmt2(b.total) + '</div></div>';
   }).join('');
   const content =
     '<div class="stat-row n3">' +
@@ -1745,8 +1749,10 @@ VIEWS.home = function () {
     '</div>' + monthSwitcherHtml() +
     '<div class="card"><div class="field" style="margin-bottom:0"><div class="search-input-wrap">' + ICON.search + '<input id="home-search" type="text" placeholder="Search by name, 6-digit member number or phone" oninput="P.homeSearchInput(this.value)"></div></div>' +
     '<div id="home-results" class="mt-3">' + homeResultsHtml('') + '</div></div>' +
-    '<div class="card mt-3"><div class="card-title">Members by slab</div><div class="card-sub" style="margin-bottom:20px">Current live figures across all ' + totalMembers + ' members</div><div class="bar-list bar-list-lg">' + barsHtml + '</div></div>' +
-    '<div class="card mt-3"><div class="card-title">Rewards by slab</div><div class="card-sub" style="margin-bottom:20px">Total Rewards accumulated this period, by slab</div><div class="bar-list bar-list-lg">' + rewardBarsHtml + '</div></div>';
+    '<div class="two-col mt-3" style="grid-template-columns:1fr 1fr">' +
+    '<div class="card"><div class="card-title">Members by slab</div><div class="card-sub" style="margin-bottom:20px">' + fmtInt(totalMembers) + ' members total, across ' + buckets.length + ' slabs</div><div class="bar-list bar-list-lg">' + barsHtml + '</div></div>' +
+    '<div class="card"><div class="card-title">Rewards by slab</div><div class="card-sub" style="margin-bottom:20px">' + fmt2(totalRewards) + ' total this period, across ' + rewardBuckets.length + ' slabs</div><div class="bar-list bar-list-lg">' + rewardBarsHtml + '</div></div>' +
+    '</div>';
   return shell(content, { title: 'Home', sub: 'Search any member, or scan today’s standing', actions: '<button class="btn btn-primary" onclick="P.openAddMember()">' + ICON.plus + ' Add member</button>' });
 };
 
