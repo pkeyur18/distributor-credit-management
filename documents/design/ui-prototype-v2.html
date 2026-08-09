@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Member Rewards Console — Prototype</title>
+<link rel="icon" type="image/png" href="../../assets/logo-icon.png">
 <style>
 /* ============================================================
    TOKENS — verbatim from documents/design/ui-theme.md
@@ -105,8 +106,8 @@ a:hover { text-decoration: underline; }
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; }
 .brand-mark {
-  width: 26px; height: 26px; border-radius: var(--radius-sm); background: var(--accent);
-  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 13px; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: var(--radius-sm); flex-shrink: 0;
+  object-fit: cover;
 }
 .brand-name { font-weight: 600; font-size: 13.5px; letter-spacing: -0.01em; }
 .brand-sub { font-size: 11px; color: var(--text-muted); }
@@ -290,6 +291,26 @@ td.cell-primary { font-weight: 550; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); }
 .modal-warn { background: var(--warning-weak); border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border)); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12.5px; margin-bottom: 14px; }
 .modal-danger-note { background: var(--danger-weak); border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border)); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12.5px; margin-bottom: 14px; }
+.modal-warn-row { display: flex; gap: 9px; align-items: flex-start; }
+.modal-warn-row svg { width: 15px; height: 15px; color: var(--warning); flex-shrink: 0; margin-top: 1px; }
+.modal-warn-text { color: var(--warning-text); }
+.modal-warn-text b { font-weight: 650; }
+
+/* Settings pre-save impact summary */
+.impact { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 14px; }
+.impact-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 9px 12px; font-size: 12.5px; }
+.impact-row + .impact-row { border-top: 1px solid var(--border); }
+.impact-label { color: var(--text-muted); }
+.impact-val { font-weight: 650; font-variant-numeric: tabular-nums; }
+.impact-val .was { color: var(--text-muted); font-weight: 400; }
+.impact-val .arrow { color: var(--text-muted); font-weight: 400; padding: 0 3px; }
+.impact-heading { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.045em; color: var(--text-muted); margin-bottom: 8px; }
+.impact-tbl { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.impact-tbl td { height: 34px; }
+.impact-more { font-size: 12px; color: var(--text-muted); padding: 8px 12px; background: var(--bg); border-top: 1px solid var(--border); }
+.slab-move { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.slab-move .to { font-weight: 650; }
+.slab-move .sep { color: var(--text-muted); }
 
 #toast-root { position: fixed; bottom: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
 .toast {
@@ -298,6 +319,7 @@ td.cell-primary { font-weight: 550; }
   animation: toast-in 0.16s ease;
 }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.toast svg { width: 15px; height: 15px; flex-shrink: 0; }
 .toast.success { background: var(--success); color: #fff; }
 .toast.danger { background: var(--danger); color: #fff; }
 
@@ -307,7 +329,8 @@ td.cell-primary { font-weight: 550; }
 .auth-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .auth-card { width: 100%; max-width: 380px; }
 .auth-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 28px; }
-.auth-brand .brand-mark { width: 40px; height: 40px; border-radius: 11px; font-size: 17px; }
+.auth-brand .brand-mark { width: 40px; height: 40px; border-radius: 11px; }
+.auth-hero-mark { display: block; width: 72px; height: 72px; border-radius: 16px; margin: 0 auto; object-fit: cover; }
 .auth-title { font-size: 18px; font-weight: 650; text-align: center; letter-spacing: -0.01em; }
 .auth-sub { font-size: 12.5px; color: var(--text-muted); text-align: center; margin-top: 5px; }
 .auth-body { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; margin-top: 20px; }
@@ -325,6 +348,16 @@ td.cell-primary { font-weight: 550; }
 .keypad button:hover { background: var(--accent-weak); border-color: var(--accent); }
 .keypad button:active { transform: scale(0.96); }
 .keypad button.empty { visibility: hidden; }
+
+.restore-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.restore-opt { display: flex; gap: 10px; align-items: flex-start; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; cursor: pointer; background: var(--surface); text-align: left; }
+.restore-opt:hover { background: var(--bg); }
+.restore-opt.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); background: var(--surface); }
+.restore-radio { width: 15px; height: 15px; border-radius: 999px; border: 1px solid var(--border); flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; }
+.restore-opt.sel .restore-radio { border-color: var(--accent); }
+.restore-opt.sel .restore-radio::after { content: ""; width: 7px; height: 7px; border-radius: 999px; background: var(--accent); }
+.restore-main { display: block; font-size: 13px; font-weight: 600; }
+.restore-sub { display: block; font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
 
 .lockout-box { text-align: center; padding: 10px 0 4px; }
 .lockout-count { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 10px 0; color: var(--danger); }
@@ -367,12 +400,13 @@ td.cell-primary { font-weight: 550; }
 .bar-list { display: flex; flex-direction: column; gap: 9px; }
 .bar-row { display: grid; grid-template-columns: 46px 1fr 34px; align-items: center; gap: 10px; }
 .bar-row-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
-.bar-track { height: 9px; background: var(--bg); border-radius: 5px; overflow: hidden; }
+.bar-track { height: 9px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
 .bar-fill { height: 100%; width: 100%; background: var(--accent); border-radius: 5px; transform-origin: left; transition: transform 0.3s ease; }
 .bar-row-count { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
-.bar-list-lg { gap: 14px; }
-.bar-row-lg { grid-template-columns: 60px 1fr 90px; gap: 14px; }
-.bar-row-label-lg { font-size: 13.5px; font-weight: 650; color: var(--text); }
+.bar-top-badge { font-size: 10px; font-weight: 700; letter-spacing: .03em; color: var(--accent); margin-left: 6px; }
+.bar-list-lg { display: grid; grid-template-columns: minmax(60px, auto) 1fr 90px; align-items: center; gap: 14px; }
+.bar-row-lg { display: contents; }
+.bar-row-label-lg { font-size: 13.5px; font-weight: 650; color: var(--text); white-space: nowrap; }
 .bar-track-lg { height: 16px; border-radius: 8px; }
 .bar-track-lg .bar-fill { border-radius: 8px; }
 .bar-row-count-lg { font-size: 13.5px; font-weight: 650; color: var(--text); }
@@ -380,31 +414,45 @@ td.cell-primary { font-weight: 550; }
 /* ============================================================
    STRUCTURE TREE
    ============================================================ */
-.tree-legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
-.tree-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
-.tree-wrap { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px 20px; min-height: 320px; }
+.tree-toolbar { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.tree-toolbar .search-box { flex: 1; max-width: 380px; }
+.tree-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow-x: auto; overflow-y: hidden; }
+/* max-content keeps every generation row inside a container at least as wide as itself — a centred
+   row that overflows its own container would push its first cards out of scrolling reach */
+.tree-canvas { position: relative; width: max-content; min-width: 100%; padding: 32px 20px 36px; min-height: 320px; transform-origin: 0 0; }
 .tree-connectors { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .tree-connectors line { stroke: var(--border); stroke-width: 1.5; }
 .tree-root-row { display: flex; justify-content: center; margin-bottom: 6px; }
-.tree-children-row { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; padding-top: 6px; }
-.tree-scroll { max-height: 65vh; overflow: auto; }
-.tree-wrap.tree-wrap-full { width: max-content; min-width: 100%; }
-.tree-subtree { display: flex; flex-direction: column; align-items: center; }
-.tree-generation { display: flex; justify-content: center; gap: 18px; flex-wrap: nowrap; padding-top: 36px; }
+.tree-children-row { display: flex; justify-content: center; gap: 18px; flex-wrap: nowrap; padding-top: 36px; }
+.tree-zoom { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px; background: var(--bg); }
+.tree-zoom button { border: none; background: none; height: 26px; min-width: 28px; padding: 0 8px; border-radius: 5px; cursor: pointer; color: var(--text-muted); font: inherit; font-size: 12.5px; font-weight: 550; }
+.tree-zoom button:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+.tree-zoom button:disabled { opacity: 0.4; cursor: not-allowed; }
+.tree-zoom .tree-zoom-level { min-width: 46px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 .tree-node {
   width: 172px; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-lg);
   padding: 12px 13px; cursor: pointer; transition: border-color .1s, transform .1s;
 }
 .tree-node:hover { border-color: var(--accent); transform: translateY(-1px); }
+.tree-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tree-node.root-node { border-color: var(--accent); background: var(--accent-weak); width: 190px; }
+.tree-node.open-node { border-color: var(--accent); }
+.tree-node.leaf-node { cursor: default; }
+.tree-node.leaf-node:hover { border-color: var(--border); transform: none; }
 .tree-node-name { font-size: 13px; font-weight: 650; margin-bottom: 2px; }
 .tree-node-id { font-size: 11px; color: var(--text-muted); }
 .tree-node-bv { display: flex; justify-content: space-between; align-items: baseline; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--border); }
 .tree-node-bv-label { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
 .tree-node-bv-val { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .tree-node-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.tree-node-legs { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 650; color: var(--accent); }
+.tree-node.leaf-node .tree-node-legs { color: var(--text-muted); font-weight: 400; }
+.tree-node-legs svg { width: 11px; height: 11px; transition: transform .12s; }
+.tree-node.open-node .tree-node-legs svg { transform: rotate(90deg); }
 .tree-advisory { font-size: 11.5px; color: var(--warning); background: var(--warning-weak); border-radius: var(--radius-sm); padding: 6px 9px; margin-top: 12px; text-align: center; }
+/* the canvas is width:max-content, so unconstrained prose inside it would set the chart's width
+   on its own and make a narrow chart scroll sideways for no reason — cap it instead */
+.tree-canvas .tree-advisory, .tree-canvas .empty-state { max-width: 460px; margin-left: auto; margin-right: auto; }
 
 /* ============================================================
    WIZARD (monthly close)
@@ -417,6 +465,7 @@ td.cell-primary { font-weight: 550; }
 .wizard-icon-wrap { width: 52px; height: 52px; border-radius: 14px; background: var(--accent-weak); color: var(--accent); display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; }
 .wizard-icon-wrap svg { width: 24px; height: 24px; }
 .wizard-icon-wrap.success { background: var(--success-weak); color: var(--success); }
+.wizard-icon-wrap.danger { background: var(--danger-weak); color: var(--danger); }
 .wizard-title { font-size: 19px; font-weight: 650; text-align: center; letter-spacing: -0.01em; }
 .wizard-sub { font-size: 13px; color: var(--text-muted); text-align: center; margin-top: 6px; max-width: 420px; margin-inline: auto; }
 .wizard-body { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px; margin-top: 22px; }
@@ -466,6 +515,7 @@ const ICON = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>',
   moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
@@ -488,6 +538,7 @@ function fmt2(n) { return (Math.round((n + Number.EPSILON) * 100) / 100).toFixed
 function fmtInt(n) { return Math.round(n).toLocaleString('en-IN'); }
 function pct(n) { return fmt2(n) + '%'; }
 function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+function slabTint(i, n) { const p = n > 1 ? Math.round(28 + (i / (n - 1)) * 72) : 100; return 'color-mix(in oklch, var(--accent) ' + p + '%, var(--bg) ' + (100 - p) + '%)'; }
 
 function mulberry32(seed) {
   return function () {
@@ -533,7 +584,18 @@ const usedIds = new Set();
 const usedPhones = new Set();
 
 function newId() { let id; do { id = randInt(100001, 999999); } while (usedIds.has(id)); usedIds.add(id); return id; }
-function newPhone() { let p; do { p = String(pick([6,7,8,9])) + String(randInt(100000000, 999999999)); } while (usedPhones.has(p)); usedPhones.add(p); return p; }
+// Formats deliberately vary — the admin types a number however they were given it, so Rule-44's matching
+// normalises both sides to digits rather than assuming one stored shape.
+const PHONE_FORMATS = [
+  function (d) { return d; },
+  function (d) { return d.slice(0, 5) + ' ' + d.slice(5); },
+  function (d) { return '+91 ' + d.slice(0, 5) + ' ' + d.slice(5); },
+  function (d) { return '0' + d; }
+];
+function newPhone() {
+  let d; do { d = String(pick([6,7,8,9])) + String(randInt(100000000, 999999999)); } while (usedPhones.has(d));
+  usedPhones.add(d); return pick(PHONE_FORMATS)(d);
+}
 function randomName() { return pick(FIRST_NAMES) + ' ' + pick(LAST_NAMES); }
 function emailFor(name) { return name.toLowerCase().replace(/[^a-z ]/g, '').trim().replace(/\s+/g, '.') + randInt(10, 98) + '@mailbox.in'; }
 function randomJoinDate(level) {
@@ -560,12 +622,13 @@ function makeMember(opts) {
 }
 function addMember(m) { MEMBERS.push(m); membersById.set(m.id, m); if (m.refId) { if (!childrenOf.has(m.refId)) childrenOf.set(m.refId, []); childrenOf.get(m.refId).push(m.id); } return m; }
 function directChildren(id) { return (childrenOf.get(id) || []).map(function (cid) { return membersById.get(cid); }); }
-function totalDescendants(id) {
-  let count = 0;
-  (function walk(pid) { directChildren(pid).forEach(function (c) { count++; walk(c.id); }); })(id);
-  return count;
-}
 function levelOf(id) { return membersById.get(id).level; }
+function ancestorTrail(id) {
+  const out = [];
+  let walk = membersById.get(id);
+  while (walk) { out.unshift(walk); walk = walk.refId ? membersById.get(walk.refId) : null; }
+  return out;
+}
 
 let ROOT_ID, LEGA_ID, LEGB_ID, LEGC_ID, LEGD_ID;
 
@@ -678,7 +741,7 @@ function rollupTBV(bvMap) {
 }
 
 function computeRewards(bvMap, tbvMap) {
-  const rewards = new Map(); // id -> { differential, royalty, total, breakdown: [{childId, childSlab, diffPct, tbv, amount}], qualifying, royaltyChildren }
+  const rewards = new Map(); // id -> { differential, royalty, ownReward, total, breakdown: [{childId, childSlab, diffPct, tbv, amount}], qualifying, royaltyChildren }
   const top = topSlabPct();
   MEMBERS.forEach(function (m) {
     const ownSlab = slabFor(tbvMap.get(m.id) || 0);
@@ -700,12 +763,69 @@ function computeRewards(bvMap, tbvMap) {
     }
     differential = Math.round(differential * 100) / 100;
     royalty = Math.round(royalty * 100) / 100;
+    // Rule-46 (CR-4, 8 Aug 2026): own Business Volume also earns, at the member's own slab.
+    const ownReward = Math.round(ownSlab / 100 * (bvMap.get(m.id) || 0) * 100) / 100;
     rewards.set(m.id, {
-      ownSlab: ownSlab, differential: differential, royalty: royalty, total: Math.round((differential + royalty) * 100) / 100,
+      ownSlab: ownSlab, differential: differential, royalty: royalty, ownReward: ownReward,
+      total: Math.round((differential + royalty + ownReward) * 100) / 100,
       breakdown: breakdown, qualifyingCount: qualifyingKids.length, childCount: kids.length, royaltyOn: royaltyOn,
     });
   });
   return rewards;
+}
+
+/* Dry run for the settings warning (RQ-18/V7.6): what would the open month look like
+   under different slab/royalty settings? Total Business Volume cannot move — rollupTBV
+   reads only the business-volume map and the hierarchy — so the live TBV is reused and
+   only computeRewards is re-run. slabFor/topSlabPct/computeRewards read SETTINGS
+   directly, so the candidate values are swapped in and restored in a finally block:
+   a throw must never leave the live settings holding uncommitted values. */
+function previewRecalcImpact(nextPartial) {
+  const beforeRewards = liveRewards();
+  let beforeTotal = 0, beforeRoyaltyCount = 0;
+  const beforeSlab = new Map();
+  MEMBERS.forEach(function (m) {
+    const r = beforeRewards.get(m.id);
+    beforeTotal += r.total;
+    beforeSlab.set(m.id, r.ownSlab);
+    if (r.royalty > 0) beforeRoyaltyCount++;
+  });
+
+  const saved = { slabTable: SETTINGS.slabTable, royaltyMinChildren: SETTINGS.royaltyMinChildren, royaltyRatePct: SETTINGS.royaltyRatePct };
+  let after;
+  try {
+    if (nextPartial.slabTable) SETTINGS.slabTable = nextPartial.slabTable;
+    if (nextPartial.royaltyMinChildren != null) SETTINGS.royaltyMinChildren = nextPartial.royaltyMinChildren;
+    if (nextPartial.royaltyRatePct != null) SETTINGS.royaltyRatePct = nextPartial.royaltyRatePct;
+    after = computeRewards(liveBV(), liveTBV());
+  } finally {
+    SETTINGS.slabTable = saved.slabTable;
+    SETTINGS.royaltyMinChildren = saved.royaltyMinChildren;
+    SETTINGS.royaltyRatePct = saved.royaltyRatePct;
+  }
+
+  let afterTotal = 0, afterRoyaltyCount = 0;
+  const slabMoves = [], royaltyMoves = [];
+  MEMBERS.forEach(function (m) {
+    const a = after.get(m.id);
+    afterTotal += a.total;
+    if (a.royalty > 0) afterRoyaltyCount++;
+    const fromSlab = beforeSlab.get(m.id);
+    if (fromSlab !== a.ownSlab) slabMoves.push({ id: m.id, name: m.name, from: fromSlab, to: a.ownSlab });
+    const wasEarning = beforeRewards.get(m.id).royalty > 0;
+    if (wasEarning !== (a.royalty > 0)) royaltyMoves.push({ id: m.id, name: m.name, starts: a.royalty > 0 });
+  });
+  slabMoves.sort(function (x, y) { return Math.abs(y.to - y.from) - Math.abs(x.to - x.from) || x.name.localeCompare(y.name); });
+  royaltyMoves.sort(function (x, y) { return (x.starts === y.starts) ? x.name.localeCompare(y.name) : (x.starts ? -1 : 1); });
+
+  return {
+    beforeTotal: Math.round(beforeTotal * 100) / 100,
+    afterTotal: Math.round(afterTotal * 100) / 100,
+    beforeRoyaltyCount: beforeRoyaltyCount,
+    afterRoyaltyCount: afterRoyaltyCount,
+    slabMoves: slabMoves,
+    royaltyMoves: royaltyMoves,
+  };
 }
 
 const CRC_TABLE = (function () {
@@ -728,20 +848,48 @@ function crc32(str) {
 // Live (current, uncommitted) state — a real per-entry ledger, not a single overwritable figure
 let entrySeq = 1;
 function newEntryId() { return entrySeq++; }
-let LIVE_ENTRIES = new Map(); // memberId -> [{id, date (ISO), amount}] — seeded further down, once the active period is known
-let LIVE_BV, LIVE_TBV, LIVE_REWARDS;
-function recalcLive() {
-  LIVE_BV = new Map(MEMBERS.map(function (m) {
-    const entries = LIVE_ENTRIES.get(m.id) || [];
+// Rule-36 (amended) — a month that has ended but is not closed still holds live figures and still accepts
+// entries, so more than one period can be live at once. Everything below is keyed by ym for that reason.
+// APP.viewYm decides which one the screens are showing; it defaults to the oldest still open for entry.
+const LIVE_BY_YM = {}; // ym -> { entries: Map(memberId -> [{id, date, amount}]), bv, tbv, rewards }
+function liveFor(ym) {
+  if (!LIVE_BY_YM[ym]) { LIVE_BY_YM[ym] = { entries: new Map(), bv: new Map(), tbv: new Map(), rewards: new Map() }; recalcLive(ym); }
+  return LIVE_BY_YM[ym];
+}
+function viewYm() {
+  const yms = entryYms();
+  return (APP && APP.viewYm && yms.indexOf(APP.viewYm) !== -1) ? APP.viewYm : yms[0];
+}
+// Rendered only when there is genuinely a choice to make — in the ordinary single-month case no control
+// appears at all, which is the client's explicit preference (CR-2).
+function monthSwitcherHtml() {
+  const yms = entryYms();
+  if (yms.length < 2) return '';
+  return '<div class="card mt-3" style="display:flex;align-items:center;gap:10px;padding:12px 14px">' +
+    '<span class="muted" style="font-size:12.5px">Showing figures for</span>' +
+    '<select style="width:auto;height:30px" onchange="P.setViewYm(this.value)">' +
+    yms.map(function (y) { return '<option value="' + y + '"' + (y === viewYm() ? ' selected' : '') + '>' + esc(ymLabel(y)) + '</option>'; }).join('') +
+    '</select>' +
+    '<span class="muted" style="font-size:12px">' + yms.length + ' months are open for entry until the oldest is closed.</span></div>';
+}
+function setViewYm(ym) { APP.viewYm = ym; render(); }
+function liveEntries(ym) { return liveFor(ym || viewYm()).entries; }
+function liveBV(ym) { return liveFor(ym || viewYm()).bv; }
+function liveTBV(ym) { return liveFor(ym || viewYm()).tbv; }
+function liveRewards(ym) { return liveFor(ym || viewYm()).rewards; }
+function recalcLive(ym) {
+  const L = LIVE_BY_YM[ym || viewYm()];
+  L.bv = new Map(MEMBERS.map(function (m) {
+    const entries = L.entries.get(m.id) || [];
     const sum = entries.reduce(function (s, e) { return s + e.amount; }, 0);
     return [m.id, Math.round(sum * 100) / 100];
   }));
-  LIVE_TBV = rollupTBV(LIVE_BV);
-  LIVE_REWARDS = computeRewards(LIVE_BV, LIVE_TBV);
+  L.tbv = rollupTBV(L.bv);
+  L.rewards = computeRewards(L.bv, L.tbv);
 }
-function allLiveEntriesFlat() {
+function allLiveEntriesFlat(ym) {
   const out = [];
-  LIVE_ENTRIES.forEach(function (list, memberId) { list.forEach(function (e) { out.push({ memberId: memberId, id: e.id, date: e.date, amount: e.amount }); }); });
+  liveEntries(ym).forEach(function (list, memberId) { list.forEach(function (e) { out.push({ memberId: memberId, id: e.id, date: e.date, amount: e.amount }); }); });
   out.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id; });
   return out;
 }
@@ -764,6 +912,8 @@ function allLiveEntriesFlat() {
   const rew = computeRewards(bv, tbv);
   console.assert(rew.get(M).differential === fmtDiffCheck(4, 2, 150), 'self-check: mid differential');
   console.assert(rew.get(T).differential === fmtDiffCheck(6, 4, 450), 'self-check: top differential');
+  console.assert(rew.get(M).ownReward === fmtDiffCheck(4, 0, 300) && rew.get(M).ownReward === 12, 'self-check: mid own-BV reward (Rule-46)');
+  console.assert(rew.get(T).ownReward === fmtDiffCheck(6, 0, 2000) && rew.get(T).ownReward === 120, 'self-check: top own-BV reward (Rule-46)');
   function fmtDiffCheck(a, b, base) { return Math.round((a - b) / 100 * base * 100) / 100; }
   childrenOf = savedChildren; MEMBERS = savedMembers; membersById = savedById;
   console.assert(crc32('123456789') === 0xCBF43926, 'self-check: CRC32 table');
@@ -816,17 +966,38 @@ function outstandingYms() {
   while (ym < CURRENT_YM) { out.push(ym); ym = ymAdd(ym, 1); }
   return out;
 }
-function isRecordingLocked() { return outstandingYms().length > 0; }
 function oldestOutstandingYm() { const o = outstandingYms(); return o.length ? o[0] : null; }
+// Rule-36 (amended) — every month that has ended but is not closed accepts entries. The current month
+// joins them only once nothing older is outstanding. There is no state in which nothing can be recorded.
+function entryYms() { const o = outstandingYms(); return o.length ? o : [CURRENT_YM]; }
+function activeYm() { return entryYms()[0]; }
+function currentMonthBlockedBy() { const o = outstandingYms(); return o.length ? o[0] : null; }
 function latestSnapshot(ym) { const v = SNAPSHOTS[ym]; return v ? v[v.length - 1] : null; }
 function closedYms() { return Object.keys(SNAPSHOTS).sort(); }
 
 // Seed live entries now that the active period (oldest outstanding, or current if caught up) is known
-const SEED_YM = isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM;
+const SEED_YM = activeYm();
 MEMBERS.forEach(function (m) {
-  if (m.bv > 0) LIVE_ENTRIES.set(m.id, [{ id: newEntryId(), date: SEED_YM + '-0' + randInt(1, 5), amount: m.bv }]);
+  if (m.bv > 0) liveEntries(SEED_YM).set(m.id, [{ id: newEntryId(), date: SEED_YM + '-0' + randInt(1, 5), amount: m.bv }]);
 });
-recalcLive();
+recalcLive(SEED_YM);
+
+// self-check: Rule-36's entry matrix, and Rule-44's matching. These fail loudly if the superseded
+// "lock everything once a month ends" behaviour is ever reintroduced.
+(function periodSelfCheck() {
+  const out = outstandingYms();
+  const recordable = entryYms();
+  console.assert(recordable.length > 0, 'self-check: some month is always recordable (Rule-36 amended)');
+  out.forEach(function (ym) { console.assert(recordable.indexOf(ym) !== -1, 'self-check: outstanding month ' + ym + ' accepts entries'); });
+  console.assert(out.length === 0 ? recordable.indexOf(CURRENT_YM) !== -1 : recordable.indexOf(CURRENT_YM) === -1,
+    'self-check: current month is recordable only when nothing older is outstanding');
+  closedYms().forEach(function (ym) { console.assert(recordable.indexOf(ym) === -1, 'self-check: closed month ' + ym + ' is not recordable'); });
+  const b = entryDateBounds(activeYm());
+  console.assert(b.min.slice(0, 7) === activeYm() && b.max.slice(0, 7) === activeYm(), 'self-check: entry dates are bounded to the recording month');
+  console.assert(phoneKey('+91 98765 43210') === '9876543210' && phoneKey('098765 43210') === '9876543210' &&
+    phoneKey('9876543210') === '9876543210', 'self-check: phone normalisation (Rule-44)');
+  console.log('[prototype] recording into ' + ymLabel(activeYm()) + '; ' + recordable.length + ' month(s) open for entry');
+})();
 
 /* ============================================================
    XLSX WRITER — minimal, real, uncompressed-ZIP OOXML (no deps)
@@ -948,7 +1119,8 @@ function pushAudit(entry) { AUDIT_LOG.unshift(Object.assign({ ts: isoToday(0) + 
    APP STATE
    ============================================================ */
 let APP = {
-  authPhase: 'setup',            // 'setup' | 'login' | 'locked' | 'app'
+  authPhase: 'setup',            // 'setup' | 'login' | 'locked' | 'db-error' | 'restore' | 'app'
+  dbRecovery: { selected: null },// restore point chosen on the data-recovery screen
   credentials: null,             // { pin, password, recoveryCode }
   failedAttempts: 0,
   lockoutUntil: 0,
@@ -956,6 +1128,17 @@ let APP = {
   pinBuffer: '',
   recovery: { step: 0, code: '', codeError: '', newMode: 'pin', pin: '', password: '', recoveryCode: '', confirmed: false },
   setupDraft: { step: 0, mode: 'pin', pin: '', password: '', recoveryCode: '', confirmed: false },
+  consoleBackup: {                // whole-console backup & restore (RQ-23) — separate from the per-month backups above
+    schedule: 'weekly',           // 'off' | 'daily' | 'weekly' | 'monthly'
+    retention: 10,
+    lastAt: '07 Aug 2026, 9:14 AM',
+    backups: [
+      { id: 'cb-3', label: 'Today, 9:14 AM', sub: 'Scheduled — weekly', kind: 'scheduled' },
+      { id: 'cb-2', label: '3 Aug 2026, 6:02 PM', sub: 'Manual', kind: 'manual' },
+      { id: 'cb-1', label: '27 Jul 2026, 8:47 AM', sub: 'Scheduled — weekly', kind: 'scheduled' },
+    ],
+  },
+  restoreConfirm: { active: false, source: null, targetId: null, checked: false }, // 'settings' | 'setup' | 'db-recovery'
   route: 'home',
   params: {},
   navStack: [],
@@ -965,8 +1148,10 @@ let APP = {
   lockedBeforeModal: null,
   memberEntriesForId: null, memberEntriesPage: 0, memberEntriesPageSize: 10,
   correctionEntriesForKey: null, correctionEntriesPage: 0, correctionEntriesPageSize: 10,
-  structureFullTree: false,      // persists across navigation by design — not reset per member
-  structureFullTreeConfirmedId: null, // re-gates per member so a huge subtree always needs one explicit confirm
+  structureOpenPath: [],         // member ids from the chart's root member down to the deepest open one — the whole state of the structure chart
+  structureZoom: 1,              // chart scale, clamped to ZOOM_MIN..ZOOM_MAX
+  viewYm: null,                  // which not-yet-closed month the figure screens show; null = the oldest open for entry
+  entryYm: null,                 // which month the entry form writes into; null = the same
 };
 let toastSeq = 0;
 
@@ -993,7 +1178,9 @@ function openModal(innerHtml, opts) {
   const wrap = document.createElement('div');
   wrap.className = 'modal-backdrop';
   wrap.id = 'active-modal';
-  wrap.innerHTML = '<div class="modal' + (opts.wide ? ' wide' : '') + '">' + innerHtml + '</div>';
+  wrap.innerHTML = '<div class="modal' + (opts.wide ? ' wide' : '') + '" role="dialog" aria-modal="true"' +
+    (opts.labelledBy ? ' aria-labelledby="' + opts.labelledBy + '"' : '') + '>' + innerHtml + '</div>';
+  wrap.dataset.dismissable = opts.dismissable === false ? 'false' : 'true';
   wrap.addEventListener('mousedown', function (e) { if (e.target === wrap && opts.dismissable !== false) closeModal(); });
   document.body.appendChild(wrap);
   if (opts.autofocus !== false) {
@@ -1002,6 +1189,14 @@ function openModal(innerHtml, opts) {
   }
 }
 function closeModal() { const m = document.getElementById('active-modal'); if (m) m.remove(); }
+
+/* Escape closes any modal that could already be dismissed by clicking the backdrop.
+   Modals opened with dismissable:false (add/edit member) deliberately stay put. */
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  const m = document.getElementById('active-modal');
+  if (m && m.dataset.dismissable !== 'false') closeModal();
+});
 
 function confirmAction(opts) {
   const btnClass = opts.danger ? 'btn-danger' : 'btn-primary';
@@ -1014,6 +1209,74 @@ function confirmAction(opts) {
     '</div>', { dismissable: true }
   );
   document.getElementById('confirm-modal-btn').addEventListener('click', function () { closeModal(); opts.onConfirm(); });
+  const cancelBtn = document.querySelector('#active-modal .btn-secondary');
+  if (cancelBtn) cancelBtn.focus();
+}
+
+/* Pre-save warning for settings that re-work the open month (RQ-18/V7.6).
+   Shows what actually moves before anything is committed; cancelling changes nothing. */
+const IMPACT_ROWS_SHOWN = 4;
+function confirmSettingsRecalc(opts) {
+  const ym = viewYm();
+  const monthName = ymLabel(ym);
+  const im = opts.impact;
+  const movers = opts.kind === 'royalty' ? im.royaltyMoves : im.slabMoves;
+  const rewardsChanged = im.beforeTotal !== im.afterTotal;
+
+  let impactRows =
+    '<div class="impact-row"><span class="impact-label">Rewards this month</span>' +
+    '<span class="impact-val num">' + (rewardsChanged
+      ? '<span class="was">' + fmt2(im.beforeTotal) + '</span><span class="arrow">→</span>' + fmt2(im.afterTotal)
+      : fmt2(im.afterTotal) + ' <span class="was">unchanged</span>') +
+    '</span></div>';
+  if (opts.kind === 'royalty') {
+    impactRows += '<div class="impact-row"><span class="impact-label">Members earning royalty</span>' +
+      '<span class="impact-val num">' + (im.beforeRoyaltyCount !== im.afterRoyaltyCount
+        ? '<span class="was">' + fmtInt(im.beforeRoyaltyCount) + '</span><span class="arrow">→</span>' + fmtInt(im.afterRoyaltyCount)
+        : fmtInt(im.afterRoyaltyCount) + ' <span class="was">unchanged</span>') +
+      '</span></div>';
+  }
+
+  let listBlock = '';
+  if (movers.length) {
+    const shown = movers.slice(0, IMPACT_ROWS_SHOWN).map(function (mv) {
+      const change = opts.kind === 'royalty'
+        ? '<span class="slab-move">' + (mv.starts ? '<span class="to">Starts</span>' : 'Stops') + '</span>'
+        : '<span class="slab-move">' + mv.from + '% <span class="sep">→</span> <span class="to">' + mv.to + '%</span></span>';
+      return '<tr><td class="cell-primary">' + esc(mv.name) + '</td><td class="mono">' + mv.id + '</td><td class="num">' + change + '</td></tr>';
+    }).join('');
+    const heading = opts.kind === 'royalty'
+      ? fmtInt(movers.length) + (movers.length === 1 ? ' member changes royalty' : ' members change royalty')
+      : fmtInt(movers.length) + (movers.length === 1 ? ' member changes slab' : ' members change slab');
+    listBlock = '<div class="impact-heading">' + heading + '</div>' +
+      '<div class="impact-tbl"><table><thead><tr><th>Member</th><th>Number</th><th class="num">' +
+      (opts.kind === 'royalty' ? 'Royalty' : 'Slab') + '</th></tr></thead><tbody>' + shown + '</tbody></table>' +
+      (movers.length > IMPACT_ROWS_SHOWN ? '<div class="impact-more">and ' + fmtInt(movers.length - IMPACT_ROWS_SHOWN) + ' more</div>' : '') +
+      '</div>';
+  } else if (!rewardsChanged) {
+    listBlock = '<p class="hint">No member’s figures change under these settings.</p>';
+  } else {
+    listBlock = '<p class="hint">No member changes ' + (opts.kind === 'royalty' ? 'royalty' : 'slab') + ' — only the amounts earned move.</p>';
+  }
+
+  openModal(
+    '<div class="modal-header"><h2 id="recalc-modal-title">' + esc(opts.title) + '</h2>' +
+    '<button class="modal-close" onclick="P.closeModal()" aria-label="Close without saving">✕</button></div>' +
+    '<div class="modal-body">' +
+    '<div class="modal-warn"><div class="modal-warn-row">' +
+    ICON.alert +
+    '<span class="modal-warn-text"><b>' + esc(monthName) + ' is re-worked as soon as you save.</b> Closed months are never affected — their permanent records stay exactly as they are.</span>' +
+    '</div></div>' +
+    '<div class="impact">' + impactRows + '</div>' +
+    listBlock +
+    '</div>' +
+    '<div class="modal-footer">' +
+    '<button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button>' +
+    '<button class="btn btn-primary" id="recalc-confirm-btn">Save and re-work ' + esc(monthName.split(' ')[0]) + '</button>' +
+    '</div>',
+    { dismissable: true, autofocus: false, labelledBy: 'recalc-modal-title' }
+  );
+  document.getElementById('recalc-confirm-btn').addEventListener('click', function () { closeModal(); opts.onConfirm(); });
   const cancelBtn = document.querySelector('#active-modal .btn-secondary');
   if (cancelBtn) cancelBtn.focus();
 }
@@ -1068,7 +1331,7 @@ const NAV_ITEMS = [
   { view: 'audit', label: 'Audit log', icon: ICON.audit },
 ];
 function buildSidebar() {
-  let html = '<div class="brand"><div class="brand-mark">SP</div><div><div class="brand-name">Member Rewards Console</div><div class="brand-sub">Siddharth Patel</div></div></div>';
+  let html = '<div class="brand"><img class="brand-mark" src="../../assets/logo-icon.png" alt=""><div><div class="brand-name">Member Rewards Console</div><div class="brand-sub">Siddharth Patel</div></div></div>';
   html += '<nav class="sidebar-nav">';
   NAV_ITEMS.forEach(function (it) {
     if (it.group) { html += '<div class="nav-section-label">' + esc(it.group) + '</div>'; return; }
@@ -1085,13 +1348,14 @@ function buildSidebar() {
   return html;
 }
 function buildBanner() {
-  if (!isRecordingLocked()) return '';
   const oldest = oldestOutstandingYm();
+  if (!oldest) return '';
   const count = outstandingYms().length;
   return '<div class="banner"><div class="banner-text">' + ICON.alert.replace('<svg ', '<svg class="banner-icon" ') +
     '<span><strong>' + esc(ymLabel(oldest)) + '</strong> has ended and is awaiting close.' +
     (count > 1 ? ' ' + (count - 1) + ' more month' + (count > 2 ? 's are' : ' is') + ' outstanding after that.' : '') +
-    ' Volume entry is locked until it closes.</span></div>' +
+    ' You can still record entries dated in ' + esc(ymLabel(oldest)) + '. ' +
+    esc(ymLabel(CURRENT_YM)) + ' entries unlock once it closes.</span></div>' +
     '<button class="btn btn-primary btn-sm" onclick="P.startClose(\'' + oldest + '\')">Close ' + esc(ymLabel(oldest)) + '</button></div>';
 }
 function shell(contentHtml, head) {
@@ -1111,6 +1375,7 @@ function shell(contentHtml, head) {
    ============================================================ */
 function render() {
   const app = document.getElementById('app');
+  if (APP.authPhase === 'db-error' || APP.authPhase === 'restore') { app.innerHTML = renderDbRecovery(); return; }
   if (APP.authPhase === 'setup') { app.innerHTML = renderSetup(); return; }
   if (APP.authPhase === 'login') { app.innerHTML = renderLogin(); return; }
   if (APP.authPhase === 'locked') { app.innerHTML = renderLockedScreen(); return; }
@@ -1120,8 +1385,15 @@ function render() {
   afterRender();
 }
 function afterRender() {
-  if (APP.route === 'structure') drawTreeConnectors();
+  if (APP.route === 'structure') { drawTreeConnectors(); scrollTreeToOpenBranch(); }
   if (APP.route === 'settings') measureTopbarHeight();
+}
+// the chart scrolls sideways, so a branch opened at the far end of a wide row would otherwise land off-screen
+function scrollTreeToOpenBranch() {
+  const wrap = document.getElementById('tree-wrap');
+  const deepest = document.getElementById('tree-node-' + APP.structureOpenPath[APP.structureOpenPath.length - 1]);
+  if (!wrap || !deepest) return;
+  wrap.scrollLeft = deepest.offsetLeft * APP.structureZoom + (deepest.offsetWidth * APP.structureZoom - wrap.clientWidth) / 2;
 }
 window.addEventListener('resize', function () {
   if (APP.route === 'structure') drawTreeConnectors();
@@ -1132,10 +1404,13 @@ function measureTopbarHeight() {
   if (!topbar) return;
   document.documentElement.style.setProperty('--topbar-h', topbar.getBoundingClientRect().height + 'px');
 }
-function connectorLinesForParent(parentId, wrapRect) {
+function connectorLinesForParent(parentId, wrapRect, zoom) {
   const rootEl = document.getElementById('tree-node-' + parentId);
   const kids = directChildren(parentId);
   if (!rootEl || !kids.length) return '';
+  // every measurement here is post-transform screen pixels; the svg sits inside the scaled canvas,
+  // so coordinates are divided by the zoom on the way out and the few fixed offsets are scaled into it
+  const z = zoom || 1;
   const rootRect = rootEl.getBoundingClientRect();
   const rootX = rootRect.left + rootRect.width / 2 - wrapRect.left;
   const rootBottomY = rootRect.bottom - wrapRect.top;
@@ -1151,46 +1426,42 @@ function connectorLinesForParent(parentId, wrapRect) {
   rows.sort(function (a, b) { return a.top - b.top; });
   rows.forEach(function (row) {
     row.topY = row.top - wrapRect.top;
-    row.trunkY = row.topY - 14;
+    row.trunkY = row.topY - 14 * z;
     row.minX = Math.min.apply(null, row.xs);
     row.maxX = Math.max.apply(null, row.xs);
     row.centerX = (row.minX + row.maxX) / 2;
   });
 
-  const line = function (x1, y1, x2, y2) { return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '"></line>'; };
-  const CHANNEL_X = 10;
+  const line = function (x1, y1, x2, y2) { return '<line x1="' + (x1 / z) + '" y1="' + (y1 / z) + '" x2="' + (x2 / z) + '" y2="' + (y2 / z) + '"></line>'; };
+  const CHANNEL_X = 10 * z;
   let lines = '';
   rows.forEach(function (row, i) {
+    let barMin = row.minX, barMax = row.maxX;
     if (i === 0) {
       lines += line(rootX, rootBottomY, rootX, row.trunkY);
+      // the parent card is one of a centred row of siblings, so it can sit outside the span of its
+      // own legs — widen the trunk until it reaches the parent's stem
+      barMin = Math.min(barMin, rootX); barMax = Math.max(barMax, rootX);
     } else {
       const prev = rows[i - 1];
       lines += line(prev.centerX, prev.trunkY, CHANNEL_X, prev.trunkY);
       lines += line(CHANNEL_X, prev.trunkY, CHANNEL_X, row.trunkY);
       lines += line(CHANNEL_X, row.trunkY, row.centerX, row.trunkY);
     }
-    if (row.xs.length > 1) lines += line(row.minX, row.trunkY, row.maxX, row.trunkY);
+    if (barMax > barMin) lines += line(barMin, row.trunkY, barMax, row.trunkY);
     row.xs.forEach(function (x) { lines += line(x, row.trunkY, x, row.topY); });
   });
   return lines;
 }
 function drawTreeConnectors() {
   const svg = document.getElementById('tree-connectors');
-  const wrap = document.getElementById('tree-wrap');
+  // measure against the canvas, not the scroller — both rects move together when the chart is scrolled
+  const canvas = document.getElementById('tree-canvas');
   const currentId = APP.params && APP.params.id ? APP.params.id : ROOT_ID;
-  if (!svg || !wrap || !document.getElementById('tree-node-' + currentId)) return;
-  const wrapRect = wrap.getBoundingClientRect();
-  let lines;
-  if (APP.structureFullTree) {
-    lines = '';
-    (function walk(id) {
-      lines += connectorLinesForParent(id, wrapRect);
-      directChildren(id).forEach(function (c) { walk(c.id); });
-    })(currentId);
-  } else {
-    lines = connectorLinesForParent(currentId, wrapRect);
-  }
-  svg.innerHTML = lines;
+  if (!svg || !canvas || !document.getElementById('tree-node-' + currentId)) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  // one generation row per open member — connectorLinesForParent returns '' for a member with no legs
+  svg.innerHTML = APP.structureOpenPath.map(function (id) { return connectorLinesForParent(id, canvasRect, APP.structureZoom); }).join('');
 }
 
 const VIEWS = {};
@@ -1210,7 +1481,7 @@ function renderSetup() {
   const d = APP.setupDraft;
   if (d.step === 0) {
     return '<div class="auth-shell"><div class="auth-card">' +
-      '<div class="auth-brand"><div class="brand-mark">SP</div><div class="auth-title">Set up the console</div><div class="auth-sub">Choose how you will unlock this console. This runs once, before the first sign-in.</div></div>' +
+      '<div class="auth-brand"><img class="auth-hero-mark" src="../../assets/logo-icon.png" alt=""><div class="auth-title">Set up the console</div><div class="auth-sub">Choose how you will unlock this console. This runs once, before the first sign-in.</div></div>' +
       '<div class="auth-body">' +
       '<div class="segmented mb-3"><button class="' + (d.mode === 'pin' ? 'active' : '') + '" onclick="P.setSetupMode(\'pin\')">PIN</button><button class="' + (d.mode === 'password' ? 'active' : '') + '" onclick="P.setSetupMode(\'password\')">Password</button></div>' +
       (d.mode === 'pin'
@@ -1220,7 +1491,8 @@ function renderSetup() {
           '<div class="field"><label for="setup-pw2">Confirm password</label>' + pwFieldHtml('setup-pw2', { placeholder: 'Re-type your password' }) + '</div>') +
       (d.error ? '<div class="field"><span class="err">' + esc(d.error) + '</span></div>' : '') +
       '<button class="btn btn-primary btn-block" onclick="P.setupContinue()">Continue</button>' +
-      '</div></div></div>';
+      '</div><div class="auth-foot"><a href="javascript:void(0)" onclick="P.goToRestoreFromSetup()">Restore from a backup file instead</a></div>' +
+      '</div></div>';
   }
   // step 1 — recovery code reveal
   return '<div class="auth-shell"><div class="auth-card">' +
@@ -1263,7 +1535,7 @@ function renderLogin() {
       '<button class="btn btn-primary btn-block" onclick="P.passwordSubmit()">Unlock</button>';
   }
   return '<div class="auth-shell"><div class="auth-card">' +
-    '<div class="auth-brand"><div class="brand-mark">SP</div><div class="auth-title">Member Rewards Console</div><div class="auth-sub">Sign in to continue</div></div>' +
+    '<div class="auth-brand"><img class="auth-hero-mark" src="../../assets/logo-icon.png" alt=""><div class="auth-title">Member Rewards Console</div><div class="auth-sub">Sign in to continue</div></div>' +
     '<div class="auth-body">' +
     (lockedOut ? '' : '<div class="segmented mb-3" style="justify-content:center;display:flex"><button class="' + (APP.loginMode === 'pin' ? 'active' : '') + '" onclick="P.setLoginMode(\'pin\')">PIN</button><button class="' + (APP.loginMode === 'password' ? 'active' : '') + '" onclick="P.setLoginMode(\'password\')">Password</button></div>') +
     body +
@@ -1293,7 +1565,7 @@ function renderRecovery() {
       '<button class="btn btn-primary btn-block" ' + (r.confirmed ? '' : 'disabled') + ' onclick="P.recoveryFinish()">Sign in with new credential</button>';
   }
   return '<div class="auth-shell"><div class="auth-card">' +
-    '<div class="auth-brand"><div class="brand-mark">SP</div><div class="auth-title">' + esc(title) + '</div><div class="auth-sub">' + esc(sub) + '</div></div>' +
+    '<div class="auth-brand"><img class="brand-mark" src="../../assets/logo-icon.png" alt=""><div class="auth-title">' + esc(title) + '</div><div class="auth-sub">' + esc(sub) + '</div></div>' +
     '<div class="auth-body">' + body + '</div>' +
     (r.step === 0 ? '<div class="auth-foot"><a href="javascript:void(0)" onclick="P.cancelRecovery()">Back to sign in</a></div>' : '') +
     '</div></div>';
@@ -1320,46 +1592,167 @@ function renderLockedScreen() {
 }
 
 /* ============================================================
+   DATA RECOVERY / RESTORE — one shared screen, two entry reasons:
+   'db-error'  — the data genuinely could not be opened at launch (never reached in
+                 normal use; the prototype enters it via #db-recovery).
+   'restore'   — reached voluntarily, via the "Restore from a backup file instead"
+                 link on the first-run setup screen. Same restore mechanics, no
+                 internal restore-points list (a brand-new machine has none of its
+                 own yet), different heading and back-link.
+   ============================================================ */
+function restorePoints() {
+  return Object.keys(SNAPSHOTS).sort().reverse().slice(0, 3).map(function (ym) {
+    const snap = latestSnapshot(ym);
+    return { ym: ym, version: snap.version, closedOn: snap.closedOn };
+  });
+}
+function renderDbRecovery() {
+  const isVoluntary = APP.authPhase === 'restore';
+  const points = isVoluntary ? [] : restorePoints();
+  if (!APP.dbRecovery.selected && points.length) APP.dbRecovery.selected = points[0].ym;
+  const sel = APP.dbRecovery.selected;
+
+  const list = points.map(function (p, i) {
+    const isSel = p.ym === sel;
+    const sub = (i === 0 ? 'Most recent · ' : '') + 'version ' + p.version + (p.version > 1 ? ', corrected ' + ddmmyyyy(p.closedOn) : '');
+    return '<button class="restore-opt' + (isSel ? ' sel' : '') + '" onclick="P.selectRestorePoint(\'' + p.ym + '\')" aria-pressed="' + (isSel ? 'true' : 'false') + '">' +
+      '<span class="restore-radio"></span>' +
+      '<span><span class="restore-main">' + esc(ymLabel(p.ym)) + ' — closed ' + ddmmyyyy(p.closedOn) + '</span>' +
+      '<span class="restore-sub">' + esc(sub) + '</span></span></button>';
+  }).join('');
+
+  let body;
+  if (isVoluntary) {
+    body = '<button class="btn btn-primary btn-block" onclick="P.restoreFromFileAtDbRecovery()">Choose backup file…</button>' +
+      '<p class="hint" style="margin-top:10px;text-align:center">This console will come up in exactly the state that backup holds — the PIN or password from that backup will unlock it.</p>';
+  } else {
+    body = points.length
+      ? '<div class="impact-heading">Restore from</div>' +
+        '<div class="restore-list">' + list + '</div>' +
+        '<button class="btn btn-primary btn-block" onclick="P.restoreFromBackup()">Restore from ' + esc(ymLabel(sel).split(' ')[0]) + '</button>' +
+        '<p class="hint" style="margin-top:10px;text-align:center">Anything recorded after that backup will need entering again.</p>'
+      : '<p class="hint" style="text-align:center">No backup has been taken yet, so there is nothing to restore from.</p>';
+  }
+
+  const heading = isVoluntary
+    ? { icon: ICON.shield, cls: '', title: 'Restore from a backup file', sub: 'Bringing this console over from another computer? Choose the backup file you brought with you.' }
+    : { icon: ICON.alert, cls: 'danger', title: 'This console could not open its data', sub: 'Nothing has been lost. Every backup this console has taken is still here — choose one to go back to.' };
+  const footLink = isVoluntary
+    ? '<a href="javascript:void(0)" onclick="P.backToSetupFromRestore()">Back</a>'
+    : '<a href="javascript:void(0)" onclick="P.retryOpenData()">Try opening the data again</a>' +
+      ' · <a href="javascript:void(0)" onclick="P.restoreFromFileAtDbRecovery()">Browse a different backup file</a>';
+
+  return '<div class="auth-shell"><div class="auth-card">' +
+    '<div class="auth-brand"><div class="wizard-icon-wrap ' + heading.cls + '" style="margin:0 auto">' + heading.icon + '</div>' +
+    '<div class="auth-title" style="margin-top:14px">' + esc(heading.title) + '</div>' +
+    '<div class="auth-sub">' + esc(heading.sub) + '</div></div>' +
+    '<div class="auth-body">' + body + '</div>' +
+    '<div class="auth-foot">' + footLink + '</div>' +
+    '</div></div>';
+}
+function goToRestoreFromSetup() { APP.authPhase = 'restore'; render(); }
+function backToSetupFromRestore() { APP.authPhase = 'setup'; render(); }
+function restoreFromFileAtDbRecovery() {
+  // Mocked file-picker: a real build calls the native open-file dialog, then restore_from_backup_file.
+  if (location.hash === '#db-recovery') history.replaceState(null, '', location.pathname + location.search);
+  toast('Restored from the chosen backup file', 'success');
+  APP.authPhase = 'login'; // the restored file supplies its own credential, regardless of entry reason
+  render();
+}
+/* Adding the hash to an already-open page is a same-document navigation, so init() never
+   re-runs. Without this the demo trigger silently does nothing unless the page is reloaded. */
+window.addEventListener('hashchange', function () {
+  if (location.hash === '#db-recovery' && APP.authPhase !== 'db-error') { APP.authPhase = 'db-error'; render(); }
+});
+function selectRestorePoint(ym) { APP.dbRecovery.selected = ym; render(); }
+function restoreFromBackup() {
+  const ym = APP.dbRecovery.selected;
+  leaveDbRecovery();
+  toast('Restored from ' + ymLabel(ym), 'success');
+}
+function retryOpenData() { leaveDbRecovery(); toast('Data opened', 'success'); }
+function leaveDbRecovery() {
+  if (location.hash === '#db-recovery') history.replaceState(null, '', location.pathname + location.search);
+  APP.authPhase = APP.credentials ? 'login' : 'setup';
+  render();
+}
+
+/* ============================================================
    VIEW — Home / Search
    ============================================================ */
-function searchMembers(q) {
+// Rule-44 — one match function for every search box in the console. Name substring, member-number digits,
+// or phone digits with a four-digit floor so a short query can't sweep in half the network. Both sides are
+// reduced to digits before the phone compare, so formatting the admin typed is irrelevant; the stored value
+// is never rewritten.
+const PHONE_MIN_DIGITS = 4;
+function digitsOf(s) { return String(s == null ? '' : s).replace(/\D/g, ''); }
+// A number is the same number however it was written down: drop an international prefix or a trunk zero so
+// "+91 98765 43210", "098765 43210" and "9876543210" all reduce to the same key. Both the stored value and
+// the query go through this; the stored value itself is never rewritten.
+function phoneKey(s) {
+  const d = digitsOf(s);
+  return d.length > 10 ? d.slice(-10) : d.replace(/^0+/, '');
+}
+function memberMatches(m, q, qDigits, qPhone) {
+  if (m.name.toLowerCase().indexOf(q) !== -1) return true;
+  if (qDigits && String(m.id).indexOf(qDigits) !== -1) return true;
+  return qPhone.length >= PHONE_MIN_DIGITS && phoneKey(m.phone).indexOf(qPhone) !== -1;
+}
+function searchMembers(q, opts) {
   q = (q || '').trim().toLowerCase();
   if (!q) return null;
-  return MEMBERS.filter(function (m) { return m.name.toLowerCase().indexOf(q) !== -1 || String(m.id).indexOf(q) !== -1; }).slice(0, 25);
+  const qDigits = digitsOf(q);
+  const qPhone = phoneKey(q);
+  const activeOnly = opts && opts.activeOnly;
+  return MEMBERS.filter(function (m) {
+    return (!activeOnly || m.active) && memberMatches(m, q, qDigits, qPhone);
+  }).slice(0, (opts && opts.limit) || 25);
 }
 function homeResultsHtml(q) {
   const results = searchMembers(q);
   if (!results) {
-    return '<div class="empty-state">' + ICON.search.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:10px;opacity:.5" ') + '<div class="empty-state-title">Search for a member to see their details</div><div class="empty-state-sub">Type a name or 6-digit member number above — nothing is shown until you search.</div></div>';
+    return '<div class="empty-state">' + ICON.search.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:10px;opacity:.5" ') + '<div class="empty-state-title">Search for a member to see their details</div><div class="empty-state-sub">Type a name, 6-digit member number or phone number above — nothing is shown until you search.</div></div>';
   }
   const rows = results.map(function (m) {
-    return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + m.id + '})"><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td class="num">' + fmtInt(LIVE_TBV.get(m.id) || 0) + '</td><td>' + pillSlab(LIVE_REWARDS.get(m.id).ownSlab) + '</td><td>' + pillActive(m.active) + '</td></tr>';
+    return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + m.id + '})"><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td class="mono">' + esc(m.phone) + '</td><td class="num">' + fmtInt(liveTBV().get(m.id) || 0) + '</td><td>' + pillSlab(liveRewards().get(m.id).ownSlab) + '</td><td>' + pillActive(m.active) + '</td></tr>';
   }).join('');
   return '<div class="card-head"><div><div class="card-title">' + results.length + ' result' + (results.length === 1 ? '' : 's') + '</div>' +
     '<div class="card-sub">Matching "' + esc(q) + '"</div></div></div>' +
     (results.length === 0
-      ? '<div class="empty-state">' + ICON.inbox.replace('<svg ', '<svg style="width:32px;height:32px;margin-bottom:10px;opacity:.5" ') + '<div class="empty-state-title">No members match "' + esc(q) + '"</div><div class="empty-state-sub">Try a different name or member number.</div></div>'
-      : '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Member #</th><th class="num">Total Business Volume</th><th>Slab</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>');
+      ? '<div class="empty-state">' + ICON.inbox.replace('<svg ', '<svg style="width:32px;height:32px;margin-bottom:10px;opacity:.5" ') + '<div class="empty-state-title">No members match "' + esc(q) + '"</div><div class="empty-state-sub">Try a different name, member number or phone.</div></div>'
+      : '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Member #</th><th>Phone</th><th class="num">Total Business Volume</th><th>Slab</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>');
 }
 VIEWS.home = function () {
   const inactiveCount = MEMBERS.filter(function (m) { return !m.active; }).length;
-  const entriesThisPeriod = MEMBERS.filter(function (m) { return (LIVE_BV.get(m.id) || 0) > 0; }).length;
-  const topSlabCount = MEMBERS.filter(function (m) { return LIVE_REWARDS.get(m.id).ownSlab === topSlabPct(); }).length;
-  const buckets = sortedSlabTable().map(function (row) { return { pct: row.pct, count: MEMBERS.filter(function (m) { return LIVE_REWARDS.get(m.id).ownSlab === row.pct; }).length }; });
+  const entriesThisPeriod = MEMBERS.filter(function (m) { return (liveBV().get(m.id) || 0) > 0; }).length;
+  const topSlabCount = MEMBERS.filter(function (m) { return liveRewards().get(m.id).ownSlab === topSlabPct(); }).length;
+  const buckets = sortedSlabTable().map(function (row) { return { pct: row.pct, count: MEMBERS.filter(function (m) { return liveRewards().get(m.id).ownSlab === row.pct; }).length }; });
   const maxCount = Math.max.apply(null, buckets.map(function (b) { return b.count; }).concat([1]));
   const totalMembers = MEMBERS.length;
-  const barsHtml = buckets.map(function (b) {
-    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="transform:scaleX(' + (maxCount ? b.count / maxCount : 0) + ')"></div></div><div class="bar-row-count bar-row-count-lg">' + b.count + '<span class="muted" style="font-weight:400"> / ' + totalMembers + '</span></div></div>';
+  const barsHtml = buckets.map(function (b, idx) {
+    const topBadge = idx === buckets.length - 1 ? '<span class="bar-top-badge">TOP</span>' : '';
+    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + topBadge + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="transform:scaleX(' + (maxCount ? b.count / maxCount : 0) + ');background:' + slabTint(idx, buckets.length) + '"></div></div><div class="bar-row-count bar-row-count-lg">' + b.count + '</div></div>';
+  }).join('');
+  // CR-5 (8 Aug 2026): second chart, same bar-list pattern, summing Rewards per slab instead of counting members.
+  const rewardBuckets = sortedSlabTable().map(function (row) { return { pct: row.pct, total: MEMBERS.reduce(function (sum, m) { const r = liveRewards().get(m.id); return r.ownSlab === row.pct ? sum + r.total : sum; }, 0) }; });
+  const maxRewardBucket = Math.max.apply(null, rewardBuckets.map(function (b) { return b.total; }).concat([1]));
+  const totalRewards = rewardBuckets.reduce(function (sum, b) { return sum + b.total; }, 0);
+  const rewardBarsHtml = rewardBuckets.map(function (b, idx) {
+    const topBadge = idx === rewardBuckets.length - 1 ? '<span class="bar-top-badge">TOP</span>' : '';
+    return '<div class="bar-row bar-row-lg"><div class="bar-row-label bar-row-label-lg">' + pct(b.pct) + topBadge + '</div><div class="bar-track bar-track-lg"><div class="bar-fill" style="transform:scaleX(' + (maxRewardBucket ? b.total / maxRewardBucket : 0) + ');background:' + slabTint(idx, rewardBuckets.length) + '"></div></div><div class="bar-row-count bar-row-count-lg">' + fmt2(b.total) + '</div></div>';
   }).join('');
   const content =
     '<div class="stat-row n3">' +
     '<div class="stat-card"><div class="stat-label">Members</div><div class="stat-value">' + fmtInt(MEMBERS.length) + '</div><div class="stat-foot">' + inactiveCount + ' inactive</div></div>' +
-    '<div class="stat-card"><div class="stat-label">Entries this period</div><div class="stat-value">' + fmtInt(entriesThisPeriod) + '</div><div class="stat-foot">' + (isRecordingLocked() ? 'Recording locked' : ymLabel(CURRENT_YM)) + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">Entries this period</div><div class="stat-value">' + fmtInt(entriesThisPeriod) + '</div><div class="stat-foot">' + esc(ymLabel(viewYm())) + '</div></div>' +
     '<div class="stat-card"><div class="stat-label">On top slab</div><div class="stat-value">' + fmtInt(topSlabCount) + '</div><div class="stat-foot">' + pct(topSlabPct()) + ' and above</div></div>' +
-    '</div>' +
-    '<div class="card"><div class="field" style="margin-bottom:0"><div class="search-input-wrap">' + ICON.search + '<input id="home-search" type="text" placeholder="Search by name or 6-digit member number" oninput="P.homeSearchInput(this.value)"></div></div>' +
+    '</div>' + monthSwitcherHtml() +
+    '<div class="card"><div class="field" style="margin-bottom:0"><div class="search-input-wrap">' + ICON.search + '<input id="home-search" type="text" placeholder="Search by name, 6-digit member number or phone" oninput="P.homeSearchInput(this.value)"></div></div>' +
     '<div id="home-results" class="mt-3">' + homeResultsHtml('') + '</div></div>' +
-    '<div class="card mt-3"><div class="card-title">Members by slab</div><div class="card-sub" style="margin-bottom:20px">Current live figures across all ' + totalMembers + ' members</div><div class="bar-list bar-list-lg">' + barsHtml + '</div></div>';
+    '<div class="two-col mt-3" style="grid-template-columns:1fr 1fr">' +
+    '<div class="card"><div class="card-title">Members by slab</div><div class="card-sub" style="margin-bottom:20px">' + fmtInt(totalMembers) + ' members total, across ' + buckets.length + ' slabs</div><div class="bar-list bar-list-lg">' + barsHtml + '</div></div>' +
+    '<div class="card"><div class="card-title">Rewards by slab</div><div class="card-sub" style="margin-bottom:20px">' + fmt2(totalRewards) + ' total this period, across ' + rewardBuckets.length + ' slabs</div><div class="bar-list bar-list-lg">' + rewardBarsHtml + '</div></div>' +
+    '</div>';
   return shell(content, { title: 'Home', sub: 'Search any member, or scan today’s standing', actions: '<button class="btn btn-primary" onclick="P.openAddMember()">' + ICON.plus + ' Add member</button>' });
 };
 
@@ -1370,12 +1763,13 @@ VIEWS.member = function (params) {
   const m = membersById.get(params.id);
   if (!m) return shell('<div class="empty-state"><div class="empty-state-title">Member not found</div></div>', { title: 'Member' });
   if (APP.memberEntriesForId !== m.id) { APP.memberEntriesForId = m.id; APP.memberEntriesPage = 0; }
-  const tbv = LIVE_TBV.get(m.id) || 0;
-  const bv = LIVE_BV.get(m.id) || 0;
-  const rew = LIVE_REWARDS.get(m.id);
+  const tbv = liveTBV().get(m.id) || 0;
+  const bv = liveBV().get(m.id) || 0;
+  const rew = liveRewards().get(m.id);
   const kids = directChildren(m.id);
   const parent = m.refId ? membersById.get(m.refId) : null;
 
+  const ownRewardRow = '<tr><td colspan="3" class="cell-primary">Own Business Volume <span class="muted" style="font-weight:400">— ' + fmt2(bv) + ' at ' + pct(rew.ownSlab) + '</span></td><td></td><td class="num cell-primary">' + fmt2(rew.ownReward) + '</td></tr>';
   const breakdownRows = rew.breakdown.map(function (b) {
     const c = membersById.get(b.childId);
     return '<tr><td class="cell-primary">' + memberLink(b.childId) + '</td><td class="num">' + fmtInt(b.tbv) + '</td><td>' + pillSlab(b.childSlab) + '</td>' +
@@ -1386,7 +1780,7 @@ VIEWS.member = function (params) {
     : (rew.childCount > 0 ? '<tr><td colspan="3" class="muted">Royalty <span style="font-weight:400">— ' + rew.qualifyingCount + ' of ' + rew.childCount + ' legs on top slab (needs ' + SETTINGS.royaltyMinChildren + ')</span></td><td></td><td class="num muted">0.00</td></tr>' : '');
 
   const childRows = kids.map(function (c) {
-    return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + c.id + '})"><td class="cell-primary">' + esc(c.name) + '</td><td class="mono">' + c.id + '</td><td class="num">' + fmtInt(LIVE_TBV.get(c.id) || 0) + '</td><td>' + pillSlab(LIVE_REWARDS.get(c.id).ownSlab) + '</td><td>' + pillActive(c.active) + '</td></tr>';
+    return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + c.id + '})"><td class="cell-primary">' + esc(c.name) + '</td><td class="mono">' + c.id + '</td><td class="num">' + fmtInt(liveTBV().get(c.id) || 0) + '</td><td>' + pillSlab(liveRewards().get(c.id).ownSlab) + '</td><td>' + pillActive(c.active) + '</td></tr>';
   }).join('');
 
   const content =
@@ -1397,9 +1791,7 @@ VIEWS.member = function (params) {
     '<div class="flex gap-2">' +
     '<button class="btn btn-secondary" onclick="P.openEditMember(' + m.id + ')">Edit member</button>' +
     (m.id === ROOT_ID ? '' : (m.active ? '<button class="btn btn-danger" onclick="P.confirmDeactivate(' + m.id + ')">Deactivate</button>' : '<button class="btn btn-secondary" onclick="P.reactivateMember(' + m.id + ')">Reactivate</button>')) +
-    (isRecordingLocked()
-      ? '<button class="btn btn-primary" disabled title="Locked until ' + esc(ymLabel(oldestOutstandingYm())) + ' closes">Record volume</button>'
-      : '<button class="btn btn-primary" onclick="P.nav(\'entry\',{prefill:' + m.id + '})">Record volume</button>') +
+    '<button class="btn btn-primary" onclick="P.nav(\'entry\',{prefill:' + m.id + '})">Record volume</button>' +
     '</div></div></div>' +
     '<div class="stat-row">' +
     '<div class="stat-card"><div class="stat-label">Business Volume</div><div class="stat-value num">' + fmt2(bv) + '</div></div>' +
@@ -1408,11 +1800,12 @@ VIEWS.member = function (params) {
     '<div class="stat-card"><div class="stat-label">Rewards this period</div><div class="stat-value num">' + fmt2(rew.total) + '</div></div>' +
     '</div>' +
     '<div class="two-col">' +
-    '<div class="card"><div class="card-title">Rewards detail</div><div class="card-sub" style="margin-bottom:12px">Differential and royalty never pay on the same leg</div>' +
-    (rew.childCount === 0
-      ? '<div class="empty-state" style="padding:26px 12px">' + ICON.tree.replace('<svg ', '<svg style="width:26px;height:26px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No direct legs</div><div class="empty-state-sub">Rewards are earned on the gap to each direct leg’s slab.</div></div>'
-      : '<div class="table-wrap"><table><thead><tr><th>Leg</th><th class="num">Total Business Volume</th><th>Slab</th><th class="num">Gap</th><th class="num">Amount</th></tr></thead><tbody>' + breakdownRows + royaltyRow +
-        '<tr class="table-foot-row"><td colspan="4">Rewards total</td><td class="num">' + fmt2(rew.total) + '</td></tr></tbody></table></div>') +
+    '<div class="card"><div class="card-title">Rewards detail</div><div class="card-sub" style="margin-bottom:12px">Own Business Volume, differential and royalty — differential and royalty never pay on the same leg</div>' +
+    '<div class="table-wrap"><table><thead><tr><th>Leg</th><th class="num">Total Business Volume</th><th>Slab</th><th class="num">Gap</th><th class="num">Amount</th></tr></thead><tbody>' + ownRewardRow +
+      (rew.childCount === 0
+        ? '<tr><td colspan="4" class="muted">No direct legs — differential and royalty are earned on the gap to each direct leg’s slab</td><td class="num muted">0.00</td></tr>'
+        : breakdownRows + royaltyRow) +
+      '<tr class="table-foot-row"><td colspan="4">Rewards total</td><td class="num">' + fmt2(rew.total) + '</td></tr></tbody></table></div>' +
     '</div>' +
     '<div class="card"><div class="card-title">Details</div>' +
     '<div class="mt-3" style="font-size:13px;display:flex;flex-direction:column;gap:9px">' +
@@ -1435,10 +1828,10 @@ VIEWS.member = function (params) {
 
 /* ---- Member Detail: this period's entries (paginated, editable) ---- */
 function memberEntriesSorted(memberId) {
-  return (LIVE_ENTRIES.get(memberId) || []).slice().sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id; });
+  return (liveEntries().get(memberId) || []).slice().sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id; });
 }
 function memberEntriesCardHtml(memberId) {
-  const ym = isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM;
+  const ym = viewYm();
   const all = memberEntriesSorted(memberId);
   const pageSize = APP.memberEntriesPageSize || 10;
   const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
@@ -1466,18 +1859,18 @@ function memberEntriesNextPage() { APP.memberEntriesPage++; render(); }
 /* ---- Edit a single entry (date + amount, clamped to the active period's month) ---- */
 let EDIT_ENTRY_STATE = null;
 function periodMonthBounds(ym) {
-  ym = ym || (isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM);
+  ym = ym || (viewYm());
   return { min: ym + '-01', max: ym + '-' + pad2(lastDayOf(ym)) };
 }
 function openEditEntry(memberId, entryId) {
-  const entry = (LIVE_ENTRIES.get(memberId) || []).find(function (e) { return e.id === entryId; });
+  const entry = (liveEntries().get(memberId) || []).find(function (e) { return e.id === entryId; });
   if (!entry) return;
   EDIT_ENTRY_STATE = { memberId: memberId, entryId: entryId };
   const bounds = periodMonthBounds();
   openModal(
     '<div class="modal-header"><h2>Edit entry</h2><button class="modal-close" onclick="P.closeModal()">✕</button></div>' +
     '<div class="modal-body"><div id="edit-entry-errors"></div>' +
-    '<div class="field"><label for="edit-entry-date">Date</label><input id="edit-entry-date" type="date" min="' + bounds.min + '" max="' + bounds.max + '" value="' + entry.date + '" oninput="P.validateEditEntry()"><span class="hint">Must stay within ' + esc(ymLabel(isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM)) + '.</span></div>' +
+    '<div class="field"><label for="edit-entry-date">Date</label><input id="edit-entry-date" type="date" min="' + bounds.min + '" max="' + bounds.max + '" value="' + entry.date + '" oninput="P.validateEditEntry()"><span class="hint">Must stay within ' + esc(ymLabel(viewYm())) + '.</span></div>' +
     '<div class="field"><label for="edit-entry-amount">Business Volume</label><input id="edit-entry-amount" type="number" step="0.01" min="0.01" value="' + entry.amount + '" oninput="P.validateEditEntry()"></div>' +
     '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button><button class="btn btn-primary" id="edit-entry-save-btn" onclick="P.saveEditEntry()">Save</button></div>',
     { dismissable: true }
@@ -1496,7 +1889,7 @@ function validateEditEntry() {
 function saveEditEntry() {
   if (!validateEditEntry()) return;
   const s = EDIT_ENTRY_STATE;
-  const entry = (LIVE_ENTRIES.get(s.memberId) || []).find(function (e) { return e.id === s.entryId; });
+  const entry = (liveEntries().get(s.memberId) || []).find(function (e) { return e.id === s.entryId; });
   if (!entry) return;
   const m = membersById.get(s.memberId);
   const beforeDate = entry.date, beforeAmount = entry.amount;
@@ -1514,66 +1907,251 @@ function saveEditEntry() {
 VIEWS.structure = function (params) {
   const currentId = params && params.id ? params.id : ROOT_ID;
   const node = membersById.get(currentId);
-  const trail = [];
-  let walk = node;
-  while (walk) { trail.unshift(walk); walk = walk.refId ? membersById.get(walk.refId) : null; }
+  // the open path always starts at the member the chart is rooted on — reset it if navigation moved that member
+  if (!APP.structureOpenPath.length || APP.structureOpenPath[0] !== currentId) { APP.structureOpenPath = [currentId]; APP.structureZoom = 1; }
+  const openPath = APP.structureOpenPath;
+  const openSet = new Set(openPath);
+  const trail = ancestorTrail(currentId);
   const breadcrumb = '<div class="breadcrumb">' + (APP.navStack.length ? backLink() + '<span class="sep">/</span>' : '') + trail.map(function (n, i) {
     return (i > 0 ? '<span class="sep">/</span>' : '') + (i === trail.length - 1 ? '<span class="current">' + esc(n.name) + '</span>' : '<a href="javascript:void(0)" onclick="P.nav(\'structure\',{id:' + n.id + '},{replace:true})">' + esc(n.name) + '</a>');
   }).join('') + '</div>';
 
-  const kids = directChildren(currentId);
-  const guidance = LEVEL_WIDTH_GUIDANCE[node.level + 1];
-  const fullTree = !!APP.structureFullTree;
   const nodeCard = function (n, isRoot) {
-    return '<div class="tree-node' + (isRoot ? ' root-node' : '') + '" id="tree-node-' + n.id + '" onclick="P.nav(\'structure\',{id:' + n.id + '})">' +
+    const legs = directChildren(n.id).length;
+    const isOpen = openSet.has(n.id);
+    const cls = 'tree-node' + (isRoot ? ' root-node' : '') + (isOpen ? ' open-node' : '') + (legs ? '' : ' leaf-node');
+    return '<div class="' + cls + '" id="tree-node-' + n.id + '"' +
+      (legs ? ' role="button" tabindex="0" aria-expanded="' + (isOpen ? 'true' : 'false') + '" onclick="P.structureToggle(' + n.id + ')" onkeydown="P.structureNodeKey(event,' + n.id + ')"' : '') + '>' +
       '<div class="flex" style="justify-content:space-between;align-items:flex-start"><div><div class="tree-node-name">' + esc(n.name) + (n.active ? '' : ' <span class="pill pill-inactive" style="margin-left:4px">Inactive</span>') + '</div><div class="tree-node-id">#' + n.id + '</div></div>' +
       '<button class="icon-btn" style="width:24px;height:24px;flex-shrink:0" title="View member detail" onclick="event.stopPropagation();P.nav(\'member\',{id:' + n.id + '})">' + ICON.search.replace('<svg ', '<svg style="width:12px;height:12px" ') + '</button></div>' +
-      '<div class="tree-node-bv"><span class="tree-node-bv-label">Business Volume</span><span class="tree-node-bv-val num">' + fmtInt(LIVE_BV.get(n.id) || 0) + '</span></div>' +
-      '<div class="tree-node-foot muted" style="font-size:11.5px">' + directChildren(n.id).length + ' direct leg' + (directChildren(n.id).length === 1 ? '' : 's') + '</div></div>';
-  };
-  const buildTreeSubtree = function (n, isRoot) {
-    const nKids = directChildren(n.id);
-    return '<div class="tree-subtree">' + nodeCard(n, isRoot) +
-      (nKids.length ? '<div class="tree-generation">' + nKids.map(function (k) { return buildTreeSubtree(k, false); }).join('') + '</div>' : '') +
-      '</div>';
+      '<div class="tree-node-bv"><span class="tree-node-bv-label">Business Volume</span><span class="tree-node-bv-val num">' + fmtInt(liveBV().get(n.id) || 0) + '</span></div>' +
+      '<div class="tree-node-foot"><span class="tree-node-legs">' +
+      (legs ? ICON.chevron + legs + ' direct leg' + (legs === 1 ? '' : 's') : 'No legs beneath') +
+      '</span></div></div>';
   };
 
-  const toggle = '<div class="segmented" style="margin-left:auto"><button class="' + (fullTree ? '' : 'active') + '" onclick="P.setStructureFullTree(false)">Direct legs</button><button class="' + (fullTree ? 'active' : '') + '" onclick="P.setStructureFullTree(true)">Full hierarchy</button></div>';
+  // one generation row per open member: only one branch is ever open, so a row is always a single
+  // set of siblings — kept on one line, with the chart scrolling sideways rather than wrapping
+  const generations = openPath.map(function (id) {
+    const legs = directChildren(id);
+    if (!legs.length) return '';
+    return '<div class="tree-children-row">' + legs.map(function (k) { return nodeCard(k, false); }).join('') + '</div>';
+  }).join('');
 
-  const FULL_TREE_WARN_AT = 60; // beyond this many descendants, ask before rendering — a flat unconstrained tree stops being readable well before it stops being technically scrollable
-  const descendantCount = fullTree && kids.length ? totalDescendants(currentId) : 0;
-  const needsConfirm = fullTree && descendantCount > FULL_TREE_WARN_AT && APP.structureFullTreeConfirmedId !== currentId;
+  const deepestId = openPath[openPath.length - 1];
+  const deepest = membersById.get(deepestId);
+  const deepestLegs = directChildren(deepestId).length;
+  const guidance = LEVEL_WIDTH_GUIDANCE[deepest.level + 1];
 
-  const childrenHtml = !kids.length
-    ? '<div class="empty-state">' + ICON.tree.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No direct legs</div><div class="empty-state-sub">This member has no one introduced beneath them.</div></div>'
-    : needsConfirm
-      ? ''
-      : fullTree
-        ? '<div class="tree-generation">' + kids.map(function (k) { return buildTreeSubtree(k, false); }).join('') + '</div>'
-        : '<div class="tree-children-row" style="padding-top:36px">' + kids.map(function (k) { return nodeCard(k, false); }).join('') + '</div>';
+  const emptyState = '<div class="empty-state">' + ICON.tree.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:8px;opacity:.5" ') +
+    '<div class="empty-state-title">No direct legs</div><div class="empty-state-sub">This member has no one introduced beneath them.</div></div>';
 
-  const treeWrapHtml = needsConfirm
-    ? '<div class="tree-wrap" id="tree-wrap"><div class="empty-state">' + ICON.alert.replace('<svg ', '<svg style="width:28px;height:28px;margin-bottom:8px;opacity:.5" ') +
-      '<div class="empty-state-title">' + fmtInt(descendantCount) + ' people beneath ' + esc(node.name) + '</div>' +
-      '<div class="empty-state-sub">That is too many to read comfortably in one view. You can still show it — the view will scroll — or stay with direct legs one level at a time.</div>' +
-      '<button class="btn btn-primary mt-3" onclick="P.confirmStructureFullTree(' + currentId + ')">Show full hierarchy anyway</button></div></div>'
-    : '<div class="tree-wrap' + (fullTree ? ' tree-wrap-full' : '') + '" id="tree-wrap"><svg class="tree-connectors" id="tree-connectors"></svg>' +
-      '<div class="tree-root-row">' + nodeCard(node, true) + '</div>' + childrenHtml +
-      (guidance && kids.length > guidance ? '<div class="tree-advisory">This member has ' + kids.length + ' direct legs — structure guidance suggests up to ' + guidance + ' at this level. Guidance only; entry is never blocked.</div>' : '') +
-      '</div>';
+  const zoom = APP.structureZoom;
+  const treeWrapHtml = '<div class="tree-wrap" id="tree-wrap">' +
+    '<div class="tree-canvas" id="tree-canvas" style="transform:scale(' + zoom + ')">' +
+    '<svg class="tree-connectors" id="tree-connectors"></svg>' +
+    '<div class="tree-root-row">' + nodeCard(node, true) + '</div>' +
+    (directChildren(currentId).length ? generations : emptyState) +
+    (guidance && deepestLegs > guidance ? '<div class="tree-advisory">' + esc(deepest.name) + ' has ' + deepestLegs + ' direct legs — structure guidance suggests up to ' + guidance + ' at this level. Guidance only; entry is never blocked.</div>' : '') +
+    '</div></div>';
 
-  const content =
-    '<div class="tree-legend"><span><span class="legend-swatch" style="background:var(--accent)"></span>Current member</span><span><span class="legend-swatch" style="background:var(--border)"></span>Direct leg</span>' + toggle + '</div>' +
-    (fullTree && !needsConfirm ? '<div class="tree-scroll">' + treeWrapHtml + '</div>' : treeWrapHtml) +
-    (needsConfirm ? '' : '<div class="muted" style="font-size:12px;margin-top:12px;text-align:center">' +
-    (fullTree ? 'Showing the full hierarchy beneath this member, scrollable — each card shows name, member number and own Business Volume only.'
-      : 'Showing direct legs one level at a time — each card shows name, member number and own Business Volume only.') +
-    '</div>');
+  const toolbar = '<div class="tree-toolbar">' +
+    '<div class="search-box"><div class="search-input-wrap">' + ICON.search +
+    '<input id="structure-search" type="text" placeholder="Search any member by name, 6-digit member number or phone" oninput="P.structureSearchInput(this.value)" autocomplete="off"></div>' +
+    '<div id="structure-search-results"></div></div>' +
+    '<div class="tree-zoom" style="margin-left:auto">' +
+    '<button' + (zoom <= ZOOM_MIN + 1e-6 ? ' disabled' : '') + ' title="Zoom out" aria-label="Zoom out" onclick="P.structureZoomBy(-1)">−</button>' +
+    '<span class="tree-zoom-level">' + Math.round(zoom * 100) + '%</span>' +
+    '<button' + (zoom >= ZOOM_MAX - 1e-6 ? ' disabled' : '') + ' title="Zoom in" aria-label="Zoom in" onclick="P.structureZoomBy(1)">+</button>' +
+    '<button onclick="P.structureZoomFit()">Fit width</button>' +
+    '</div>' +
+    '<button class="btn btn-secondary"' + (openPath.length > 1 ? '' : ' disabled') + ' onclick="P.structureCollapseAll()">Collapse all</button>' +
+    '<button class="btn btn-secondary" onclick="P.openFullHierarchy()">View full hierarchy</button>' +
+    '</div>';
 
-  return shell(content, { title: 'Structure', sub: fullTree ? 'Full hierarchy beneath this member' : 'One level of direct legs at a time', breadcrumb: breadcrumb });
+  const content = toolbar + treeWrapHtml +
+    '<div class="muted" style="font-size:12px;margin-top:12px;text-align:center">' +
+    'Click a member to open the legs beneath them; opening one closes the branch already open at that level. ' +
+    'A wide level scrolls sideways — use the zoom to take more of it in. ' +
+    'Each card shows name, member number and own Business Volume only. ' +
+    '<strong>View full hierarchy</strong> opens the whole structure, every branch expanded, in a separate window.</div>';
+
+  return shell(content, { title: 'Structure', sub: 'Open one branch at a time', breadcrumb: breadcrumb });
 };
-function setStructureFullTree(v) { APP.structureFullTree = !!v; render(); }
-function confirmStructureFullTree(id) { APP.structureFullTreeConfirmedId = id; render(); }
+
+/* ============================================================
+   FULL HIERARCHY WINDOW (FR-10 / Rule-45)
+   A separate window that draws the whole structure once and then forgets it. The main console does no work
+   beyond counting and opening — no shared state, no refresh, no handle back into here.
+   ============================================================ */
+const FULL_TREE_GATE = 60;          // V4.5 — above this, name the count and ask first
+const FT = { NODE_W: 172, NODE_H: 96, GAP_X: 18, GAP_Y: 46 };
+function descendantCount(id) {
+  let n = 0;
+  (function walk(mid) { directChildren(mid).forEach(function (c) { n++; walk(c.id); }); })(id);
+  return n;
+}
+function openFullHierarchy() {
+  const count = descendantCount(ROOT_ID);
+  if (count > FULL_TREE_GATE) {
+    openModal(
+      '<div class="modal-header"><h2>Open the full hierarchy?</h2><button class="modal-close" onclick="P.closeModal()">✕</button></div>' +
+      '<div class="modal-body"><p style="font-size:13px;line-height:1.55">This will draw <strong>' + fmtInt(count + 1) + ' members</strong> in a new window. It may take a moment, and a structure this size is very wide — use the zoom to take it in.</p>' +
+      '<p class="muted" style="font-size:12.5px;margin-top:10px">The console stays usable while it draws. The new window is a picture of this moment and does not update.</p></div>' +
+      '<div class="modal-footer"><button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button><button class="btn btn-primary" onclick="P.closeModal();P.drawFullHierarchy()">Open</button></div>',
+      { dismissable: true }
+    );
+    return;
+  }
+  drawFullHierarchy();
+}
+// One post-order pass: work out each subtree's width, place the node over its children, and collect the
+// connector segments as we go. No DOM measurement anywhere, so cost is linear in the node count.
+function layoutFullTree(rootId) {
+  const nodes = [], segs = [];
+  let cursor = 0, maxDepth = 0;
+  (function place(id, depth) {
+    if (depth > maxDepth) maxDepth = depth;
+    const kids = directChildren(id);
+    let x;
+    if (!kids.length) { x = cursor; cursor += FT.NODE_W + FT.GAP_X; }
+    else {
+      const xs = kids.map(function (c) { return place(c.id, depth + 1); });
+      x = (xs[0] + xs[xs.length - 1]) / 2;
+    }
+    const y = depth * (FT.NODE_H + FT.GAP_Y);
+    nodes.push({ m: membersById.get(id), x: x, y: y, depth: depth, legs: kids.length });
+    kids.forEach(function (c) {
+      const cx = nodes.find(function (n) { return n.m.id === c.id; }).x + FT.NODE_W / 2;
+      const px = x + FT.NODE_W / 2, py = y + FT.NODE_H, cy = y + FT.NODE_H + FT.GAP_Y;
+      const mid = py + FT.GAP_Y / 2;
+      segs.push('M' + px + ' ' + py + 'V' + mid + 'H' + cx + 'V' + cy);
+    });
+    return x;
+  })(rootId, 0);
+  return { nodes: nodes, path: segs.join(' '), width: Math.max(cursor, FT.NODE_W), height: (maxDepth + 1) * (FT.NODE_H + FT.GAP_Y) };
+}
+function drawFullHierarchy() {
+  const root = membersById.get(ROOT_ID);
+  const L = layoutFullTree(ROOT_ID);
+  const ym = viewYm();
+  const bv = liveBV(ym);
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const stamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const nodesHtml = L.nodes.map(function (n) {
+    const m = n.m;
+    return '<div class="ft-node' + (n.depth === 0 ? ' ft-root' : '') + (m.active ? '' : ' ft-inactive') + '"' +
+      ' id="ft-' + m.id + '" data-name="' + esc(m.name.toLowerCase()) + '" data-id="' + m.id + '" data-phone="' + esc(phoneKey(m.phone)) + '"' +
+      ' style="left:' + n.x + 'px;top:' + n.y + 'px">' +
+      '<div class="ft-name">' + esc(m.name) + (m.active ? '' : ' <span class="ft-pill">Inactive</span>') + '</div>' +
+      '<div class="ft-id">#' + m.id + '</div>' +
+      '<div class="ft-bv"><span class="ft-bv-label">Business Volume</span><span class="ft-bv-val">' + fmtInt(bv.get(m.id) || 0) + '</span></div>' +
+      '</div>';
+  }).join('');
+
+  const doc = '<!doctype html><html lang="en"' + (isDark ? ' data-theme="dark"' : '') + '><head><meta charset="utf-8">' +
+    '<title>Full hierarchy — ' + esc(root.name) + '</title>' +
+    '<style>' +
+    ':root{--accent:#4f46e5;--accent-weak:#eef2ff;--bg:#f8fafc;--surface:#fff;--border:#e2e8f0;--text:#0f172a;--text-muted:#64748b;--warning:#d97706;--warning-weak:#fffbeb;color-scheme:light}' +
+    'html[data-theme="dark"]{--accent:#6366f1;--accent-weak:#1e1b4b;--bg:#0f172a;--surface:#1e293b;--border:#334155;--text:#f1f5f9;--text-muted:#94a3b8;--warning:#f59e0b;--warning-weak:#3a2a06;color-scheme:dark}' +
+    '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}' +
+    '.ft-bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--border)}' +
+    '.ft-title{font-size:15px;font-weight:650}.ft-sub{font-size:12px;color:var(--text-muted)}' +
+    '.ft-tools{margin-left:auto;display:flex;align-items:center;gap:8px}' +
+    '.ft-zoom{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--border);border-radius:6px;padding:2px;background:var(--bg)}' +
+    '.ft-zoom button,.ft-btn{border:1px solid transparent;background:none;height:28px;min-width:30px;padding:0 10px;border-radius:5px;cursor:pointer;color:var(--text-muted);font:inherit;font-size:12.5px;font-weight:550}' +
+    '.ft-btn{border-color:var(--border);background:var(--surface);color:var(--text)}.ft-btn:hover{border-color:var(--accent);color:var(--accent)}' +
+    '.ft-zoom button:hover{background:var(--surface);color:var(--text)}.ft-level{min-width:48px;text-align:center;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text-muted)}' +
+    '.ft-search{height:28px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font:inherit;font-size:12.5px;width:210px}' +
+    '.ft-wrap{overflow:auto;padding:28px}.ft-canvas{position:relative;transform-origin:0 0}' +
+    '.ft-node{position:absolute;width:172px;height:96px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:11px 12px}' +
+    '.ft-root{border-color:var(--accent);background:var(--accent-weak)}' +
+    '.ft-inactive{background:var(--warning-weak);border-color:var(--warning)}' +
+    '.ft-hit{outline:2px solid var(--accent);outline-offset:2px}' +
+    '.ft-name{font-size:13px;font-weight:650;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.ft-pill{font-size:9.5px;font-weight:650;color:var(--warning);border:1px solid var(--warning);border-radius:999px;padding:0 5px;vertical-align:1px}' +
+    '.ft-id{font-size:11px;color:var(--text-muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}' +
+    '.ft-bv{display:flex;justify-content:space-between;align-items:baseline;margin-top:9px;padding-top:8px;border-top:1px solid var(--border)}' +
+    '.ft-bv-label{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}' +
+    '.ft-bv-val{font-size:14px;font-weight:650;font-variant-numeric:tabular-nums}' +
+    '.ft-links{position:absolute;inset:0;pointer-events:none;overflow:visible}' +
+    '.ft-links path{fill:none;stroke:var(--border);stroke-width:1.5}' +
+    '@media print{.ft-bar .ft-tools{display:none}.ft-wrap{overflow:visible;padding:0}body{background:#fff}}' +
+    '</style></head><body>' +
+    '<div class="ft-bar"><div><div class="ft-title">Full hierarchy — ' + esc(root.name) + '</div>' +
+    '<div class="ft-sub">' + fmtInt(L.nodes.length) + ' members · figures for ' + esc(ymLabel(ym)) + ' · as at ' + esc(stamp) + '</div></div>' +
+    '<div class="ft-tools">' +
+    '<input class="ft-search" type="text" placeholder="Find a member by name, number or phone" oninput="ftFind(this.value)">' +
+    '<div class="ft-zoom"><button onclick="ftZoom(-1)" title="Zoom out">−</button><span class="ft-level" id="ft-level">100%</span>' +
+    '<button onclick="ftZoom(1)" title="Zoom in">+</button><button onclick="ftFit()">Fit width</button></div>' +
+    '<button class="ft-btn" onclick="window.print()">Print</button></div></div>' +
+    '<div class="ft-wrap" id="ft-wrap"><div class="ft-canvas" id="ft-canvas" style="width:' + L.width + 'px;height:' + L.height + 'px">' +
+    '<svg class="ft-links" width="' + L.width + '" height="' + L.height + '"><path d="' + L.path + '"/></svg>' +
+    nodesHtml + '</div></div>' +
+    '<script>' +
+    'var z=1,MIN=0.1,MAX=1.5,hit=null;' +
+    'function ftApply(){document.getElementById("ft-canvas").style.transform="scale("+z+")";document.getElementById("ft-level").textContent=Math.round(z*100)+"%";}' +
+    'function ftZoom(d){z=Math.min(MAX,Math.max(MIN,Math.round((z+d*0.1)*100)/100));ftApply();}' +
+    'function ftFit(){var w=document.getElementById("ft-wrap"),c=document.getElementById("ft-canvas");z=Math.min(MAX,Math.max(MIN,(w.clientWidth-56)/c.offsetWidth));ftApply();}' +
+    'function ftFind(q){q=(q||"").trim().toLowerCase();if(hit){hit.classList.remove("ft-hit");hit=null;}if(!q)return;' +
+    'var d=q.replace(/\\D/g,"");if(d.length>10)d=d.slice(-10);else d=d.replace(/^0+/,"");' +
+    'var all=document.querySelectorAll(".ft-node");' +
+    'for(var i=0;i<all.length;i++){var n=all[i];' +
+    'if(n.dataset.name.indexOf(q)!==-1||(d&&n.dataset.id.indexOf(d)!==-1)||(d.length>=4&&n.dataset.phone.indexOf(d)!==-1)){' +
+    'hit=n;n.classList.add("ft-hit");n.scrollIntoView({block:"center",inline:"center"});return;}}}' +
+    '<\/script></body></html>';
+
+  const w = window.open('', 'full-hierarchy-' + Date.now());
+  if (!w) { toast('Allow pop-ups to open the full hierarchy', 'danger'); return; }
+  w.document.write(doc);
+  w.document.close();
+  w.focus();
+}
+
+function structureToggle(id) {
+  if (!directChildren(id).length) return;
+  const path = APP.structureOpenPath;
+  if (id === path[path.length - 1] && path.length > 1) APP.structureOpenPath = path.slice(0, -1);
+  else {
+    const ids = ancestorTrail(id).map(function (m) { return m.id; });
+    APP.structureOpenPath = ids.slice(ids.indexOf(path[0]));
+  }
+  render();
+}
+function structureNodeKey(e, id) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault(); structureToggle(id);
+}
+function structureCollapseAll() { APP.structureOpenPath = [APP.structureOpenPath[0]]; render(); }
+const ZOOM_MIN = 0.5, ZOOM_MAX = 1.5, ZOOM_STEP = 0.1;
+function clampZoom(z) { return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z / ZOOM_STEP) * ZOOM_STEP)); }
+function structureZoomBy(steps) { APP.structureZoom = clampZoom(APP.structureZoom + steps * ZOOM_STEP); render(); }
+function structureZoomFit() {
+  const wrap = document.getElementById('tree-wrap');
+  const canvas = document.getElementById('tree-canvas');
+  if (!wrap || !canvas) return;
+  // offsetWidth is the canvas's unscaled width, so this is independent of the zoom it is measured at
+  APP.structureZoom = clampZoom(wrap.clientWidth / canvas.offsetWidth);
+  render();
+}
+function structureSearchInput(q) {
+  const results = searchMembers(q, { limit: 8 });
+  if (!results) { setHtml('structure-search-results', ''); return; }
+  setHtml('structure-search-results', '<div class="search-results">' + (results.length ? results.map(function (m) {
+    return '<div class="search-result-row" onclick="P.structureSearchSelect(' + m.id + ')">' + avatar(m.name, true) + '<div><div class="search-result-name">' + esc(m.name) + '</div><div class="search-result-meta">#' + m.id + ' · level ' + m.level + (m.active ? '' : ' · Inactive') + '</div></div></div>';
+  }).join('') : '<div class="search-empty">No members match</div>') + '</div>');
+}
+function structureSearchSelect(id) {
+  const ids = ancestorTrail(id).map(function (m) { return m.id; });
+  const chartRoot = APP.params && APP.params.id ? APP.params.id : ROOT_ID;
+  // stay where we are if the member is beneath the chart's current member, otherwise show the whole structure
+  const rootFor = ids.indexOf(chartRoot) !== -1 ? chartRoot : ROOT_ID;
+  APP.structureOpenPath = ids.slice(ids.indexOf(rootFor));
+  if (rootFor !== chartRoot) APP.params = { id: rootFor };
+  render();
+}
 
 function val(id) { const n = document.getElementById(id); return n ? n.value : ''; }
 function pwFieldHtml(id, opts) {
@@ -1613,7 +2191,7 @@ function refFieldInner() {
   }
   return '<label for="ref-search">Introducer (Reference ID) *</label>' +
     (s.refId ? refChip(s.refId) :
-      '<div class="search-box"><div class="search-input-wrap">' + ICON.search + '<input id="ref-search" type="text" placeholder="Search an existing active member" oninput="P.refSearchInput(this.value)" autocomplete="off"></div><div id="ref-search-results"></div></div>') +
+      '<div class="search-box"><div class="search-input-wrap">' + ICON.search + '<input id="ref-search" type="text" placeholder="Search an active member by name, number or phone" oninput="P.refSearchInput(this.value)" autocomplete="off"></div><div id="ref-search-results"></div></div>') +
     '<span class="hint">Must resolve to an existing, active member. Locked once saved.</span>';
 }
 function memberModalHtml() {
@@ -1653,9 +2231,9 @@ function switchToReactivate(inactiveId) {
   openModal(memberModalHtml(), { dismissable: false });
 }
 function refSearchInput(q) {
-  q = q.trim().toLowerCase();
-  if (!q) { setHtml('ref-search-results', ''); return; }
-  const results = MEMBERS.filter(function (m) { return m.active && (m.name.toLowerCase().indexOf(q) !== -1 || String(m.id).indexOf(q) !== -1); }).slice(0, 8);
+  // Rule-30 — a reference must resolve to an existing *active* member, so this one filters on top of the shared match
+  const results = searchMembers(q, { limit: 8, activeOnly: true });
+  if (!results) { setHtml('ref-search-results', ''); return; }
   setHtml('ref-search-results', '<div class="search-results" style="position:static;margin-top:6px;box-shadow:none">' +
     (results.length ? results.map(function (m) { return '<div class="search-result-row" onclick="P.selectRef(' + m.id + ')">' + avatar(m.name, true) + '<div><div class="search-result-name">' + esc(m.name) + '</div><div class="search-result-meta">#' + m.id + '</div></div></div>'; }).join('')
       : '<div class="search-empty">No active member matches</div>') + '</div>');
@@ -1667,7 +2245,8 @@ function checkPhone() {
   const phone = val('member-phone').trim();
   const s = MODAL_STATE;
   if (!phone) { setHtml('phone-banner', ''); return; }
-  const dup = MEMBERS.find(function (m) { return m.phone === phone && m.id !== s.id; });
+  // Rule-34 — uniqueness is a property of the number, not of how it was typed, so compare digits
+  const dup = MEMBERS.find(function (m) { return phoneKey(m.phone) === phoneKey(phone) && m.id !== s.id; });
   if (!dup) { setHtml('phone-banner', ''); return; }
   if (dup.active) setHtml('phone-banner', '<div class="modal-danger-note">This number is already in use by <strong>' + esc(dup.name) + '</strong> (#' + dup.id + ').</div>');
   else setHtml('phone-banner', '<div class="modal-warn">This number matches an inactive member — <strong>' + esc(dup.name) + '</strong> (#' + dup.id + '). <a href="javascript:void(0)" onclick="P.switchToReactivate(' + dup.id + ')">Reactivate them instead</a></div>');
@@ -1684,7 +2263,7 @@ function saveMember() {
     if (!s.refId) errors.push('Choose an introducer.');
     const consented = document.getElementById('member-consent') && document.getElementById('member-consent').checked;
     if (!consented) errors.push('Consent is required before this member can be saved.');
-    const dup = MEMBERS.find(function (x) { return x.phone === phone; });
+    const dup = MEMBERS.find(function (x) { return phoneKey(x.phone) === phoneKey(phone); });
     if (dup && dup.active) errors.push('This phone number is already in use by an active member.');
   }
   if (errors.length) { showModalErrors(errors); return; }
@@ -1729,23 +2308,26 @@ function reactivateMember(id) {
 /* ============================================================
    VIEW — Business Volume entry
    ============================================================ */
-function recordEntry(memberId, amount, date) {
-  const list = LIVE_ENTRIES.get(memberId) || [];
-  list.push({ id: newEntryId(), date: date || isoToday(0), amount: amount });
-  LIVE_ENTRIES.set(memberId, list);
-  recalcLive();
+function recordEntry(memberId, amount, date, ym) {
+  date = date || isoToday(0);
+  ym = ym || date.slice(0, 7); // the entry's own date decides its period, nothing else
+  const list = liveEntries(ym).get(memberId) || [];
+  list.push({ id: newEntryId(), date: date, amount: amount });
+  liveEntries(ym).set(memberId, list);
+  recalcLive(ym); // confined to this period — no other live month is touched
 }
 function entrySelectedCardHtml(id, slabPctOverride, clearFn) {
   const m = membersById.get(id);
   if (!m) return '';
-  const slabPct = slabPctOverride != null ? slabPctOverride : LIVE_REWARDS.get(m.id).ownSlab;
+  const slabPct = slabPctOverride != null ? slabPctOverride : liveRewards().get(m.id).ownSlab;
   return '<div class="card" style="margin-bottom:14px"><div class="flex gap-3" style="align-items:center;justify-content:space-between">' +
     '<div class="flex gap-3" style="align-items:center">' + avatar(m.name) + '<div><div style="font-weight:650;font-size:13.5px">' + esc(m.name) + '</div><div class="muted" style="font-size:12px">#' + m.id + ' · ' + pct(slabPct) + ' slab</div></div></div>' +
     '<button class="btn btn-ghost btn-sm" onclick="P.' + (clearFn || 'entryClearSelection') + '()">Change</button></div></div>';
 }
 function entryEntriesListHtml() {
-  const feed = allLiveEntriesFlat();
-  if (!feed.length) return '<div class="empty-state" style="padding:26px 12px">' + ICON.entry.replace('<svg ', '<svg style="width:24px;height:24px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No entries yet this period</div></div>';
+  const ym = entryYm();
+  const feed = allLiveEntriesFlat(ym);
+  if (!feed.length) return '<div class="empty-state" style="padding:26px 12px">' + ICON.entry.replace('<svg ', '<svg style="width:24px;height:24px;margin-bottom:8px;opacity:.5" ') + '<div class="empty-state-title">No entries yet in ' + esc(ymLabel(ym)) + '</div></div>';
   const rows = feed.map(function (e) {
     const m = membersById.get(e.memberId);
     return '<tr class="clickable" onclick="P.nav(\'member\',{id:' + m.id + '})"><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td>' + ddmmyyyy(e.date) + '</td><td class="num">' + fmt2(e.amount) + '</td></tr>';
@@ -1753,38 +2335,60 @@ function entryEntriesListHtml() {
   return '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Member #</th><th>Recorded</th><th class="num">Business Volume</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 function entryStatRowHtml() {
-  const entriesCount = MEMBERS.filter(function (m) { return (LIVE_BV.get(m.id) || 0) > 0; }).length;
+  const ym = entryYm();
+  const entriesCount = MEMBERS.filter(function (m) { return (liveBV(ym).get(m.id) || 0) > 0; }).length;
   const today = isoToday(0);
-  const todayCount = allLiveEntriesFlat().filter(function (e) { return e.date === today; }).length;
+  const todayCount = allLiveEntriesFlat(ym).filter(function (e) { return e.date === today; }).length;
   const remaining = MEMBERS.length - entriesCount;
   return '<div class="stat-row n3">' +
-    '<div class="stat-card"><div class="stat-label">Entries this period</div><div class="stat-value">' + fmtInt(entriesCount) + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">Entries in ' + esc(ymLabel(ym)) + '</div><div class="stat-value">' + fmtInt(entriesCount) + '</div></div>' +
     '<div class="stat-card"><div class="stat-label">Recorded today</div><div class="stat-value">' + fmtInt(todayCount) + '</div></div>' +
     '<div class="stat-card"><div class="stat-label">Not yet recorded</div><div class="stat-value">' + fmtInt(remaining) + '</div></div>' +
     '</div>';
 }
+// Rule-36 (amended) — the entry form is always available. What varies is which month it writes into.
+function entryYm() {
+  const yms = entryYms();
+  return (APP.entryYm && yms.indexOf(APP.entryYm) !== -1) ? APP.entryYm : yms[0];
+}
+function setEntryYm(ym) { APP.entryYm = ym; APP.viewYm = ym; render(); }
+function entryDateBounds(ym) {
+  const b = periodMonthBounds(ym);
+  // the current month can't be recorded ahead of itself; a past month is bounded by its own last day
+  return { min: b.min, max: ym === CURRENT_YM ? isoToday(0) : b.max };
+}
+function entryMonthNoteHtml() {
+  const ym = entryYm();
+  const blocking = currentMonthBlockedBy();
+  return '<div class="modal-warn mb-3" style="margin-bottom:14px">Recording into <strong>' + esc(ymLabel(ym)) + '</strong>.' +
+    (blocking
+      ? ' ' + esc(ymLabel(CURRENT_YM)) + ' entries can be recorded once ' + esc(ymLabel(blocking)) + ' is closed.'
+      : ' Dates are limited to this month.') + '</div>';
+}
+function entryMonthSelectHtml() {
+  const yms = entryYms();
+  if (yms.length < 2) return ''; // no choice to make, so no control
+  return '<div class="field"><label for="entry-ym">Month</label><select id="entry-ym" onchange="P.setEntryYm(this.value)">' +
+    yms.map(function (y) { return '<option value="' + y + '"' + (y === entryYm() ? ' selected' : '') + '>' + esc(ymLabel(y)) + '</option>'; }).join('') +
+    '</select><span class="hint">' + yms.length + ' months are awaiting close; each accepts entries dated within it.</span></div>';
+}
 VIEWS.entry = function (params) {
   if (params && params.prefill) { APP.entrySelectedId = params.prefill; }
-  const locked = isRecordingLocked();
-  if (locked) {
-    const content = '<div class="entry-wrap">' + entryStatRowHtml() + '<div class="card"><div class="empty-state">' + ICON.lock.replace('<svg ', '<svg style="width:30px;height:30px;margin-bottom:10px;opacity:.6;color:var(--warning)" ') +
-      '<div class="empty-state-title">Volume entry is locked</div>' +
-      '<div class="empty-state-sub" style="max-width:420px;margin:0 auto">' + esc(ymLabel(oldestOutstandingYm())) + ' has ended and is waiting to close. Entry stays locked until every outstanding month is closed, oldest first.</div>' +
-      '<button class="btn btn-primary mt-3" onclick="P.startClose(\'' + oldestOutstandingYm() + '\')">Close ' + esc(ymLabel(oldestOutstandingYm())) + '</button></div></div></div>';
-    return shell(content, { title: 'Volume entry', sub: 'Record this period’s Business Volume', noBanner: false, breadcrumb: '<div class="breadcrumb">' + backLink() + '</div>' });
-  }
   const correction = APP.correctionMode;
-  const addBounds = { min: CURRENT_YM + '-01', max: isoToday(0) };
+  const ym = entryYm();
+  const bounds = entryDateBounds(ym);
   const content = '<div class="entry-wrap">' + entryStatRowHtml() + (correction ? renderCorrectionPanel() :
+    entryMonthNoteHtml() +
     '<div class="card">' +
     (APP.entrySelectedId ? entrySelectedCardHtml(APP.entrySelectedId) :
-      '<div class="search-box mb-3"><div class="search-input-wrap">' + ICON.search + '<input id="entry-search" type="text" placeholder="Search by name or 6-digit member number" oninput="P.entrySearchInput(this.value)" autocomplete="off"></div><div id="entry-search-results"></div></div>') +
-    '<div class="field"><label for="entry-date">Date *</label><input id="entry-date" type="date" min="' + addBounds.min + '" max="' + addBounds.max + '" value="' + addBounds.max + '" ' + (APP.entrySelectedId ? '' : 'disabled') + ' oninput="P.validateEntryForm()"></div>' +
+      '<div class="search-box mb-3"><div class="search-input-wrap">' + ICON.search + '<input id="entry-search" type="text" placeholder="Search by name, 6-digit member number or phone" oninput="P.entrySearchInput(this.value)" autocomplete="off"></div><div id="entry-search-results"></div></div>') +
+    entryMonthSelectHtml() +
+    '<div class="field"><label for="entry-date">Date *</label><input id="entry-date" type="date" min="' + bounds.min + '" max="' + bounds.max + '" value="' + bounds.max + '" ' + (APP.entrySelectedId ? '' : 'disabled') + ' oninput="P.validateEntryForm()"><span class="hint">Must fall within ' + esc(ymLabel(ym)) + '.</span></div>' +
     '<div class="field"><label for="entry-amount">Business Volume *</label><input id="entry-amount" class="entry-amount-input" type="number" step="0.01" min="0.01" placeholder="0.00" ' + (APP.entrySelectedId ? '' : 'disabled') + ' oninput="P.validateEntryForm()"><span class="hint" id="entry-amount-hint">Up to two decimals · no currency field</span></div>' +
     '<button class="btn btn-primary btn-block" id="entry-save-btn" disabled onclick="P.saveEntry()">Save entry</button>' +
     '</div><div class="auth-foot" style="margin-top:14px;text-align:left"><a href="javascript:void(0)" onclick="P.toggleCorrectionMode()">Correct a closed month instead →</a></div>' +
-    '<div class="card mt-3"><div class="card-title mb-3">This period’s entries</div>' + entryEntriesListHtml() + '</div>') + '</div>';
-  return shell(content, { title: 'Volume entry', sub: correction ? 'Correcting a closed month' : 'Record this period’s Business Volume', breadcrumb: '<div class="breadcrumb">' + backLink() + '</div>' });
+    '<div class="card mt-3"><div class="card-title mb-3">' + esc(ymLabel(ym)) + ' entries</div>' + entryEntriesListHtml() + '</div>') + '</div>';
+  return shell(content, { title: 'Volume entry', sub: correction ? 'Correcting a closed month' : 'Recording into ' + ymLabel(ym), breadcrumb: '<div class="breadcrumb">' + backLink() + '</div>' });
 };
 function renderCorrectionPanel() {
   const yms = closedYms();
@@ -1795,7 +2399,7 @@ function renderCorrectionPanel() {
     '<div class="card">' +
     '<div class="field"><label for="correction-ym">Month</label><select id="correction-ym" onchange="P.correctionMonthChange(this.value)">' + yms.map(function (y) { return '<option value="' + y + '"' + (y === ym ? ' selected' : '') + '>' + ymLabel(y) + '</option>'; }).join('') + '</select></div>' +
     (APP.correctionSelectedId ? entrySelectedCardHtml(APP.correctionSelectedId, historicalSlab, 'clearCorrectionSelection') :
-      '<div class="search-box"><div class="search-input-wrap">' + ICON.search + '<input id="correction-search" type="text" placeholder="Search by name or member number" oninput="P.correctionSearchInput(this.value)" autocomplete="off"></div><div id="correction-search-results"></div></div>') +
+      '<div class="search-box"><div class="search-input-wrap">' + ICON.search + '<input id="correction-search" type="text" placeholder="Search by name, member number or phone" oninput="P.correctionSearchInput(this.value)" autocomplete="off"></div><div id="correction-search-results"></div></div>') +
     '</div>' +
     (APP.correctionSelectedId ? correctionEntriesCardHtml(ym, APP.correctionSelectedId) : '') +
     '<div class="auth-foot" style="margin-top:14px;text-align:left"><a href="javascript:void(0)" onclick="P.toggleCorrectionMode()">← Back to volume entry</a></div>';
@@ -1895,9 +2499,8 @@ function saveClosedEntryModal() {
 }
 function clearCorrectionSelection() { APP.correctionSelectedId = null; render(); }
 function entrySearchInput(q) {
-  q = q.trim().toLowerCase();
-  if (!q) { setHtml('entry-search-results', ''); return; }
-  const results = MEMBERS.filter(function (m) { return m.name.toLowerCase().indexOf(q) !== -1 || String(m.id).indexOf(q) !== -1; }).slice(0, 8);
+  const results = searchMembers(q, { limit: 8 });
+  if (!results) { setHtml('entry-search-results', ''); return; }
   setHtml('entry-search-results', '<div class="search-results">' + (results.length ? results.map(function (m) {
     return '<div class="search-result-row" onclick="P.entrySelectMember(' + m.id + ')">' + avatar(m.name, true) + '<div><div class="search-result-name">' + esc(m.name) + '</div><div class="search-result-meta">#' + m.id + (m.active ? '' : ' · Inactive') + '</div></div></div>';
   }).join('') : '<div class="search-empty">No members match</div>') + '</div>');
@@ -1908,28 +2511,35 @@ function validateEntryForm() {
   const btn = document.getElementById('entry-save-btn'); const hint = document.getElementById('entry-amount-hint');
   const n = parseFloat(val('entry-amount'));
   const date = val('entry-date');
-  const minD = CURRENT_YM + '-01', maxD = isoToday(0);
+  const ym = entryYm();
+  const bounds = entryDateBounds(ym);
   const amountOk = val('entry-amount') !== '' && !isNaN(n) && n > 0;
-  const dateOk = date >= minD && date <= maxD;
+  const dateOk = date >= bounds.min && date <= bounds.max;
   const ok = amountOk && dateOk;
   if (btn) btn.disabled = !ok;
-  if (hint) { hint.textContent = !amountOk ? 'Enter an amount greater than zero' : (!dateOk ? 'Pick a date within this month, not in the future' : 'Up to two decimals · no currency field'); hint.className = 'hint' + (ok ? '' : ' warn'); }
+  if (hint) { hint.textContent = !amountOk ? 'Enter an amount greater than zero' : (!dateOk ? 'Pick a date within ' + ymLabel(ym) + ', not in the future' : 'Up to two decimals · no currency field'); hint.className = 'hint' + (ok ? '' : ' warn'); }
 }
 function saveEntry() {
   const id = APP.entrySelectedId; const n = parseFloat(val('entry-amount')); const date = val('entry-date');
   if (!id || isNaN(n) || n <= 0 || !date) return;
-  recordEntry(id, Math.round(n * 100) / 100, date);
+  // an entry belongs to the month its own date falls in, never to "the month being closed" (Rule-21)
+  const ym = date.slice(0, 7);
+  if (entryYms().indexOf(ym) === -1) {
+    const blocking = currentMonthBlockedBy();
+    toast(ymLabel(ym) + ' cannot be recorded into' + (blocking ? ' until ' + ymLabel(blocking) + ' is closed' : ''), 'error');
+    return;
+  }
+  recordEntry(id, Math.round(n * 100) / 100, date, ym);
   const m = membersById.get(id);
-  pushAudit({ member: m.name, field: 'Business Volume', before: '—', after: fmt2(n), cause: 'Volume entry recorded' });
-  toast('Entry saved for ' + m.name, 'success');
+  pushAudit({ member: m.name, field: 'Business Volume (' + ymLabel(ym) + ')', before: '—', after: fmt2(n), cause: 'Volume entry recorded' });
+  toast('Entry saved for ' + m.name + ' — ' + ymLabel(ym), 'success');
   APP.entrySelectedId = null; render();
 }
 function toggleCorrectionMode() { APP.correctionMode = !APP.correctionMode; APP.correctionSelectedId = null; render(); }
 function correctionMonthChange(ym) { APP.correctionYm = ym; render(); }
 function correctionSearchInput(q) {
-  q = q.trim().toLowerCase();
-  if (!q) { setHtml('correction-search-results', ''); return; }
-  const results = MEMBERS.filter(function (m) { return m.name.toLowerCase().indexOf(q) !== -1 || String(m.id).indexOf(q) !== -1; }).slice(0, 8);
+  const results = searchMembers(q, { limit: 8 });
+  if (!results) { setHtml('correction-search-results', ''); return; }
   setHtml('correction-search-results', '<div class="search-results">' + (results.length ? results.map(function (m) {
     return '<div class="search-result-row" onclick="P.selectCorrectionMember(' + m.id + ')">' + avatar(m.name, true) + '<div><div class="search-result-name">' + esc(m.name) + '</div><div class="search-result-meta">#' + m.id + '</div></div></div>';
   }).join('') : '<div class="search-empty">No members match</div>') + '</div>');
@@ -1960,13 +2570,13 @@ function renderCloseWizard() {
   const segs = [0, 1, 2, 3].map(function (i) { return '<div class="seg' + (i < w.step ? ' done' : i === w.step ? ' active' : '') + '"></div>'; }).join('');
   let body;
   if (w.step === 0) {
-    const liveCount = MEMBERS.filter(function (m) { return (LIVE_BV.get(m.id) || 0) > 0; }).length;
+    const liveCount = MEMBERS.filter(function (m) { return (liveBV().get(m.id) || 0) > 0; }).length;
     body = '<div class="wizard-icon-wrap">' + ICON.close + '</div><div class="wizard-title">Close ' + esc(ymLabel(ym)) + '</div>' +
       '<div class="wizard-sub">This writes a permanent record for every member, then clears live Business Volume, Total Business Volume and Rewards to zero for the new period. <strong>This step cannot be undone.</strong></div>' +
       '<div class="wizard-body"><div class="stat-row n3" style="margin-bottom:0">' +
       '<div class="stat-card"><div class="stat-label">Members</div><div class="stat-value">' + fmtInt(MEMBERS.length) + '</div></div>' +
       '<div class="stat-card"><div class="stat-label">With an entry</div><div class="stat-value">' + fmtInt(liveCount) + '</div></div>' +
-      '<div class="stat-card"><div class="stat-label">On top slab</div><div class="stat-value">' + fmtInt(MEMBERS.filter(function (m) { return LIVE_REWARDS.get(m.id).ownSlab === topSlabPct(); }).length) + '</div></div>' +
+      '<div class="stat-card"><div class="stat-label">On top slab</div><div class="stat-value">' + fmtInt(MEMBERS.filter(function (m) { return liveRewards().get(m.id).ownSlab === topSlabPct(); }).length) + '</div></div>' +
       '</div></div><div class="wizard-actions"><button class="btn btn-secondary" onclick="P.closeWizardExit()">Cancel</button><button class="btn btn-primary" onclick="P.closeWizardNext()">Continue</button></div>';
   } else if (w.step === 1) {
     body = '<div class="wizard-icon-wrap">' + ICON.shield + '</div><div class="wizard-title">Confirm a backup</div>' +
@@ -1998,12 +2608,13 @@ function closeWizardBack() { APP.closeWizard.step--; render(); }
 function generateBackup() { APP.closeWizard.backupGenerating = true; render(); setTimeout(function () { APP.closeWizard.backupGenerating = false; APP.closeWizard.backupConfirmed = true; render(); }, 800); }
 function finalizeClose() {
   const ym = APP.closeWizard.ym;
-  const rows = buildSnapshotRows(LIVE_BV);
+  const rows = buildSnapshotRows(liveBV(ym));
   SNAPSHOTS[ym] = [{ version: 1, closedOn: isoToday(0), rows: rows }];
   LAST_CLOSED_YM = ym;
-  CLOSED_ENTRIES[ym] = LIVE_ENTRIES;
-  LIVE_ENTRIES = new Map();
-  recalcLive();
+  // only the closing period is cleared — any other live month keeps its own figures (Rule-38)
+  CLOSED_ENTRIES[ym] = liveEntries(ym);
+  delete LIVE_BY_YM[ym];
+  APP.viewYm = null; APP.entryYm = null; // fall back to whatever is now oldest-open for entry
   pushAudit({ member: 'All members', field: 'Monthly close', before: ymLabel(ym), after: 'Closed', cause: 'Permanent record written; live figures cleared' });
   APP.closeWizard.step = 3; render();
 }
@@ -2014,15 +2625,19 @@ function closeWizardExit() { APP.closeWizard.active = false; APP.route = 'close'
    ============================================================ */
 function buildSlabCard() {
   if (!APP.slabDraft) APP.slabDraft = SETTINGS.slabTable.map(function (r) { return { threshold: r.threshold, pct: r.pct }; });
+  const onlyRow = APP.slabDraft.length <= 1;
   const rows = APP.slabDraft.map(function (r, i) {
     return '<tr><td><input id="slab-th-' + i + '" type="number" min="0" value="' + r.threshold + '" style="height:30px"></td>' +
       '<td><input id="slab-pct-' + i + '" type="number" min="0" step="0.5" value="' + r.pct + '" style="height:30px"></td>' +
-      '<td style="width:1%"><button class="icon-btn" onclick="P.removeSlabRow(' + i + ')">✕</button></td></tr>';
+      '<td style="width:1%"><button class="icon-btn"' + (onlyRow ? ' disabled' : '') +
+      ' aria-label="' + (onlyRow ? 'Remove row — the table must keep at least one slab' : 'Remove this slab row') + '"' +
+      ' onclick="P.removeSlabRow(' + i + ')">✕</button></td></tr>';
   }).join('');
   return '<div class="card section-anchor" id="settings-card-slab"><div class="card-head"><div><div class="card-title">Slab table</div><div class="card-sub">The band looked up from Total Business Volume. Top slab recalculates automatically.</div></div>' +
     '<button class="btn btn-secondary btn-sm" onclick="P.addSlabRow()">' + ICON.plus + ' Add row</button></div>' +
     '<div class="table-wrap"><table><thead><tr><th>Threshold</th><th>Slab %</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     '<div class="hint mt-3">Rows are not checked for consistency against each other — this is deliberate. Misconfiguring the table can produce unexpected Rewards.</div>' +
+    (onlyRow ? '<div class="hint mt-3">The last slab cannot be removed — the console needs at least one to work out a member’s slab.</div>' : '') +
     '<button class="btn btn-primary mt-3" onclick="P.saveSlabTable()">Save slab table</button></div>';
 }
 function syncSlabDraftFromDom() {
@@ -2032,17 +2647,31 @@ function syncSlabDraftFromDom() {
   });
 }
 function addSlabRow() { syncSlabDraftFromDom(); APP.slabDraft.push({ threshold: 0, pct: 0 }); document.getElementById('settings-card-slab').outerHTML = buildSlabCard(); }
-function removeSlabRow(i) { syncSlabDraftFromDom(); APP.slabDraft.splice(i, 1); document.getElementById('settings-card-slab').outerHTML = buildSlabCard(); }
+function removeSlabRow(i) {
+  syncSlabDraftFromDom();
+  if (APP.slabDraft.length <= 1) { toast('The slab table must keep at least one row', 'danger'); return; }
+  APP.slabDraft.splice(i, 1);
+  document.getElementById('settings-card-slab').outerHTML = buildSlabCard();
+}
 function saveSlabTable() {
   syncSlabDraftFromDom();
   const seen = new Set(); let dup = false;
   APP.slabDraft.forEach(function (r) { if (seen.has(r.threshold)) dup = true; seen.add(r.threshold); });
+  // Bad input is refused outright — the warning is only for changes that could legitimately be saved.
   if (dup) { toast('Two rows share the same threshold — adjust before saving', 'danger'); return; }
-  SETTINGS.slabTable = APP.slabDraft.map(function (r) { return { threshold: r.threshold, pct: r.pct }; });
-  APP.slabDraft = null; recalcLive();
-  pushAudit({ member: '—', field: 'Slab table', before: 'Previous table', after: SETTINGS.slabTable.length + ' rows', cause: 'Settings changed by administrator' });
-  toast('Slab table saved', 'success');
-  document.getElementById('settings-card-slab').outerHTML = buildSlabCard();
+  const nextTable = APP.slabDraft.map(function (r) { return { threshold: r.threshold, pct: r.pct }; });
+  confirmSettingsRecalc({
+    kind: 'slab',
+    title: 'Save the slab table?',
+    impact: previewRecalcImpact({ slabTable: nextTable }),
+    onConfirm: function () {
+      SETTINGS.slabTable = nextTable;
+      APP.slabDraft = null; recalcLive();
+      pushAudit({ member: '—', field: 'Slab table', before: 'Previous table', after: SETTINGS.slabTable.length + ' rows', cause: 'Settings changed by administrator' });
+      toast('Slab table saved', 'success');
+      document.getElementById('settings-card-slab').outerHTML = buildSlabCard();
+    },
+  });
 }
 function buildRoyaltyCard() {
   return '<div class="card section-anchor" id="settings-card-royalty"><div class="card-title">Royalty</div><div class="card-sub mb-3">Paid when enough direct legs land on the top slab</div>' +
@@ -2055,11 +2684,20 @@ function buildRoyaltyCard() {
 function royaltyExampleText(min, rate) { return 'A member with ' + min + '+ direct legs on the top slab earns ' + rate + '% royalty on each qualifying leg’s Total Business Volume.'; }
 function updateRoyaltyExample() { setHtml('royalty-example', royaltyExampleText(val('royalty-min') || SETTINGS.royaltyMinChildren, val('royalty-rate') || SETTINGS.royaltyRatePct)); }
 function saveRoyalty() {
-  SETTINGS.royaltyMinChildren = parseInt(val('royalty-min'), 10) || 1;
-  SETTINGS.royaltyRatePct = parseFloat(val('royalty-rate')) || 0;
-  recalcLive();
-  pushAudit({ member: '—', field: 'Royalty settings', before: '—', after: SETTINGS.royaltyMinChildren + ' legs / ' + SETTINGS.royaltyRatePct + '%', cause: 'Settings changed by administrator' });
-  toast('Royalty settings saved', 'success');
+  const nextMin = parseInt(val('royalty-min'), 10) || 1;
+  const nextRate = parseFloat(val('royalty-rate')) || 0;
+  confirmSettingsRecalc({
+    kind: 'royalty',
+    title: 'Save royalty settings?',
+    impact: previewRecalcImpact({ royaltyMinChildren: nextMin, royaltyRatePct: nextRate }),
+    onConfirm: function () {
+      SETTINGS.royaltyMinChildren = nextMin;
+      SETTINGS.royaltyRatePct = nextRate;
+      recalcLive();
+      pushAudit({ member: '—', field: 'Royalty settings', before: '—', after: SETTINGS.royaltyMinChildren + ' legs / ' + SETTINGS.royaltyRatePct + '%', cause: 'Settings changed by administrator' });
+      toast('Royalty settings saved', 'success');
+    },
+  });
 }
 function buildStructureCard() {
   return '<div class="card section-anchor" id="settings-card-structure"><div class="card-title">Structure guidance</div><div class="card-sub mb-3">Advisory only — never blocks a new member being added</div>' +
@@ -2096,12 +2734,104 @@ function buildSessionCard() {
     '<button class="btn btn-primary mt-3" onclick="P.saveSessionTimeout()">Save</button></div>';
 }
 function saveSessionTimeout() { SETTINGS.sessionTimeoutMinutes = parseInt(val('session-timeout'), 10) || 1; toast('Saved', 'success'); }
+
+/* Whole-console backup & restore (RQ-23) — a second, orthogonal backup mechanism from the
+   per-month close backup above: schedule/retention here in Settings (M7.7), the actual
+   backing-up and restoring in M8 (M8.6/M8.7). See architecture.md ADR-012, §15.5. */
+const BACKUP_SCHEDULES = ['off', 'daily', 'weekly', 'monthly'];
+function buildBackupScheduleCard() {
+  const cb = APP.consoleBackup;
+  return '<div class="card section-anchor" id="settings-card-backup"><div class="card-title">Backup schedule</div>' +
+    '<div class="card-sub mb-3">Backs up the whole console — every member, entry, record and setting, not just one month</div>' +
+    '<div class="segmented mb-3">' + BACKUP_SCHEDULES.map(function (s) {
+      return '<button class="' + (cb.schedule === s ? 'active' : '') + '" onclick="P.setConsoleBackupSchedule(\'' + s + '\')">' + s.charAt(0).toUpperCase() + s.slice(1) + '</button>';
+    }).join('') + '</div>' +
+    '<div class="form-grid">' +
+    '<div class="field"><label for="backup-retention">Keep the most recent</label><input id="backup-retention" type="number" min="1" value="' + cb.retention + '"></div>' +
+    '</div>' +
+    '<div class="hint mb-3">Last backup: ' + esc(cb.lastAt) + '. Older backups beyond this count are removed automatically — closed-month backups are never affected.</div>' +
+    '<button class="btn btn-secondary" onclick="P.saveBackupRetention()">Save</button> ' +
+    '<button class="btn btn-primary" onclick="P.backupConsoleNow()">Back up now</button>' +
+    '</div>';
+}
+function setConsoleBackupSchedule(kind) {
+  APP.consoleBackup.schedule = kind;
+  pushAudit({ member: '—', field: 'Whole-console backup schedule', before: '—', after: kind === 'off' ? 'Off' : kind.charAt(0).toUpperCase() + kind.slice(1), cause: 'Settings changed by administrator' });
+  render(); toast('Backup schedule set to ' + kind, 'success');
+}
+function saveBackupRetention() {
+  APP.consoleBackup.retention = parseInt(val('backup-retention'), 10) || 1;
+  pushAudit({ member: '—', field: 'Whole-console backup retention', before: '—', after: APP.consoleBackup.retention + ' backups', cause: 'Settings changed by administrator' });
+  toast('Retention saved', 'success');
+}
+function backupConsoleNow() {
+  const cb = APP.consoleBackup;
+  const now = 'Just now';
+  cb.backups.unshift({ id: 'cb-' + Date.now(), label: now, sub: 'Manual', kind: 'manual' });
+  cb.lastAt = now;
+  // Illustrative retention: keep only the most recent N scheduled/manual backups (pre-restore-safety and closed-month backups live elsewhere and are never pruned this way).
+  if (cb.backups.length > cb.retention) cb.backups.length = cb.retention;
+  render(); toast('Console backed up', 'success');
+}
+
+function buildConsoleRestoreCard() {
+  const cb = APP.consoleBackup;
+  if (!cb.selectedId && cb.backups.length) cb.selectedId = cb.backups[0].id;
+  const list = cb.backups.map(function (b) {
+    const isSel = b.id === cb.selectedId;
+    return '<button class="restore-opt' + (isSel ? ' sel' : '') + '" onclick="P.selectConsoleBackupRow(\'' + b.id + '\')" aria-pressed="' + (isSel ? 'true' : 'false') + '">' +
+      '<span class="restore-radio"></span>' +
+      '<span><span class="restore-main">' + esc(b.label) + '</span><span class="restore-sub">' + esc(b.sub) + '</span></span></button>';
+  }).join('');
+  const selected = cb.backups.filter(function (b) { return b.id === cb.selectedId; })[0];
+  return '<div class="card section-anchor" id="settings-card-restore"><div class="card-title">Restore</div>' +
+    '<div class="card-sub mb-3">Overwrites everything currently in the console — cannot be undone</div>' +
+    (cb.backups.length
+      ? '<div class="restore-list">' + list + '</div>' +
+        '<button class="btn btn-secondary mb-2" onclick="P.openConsoleRestoreConfirm(\'settings-list\', \'' + (selected ? selected.id : '') + '\')">Restore from ' + esc(selected ? selected.label : 'selected backup') + '</button>'
+      : '<p class="hint">No whole-console backup has been taken yet.</p>') +
+    '<div><a href="javascript:void(0)" onclick="P.openConsoleRestoreConfirm(\'settings-file\', null)">Restore from a file…</a></div>' +
+    '</div>';
+}
+function selectConsoleBackupRow(id) { APP.consoleBackup.selectedId = id; render(); }
+
+function openConsoleRestoreConfirm(source, targetId) {
+  APP.restoreConfirm = { active: true, source: source, targetId: targetId, checked: false };
+  const cb = APP.consoleBackup;
+  const target = source === 'settings-list' ? cb.backups.filter(function (b) { return b.id === targetId; })[0] : null;
+  const named = target ? target.label : 'the file you choose';
+  openModal(
+    '<div class="modal-header"><h2>Restore from backup</h2><button class="modal-close" onclick="P.closeModal()">✕</button></div>' +
+    '<div class="modal-body">' +
+    '<div class="modal-warn"><div class="modal-warn-row">' + ICON.alert +
+    '<span class="modal-warn-text"><b>This replaces everything</b> currently in the console with the backup from <b>' + esc(named) + '</b>. Anything recorded after that moment will be lost unless it is in a newer backup.</span>' +
+    '</div></div>' +
+    '<label class="checkbox-row"><input type="checkbox" id="restore-confirm-check" onchange="document.getElementById(\'restore-confirm-btn\').disabled = !this.checked">' +
+    '<span>I understand this overwrites all current data and cannot be undone.</span></label>' +
+    '</div>' +
+    '<div class="modal-footer"><button class="btn btn-secondary" onclick="P.closeModal()">Cancel</button>' +
+    '<button class="btn btn-danger" id="restore-confirm-btn" disabled onclick="P.confirmConsoleRestore()">Restore</button></div>',
+    { dismissable: true }
+  );
+}
+function confirmConsoleRestore() {
+  const rc = APP.restoreConfirm;
+  const cb = APP.consoleBackup;
+  closeModal();
+  // Safety net: the console backs up its own current state before any restore overwrites it (ADR-012).
+  cb.backups.unshift({ id: 'cb-safety-' + Date.now(), label: 'Just now', sub: 'Safety backup — taken automatically before this restore', kind: 'pre_restore_safety' });
+  APP.restoreConfirm = { active: false, source: null, targetId: null, checked: false };
+  APP.authPhase = 'login'; APP.route = 'home'; APP.params = {};
+  render();
+  toast(rc.source === 'settings-file' ? 'Restored from the chosen file — sign in again' : 'Console restored — sign in again', 'success');
+}
+
 VIEWS.settings = function () {
   const content = '<div class="settings-layout">' +
     '<div class="settings-nav">' +
-    ['slab:Slab table', 'royalty:Royalty', 'structure:Structure', 'reporting:Reporting', 'session:Session'].map(function (s) { const p = s.split(':'); return '<a class="nav-item" href="#settings-card-' + p[0] + '">' + esc(p[1]) + '</a>'; }).join('') +
+    ['slab:Slab table', 'royalty:Royalty', 'structure:Structure', 'reporting:Reporting', 'session:Session', 'backup:Backup schedule', 'restore:Restore'].map(function (s) { const p = s.split(':'); return '<a class="nav-item" href="#settings-card-' + p[0] + '">' + esc(p[1]) + '</a>'; }).join('') +
     '</div><div style="display:flex;flex-direction:column;gap:16px">' +
-    buildSlabCard() + buildRoyaltyCard() + buildStructureCard() + buildReportingCard() + buildSessionCard() +
+    buildSlabCard() + buildRoyaltyCard() + buildStructureCard() + buildReportingCard() + buildSessionCard() + buildBackupScheduleCard() + buildConsoleRestoreCard() +
     '</div></div>';
   return shell(content, { title: 'Settings', sub: 'Each section saves independently' });
 };
@@ -2242,9 +2972,9 @@ function lowSectionHtml(threshold) {
     (data.length ? '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Member #</th><th class="num">Average Business Volume</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty-state" style="padding:20px"><div class="empty-state-title">No members below this threshold</div></div>');
 }
 VIEWS.reports = function () {
-  const ym = isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM;
-  const monthlyPreview = MEMBERS.slice().sort(function (a, b) { return (LIVE_TBV.get(b.id) || 0) - (LIVE_TBV.get(a.id) || 0); }).slice(0, 6)
-    .map(function (m) { return '<tr><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td class="num">' + fmt2(LIVE_BV.get(m.id) || 0) + '</td><td class="num">' + fmtInt(LIVE_TBV.get(m.id) || 0) + '</td><td>' + pillSlab(LIVE_REWARDS.get(m.id).ownSlab) + '</td></tr>'; }).join('');
+  const ym = viewYm();
+  const monthlyPreview = MEMBERS.slice().sort(function (a, b) { return (liveTBV().get(b.id) || 0) - (liveTBV().get(a.id) || 0); }).slice(0, 6)
+    .map(function (m) { return '<tr><td class="cell-primary">' + esc(m.name) + '</td><td class="mono">' + m.id + '</td><td class="num">' + fmt2(liveBV().get(m.id) || 0) + '</td><td class="num">' + fmtInt(liveTBV().get(m.id) || 0) + '</td><td>' + pillSlab(liveRewards().get(m.id).ownSlab) + '</td></tr>'; }).join('');
   const yearly = yearlyAverages().slice().sort(function (a, b) { return b.avgTbv - a.avgTbv; }).slice(0, 6)
     .map(function (d) { return '<tr><td class="cell-primary">' + esc(d.name) + '</td><td class="mono">' + d.id + '</td><td class="num">' + fmt2(d.avgBv) + '</td><td class="num">' + fmt2(d.avgTbv) + '</td></tr>'; }).join('');
   const threshold = APP.lowThreshold != null ? APP.lowThreshold : SETTINGS.lowContributionThreshold;
@@ -2276,11 +3006,11 @@ VIEWS.reports = function () {
 };
 function updateLowThreshold(v) { const n = parseFloat(v); APP.lowThreshold = isNaN(n) ? SETTINGS.lowContributionThreshold : n; setHtml('low-section', lowSectionHtml(APP.lowThreshold)); }
 function exportMonthly() {
-  const ym = isRecordingLocked() ? oldestOutstandingYm() : CURRENT_YM;
+  const ym = viewYm();
   const checked = OPTIONAL_COLUMNS.filter(function (c) { const n = document.getElementById('col-' + c.key); return n && n.checked; });
   const header = ['Name', 'Member Number', 'Phone', 'Business Volume'].concat(checked.map(function (c) { return c.label; }));
   const rows = MEMBERS.map(function (m) {
-    const base = [m.name, m.id, m.phone, LIVE_BV.get(m.id) || 0];
+    const base = [m.name, m.id, m.phone, liveBV().get(m.id) || 0];
     const extra = checked.map(function (c) {
       switch (c.key) {
         case 'email': return m.email || '';
@@ -2289,10 +3019,10 @@ function exportMonthly() {
         case 'introducerName': return m.refId ? membersById.get(m.refId).name : '';
         case 'level': return m.level;
         case 'legs': return directChildren(m.id).length;
-        case 'tbv': return LIVE_TBV.get(m.id) || 0;
-        case 'slab': return LIVE_REWARDS.get(m.id).ownSlab;
-        case 'rewards': return LIVE_REWARDS.get(m.id).total;
-        case 'royalty': return LIVE_REWARDS.get(m.id).royalty;
+        case 'tbv': return liveTBV().get(m.id) || 0;
+        case 'slab': return liveRewards().get(m.id).ownSlab;
+        case 'rewards': return liveRewards().get(m.id).total;
+        case 'royalty': return liveRewards().get(m.id).royalty;
         case 'joined': return ddmmyyyy(m.joinedDate);
         case 'status': return m.active ? 'Active' : 'Inactive';
         default: return '';
@@ -2354,17 +3084,23 @@ window.P = {
   nav: nav, back: back, toggleTheme: toggleTheme, lockSession: lockSession, signOut: signOut, closeModal: closeModal,
   togglePwField: togglePwField,
   startClose: startClose,
+  goToRestoreFromSetup: goToRestoreFromSetup, backToSetupFromRestore: backToSetupFromRestore,
   setSetupMode: setSetupMode, setSetupConfirmed: setSetupConfirmed, setupContinue: setupContinue, setupFinish: setupFinish,
   setLoginMode: setLoginMode, pinPress: pinPress, pinBackspace: pinBackspace, passwordSubmit: passwordSubmit,
   startRecovery: startRecovery, cancelRecovery: cancelRecovery, recoveryVerify: recoveryVerify, setRecoveryMode: setRecoveryMode,
   recoverySetContinue: recoverySetContinue, setRecoveryConfirmed: setRecoveryConfirmed, recoveryFinish: recoveryFinish,
-  homeSearchInput: homeSearchInput, openAddMember: openAddMember, setStructureFullTree: setStructureFullTree, confirmStructureFullTree: confirmStructureFullTree,
+  homeSearchInput: homeSearchInput, openAddMember: openAddMember,
+  structureToggle: structureToggle, structureNodeKey: structureNodeKey, structureCollapseAll: structureCollapseAll,
+  openFullHierarchy: openFullHierarchy, drawFullHierarchy: drawFullHierarchy,
+  structureZoomBy: structureZoomBy, structureZoomFit: structureZoomFit,
+  structureSearchInput: structureSearchInput, structureSearchSelect: structureSearchSelect,
   openEditMember: openEditMember, confirmDeactivate: confirmDeactivate, reactivateMember: reactivateMember,
   setMemberEntriesPageSize: setMemberEntriesPageSize, memberEntriesPrevPage: memberEntriesPrevPage, memberEntriesNextPage: memberEntriesNextPage,
   openEditEntry: openEditEntry, validateEditEntry: validateEditEntry, saveEditEntry: saveEditEntry,
   refSearchInput: refSearchInput, selectRef: selectRef, clearRef: clearRef, toggleConsent: toggleConsent, checkPhone: checkPhone,
   saveMember: saveMember, switchToReactivate: switchToReactivate,
   entrySearchInput: entrySearchInput, entrySelectMember: entrySelectMember, entryClearSelection: entryClearSelection,
+  setEntryYm: setEntryYm, setViewYm: setViewYm,
   validateEntryForm: validateEntryForm, saveEntry: saveEntry, toggleCorrectionMode: toggleCorrectionMode, correctionMonthChange: correctionMonthChange,
   correctionSearchInput: correctionSearchInput, selectCorrectionMember: selectCorrectionMember, clearCorrectionSelection: clearCorrectionSelection,
   setCorrectionEntriesPageSize: setCorrectionEntriesPageSize, correctionEntriesPrevPage: correctionEntriesPrevPage, correctionEntriesNextPage: correctionEntriesNextPage,
@@ -2373,11 +3109,21 @@ window.P = {
   addSlabRow: addSlabRow, removeSlabRow: removeSlabRow, saveSlabTable: saveSlabTable, updateRoyaltyExample: updateRoyaltyExample,
   saveRoyalty: saveRoyalty, saveStructureGuidance: saveStructureGuidance, saveReporting: saveReporting,
   saveSessionTimeout: saveSessionTimeout,
+  setConsoleBackupSchedule: setConsoleBackupSchedule, saveBackupRetention: saveBackupRetention, backupConsoleNow: backupConsoleNow,
+  selectConsoleBackupRow: selectConsoleBackupRow, openConsoleRestoreConfirm: openConsoleRestoreConfirm, confirmConsoleRestore: confirmConsoleRestore,
   exportMonthly: exportMonthly, exportYearly: exportYearly, updateLowThreshold: updateLowThreshold, exportLow: exportLow, exportClosedSnapshot: exportClosedSnapshot,
   filterAudit: filterAudit,
+  selectRestorePoint: selectRestorePoint, restoreFromBackup: restoreFromBackup, retryOpenData: retryOpenData,
+  restoreFromFileAtDbRecovery: restoreFromFileAtDbRecovery,
 };
 
-function init() { document.documentElement.setAttribute('data-theme', 'light'); render(); }
+function init() {
+  document.documentElement.setAttribute('data-theme', 'light');
+  // Pre-flight: in the real console this is "can the data file be opened?". Here it is a
+  // hash, so the recovery screen stays demonstrable without putting a failure state in the UI.
+  if (location.hash === '#db-recovery') APP.authPhase = 'db-error';
+  render();
+}
 init();
 
 console.log('[prototype] members:', MEMBERS.length, 'self-check complete');

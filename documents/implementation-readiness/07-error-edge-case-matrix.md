@@ -17,6 +17,9 @@ Organized by major workflow. "Behaviour" is stated as defined wherever a source 
 | Attempt to deactivate the root member | Rejected/disabled — root cannot be deactivated | Confirmed in prototype (`m.id === ROOT_ID` disables the button); no explicit Rule states this, but it is a reasonable derived consequence of "exactly one root, fixed permanently" (Rule-30's structural constraint) |
 | Onboarding exceeds configured level-width or depth guidance | **Not an error** — warns, allows | Rule-1, Rule-32 |
 | Consent checkbox not ticked | Save disabled — not a submit-then-reject error, the action is simply unavailable | Rule-40 |
+| Search query of fewer than 4 digits, intended as a phone | **Not an error** — the phone clause does not engage; name and ID matching are unaffected | Rule-44, V4.4 |
+| Phone entered for search with spaces, dashes or a country prefix | Matches — both sides reduced to a canonical key first (digits, then an international prefix or trunk zero dropped), so it works in both directions; the stored value is never rewritten | Rule-44 |
+| Search matches an **inactive** member by phone | Shown normally, in the distinct inactive colour with a labelled pill — inactive members are findable like any other | Rule-28, M4.5 |
 
 ## Workflow: Business Volume Entry (M2)
 
@@ -25,8 +28,11 @@ Organized by major workflow. "Behaviour" is stated as defined wherever a source 
 | Amount is zero | Refused | Rule-16a |
 | Amount is negative | Refused | Rule-16a |
 | Amount has more than 2 decimal places | Refused (field-level validation) | Rule-16 |
-| Entry attempted while a reset is outstanding | **Entire screen locked** — no entry form rendered, locked empty state shown naming the outstanding month | Rule-36 |
-| Entry date outside the current period's bounds | Refused (date field clamped to period bounds) | Rule-21 |
+| Entry dated in a month that has ended but is **not closed** | **Accepted** — recorded into that month, which recalculates; no other month is touched | Rule-36 (amended 7 Aug 2026, CR-2) |
+| Entry dated in the **current** month while an earlier month is outstanding | **Refused, naming the month that must be closed first.** The form stays available — only this date is rejected | Rule-36, V2.7 |
+| Entry dated in a month that is already **closed** | Not offered on the entry screen; the correction panel is pointed to (a link, not an error) | Rule-39, V2.7 |
+| Entry date outside the bounds of the month being recorded into | Refused (date field clamped to that month's bounds) | Rule-21, V2.6 |
+| Several months outstanding at once, each holding live figures | Each accepts entries independently; a month selector appears on the entry screen and figure screens **only** in this case, defaulting to the oldest | Rule-36, Rule-20 |
 | Correcting an entry in the **current open** month | Permitted, standard edit | Rule-39 |
 | Correcting an entry in a **closed** month | Permitted — writes a new snapshot/backup version, original never overwritten; warning shown before the edit is applied | Rule-39 |
 | Concurrent entry conflict (two writes to the same member at once) | **Not applicable** — single-user, single-session system (OC-1); no concurrency-control mechanism is needed or built | `architecture.md` §9.4 |
@@ -39,10 +45,22 @@ Organized by major workflow. "Behaviour" is stated as defined wherever a source 
 | Backup generation is cancelled by the admin | Same as failure — abort, no partial state | Rule-18 |
 | Admin attempts to close a month that is not the oldest outstanding | Rejected — oldest-first enforced | Rule-20 |
 | Multiple months are outstanding | All listed in the alert; each closes separately with its own backup and snapshot; months are never merged | Rule-20 |
-| A calendar month elapses with **zero entries** (fully locked out the whole month) | **No snapshot produced**, excluded from the yearly-averaging denominator | RQ-16 (see [03-business-rules.md](03-business-rules.md)) — resolves an item `requirement-spec.md` marks ☐ open |
+| A calendar month elapses with **zero entries** | **No snapshot produced**, excluded from the yearly-averaging denominator | RQ-16 (see [03-business-rules.md](03-business-rules.md)) — resolves an item `requirement-spec.md` marks ☐ open. **Amended 7 Aug 2026 (CR-2):** this used to be the likely outcome, since entry was locked out for the whole month; it is now unlikely, because an outstanding month keeps accepting entries. The rule is unchanged and must still be built — a month with nothing recorded, for any reason, still produces no snapshot |
 | External (physically-separate-medium) backup copy fails to write | **Does not block the close** — the internal retained copy is the actual gate; external failure re-prompts/reminds instead | Rule-31, `architecture.md` §15.1 |
 | Internal retained backup copy write fails | **Blocks the close** — this is the real gate | Rule-18, Rule-31 |
 | Admin loses/never takes the external backup copy at all | **Not defended** — documented single point of failure (internal copy + live DB share the same disk) if this happens; accepted risk, not solved by the system | `architecture.md` §15.3, TR-4 |
+
+## Workflow: Search & Structure (M4)
+
+| Scenario | Behaviour | Source |
+|---|---|---|
+| Search query is empty | No results shown — not an error, not "all members" | V4.1 |
+| Search query matches nothing | States so plainly, naming the query | V4.1 |
+| Full hierarchy requested above 60 descendants | Confirmation first, naming the **exact** count; **Cancel opens nothing at all** | Rule-45, V4.5 |
+| Full hierarchy requested when the top member has nobody beneath them | Opens showing the single root node with a plain statement that there is nothing beneath it — not an error | Rule-45 |
+| Data changes in the console while a full hierarchy window is open | The window does **not** update — it is a point-in-time draw and its timestamp still names when it was drawn | Rule-45 |
+| Full hierarchy on a network at the 25,000-member ceiling | Draws, slowly, in its own window; the main console stays responsive. The extreme width is the accepted limit, not a defect | Rule-45, TR-7 |
+| Full hierarchy window printed | Spans many pages by nature on a large network; **not** scaled down to one page, which would make the node text unreadable | TR-7, [../final/07-design-system.md](../final/07-design-system.md) §6.13 |
 
 ## Workflow: Settings / Slab Table (M7)
 
@@ -50,9 +68,9 @@ Organized by major workflow. "Behaviour" is stated as defined wherever a source 
 |---|---|---|
 | Duplicate slab threshold on add/edit | Rejected — duplicate-threshold guard on save | Rule-4 (validated in prototype) |
 | Slab percentages configured non-monotonically vs. thresholds | **Not validated, not blocked** — explicitly declined by the client as a residual risk | Rule-41 / ADR-009 |
-| Attempt to remove the last remaining slab row | **Undefined in any source document.** Recommendation: reject (a slab table cannot be empty — the implicit 0% base has no meaning without at least one real row to compare against). Needs a UI-layer decision, not a blocker. | Not derivable — flagged, see [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) LOW item |
+| Attempt to remove the last remaining slab row | **Refused.** The remove control is disabled when one row remains, with an `aria-label` and an on-screen hint explaining why; the handler also refuses with a named message if reached another way. A slab table cannot be empty — there would be no way to work out any member's slab. | Decided and built 6 Aug 2026 (LOW-2) |
 | Settings change alters the current open period's figures (e.g. royalty rate) | Recalculates the current open period only; closed months are never affected | Described in prose (RQ-18/V7.6) |
-| Settings change is saved without the required warning being shown first | **UI gap** — architecture text requires a warning dialog; the approved prototype saves silently with only a success toast | MEDIUM item, see [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) |
+| Settings change that re-works the open month (slab table, royalty) | **Pre-save warning shown.** Names the open month, states that closed months are unaffected, shows Rewards before → after, and lists the members actually affected (slab moves, or royalty starts/stops on a royalty change). Cancel is a true no-op. Bad input (duplicate threshold) is still refused outright *before* the warning is offered. | Built 6 Aug 2026 (MEDIUM-1, variant C) |
 
 ## Workflow: Authentication (M8)
 
@@ -78,11 +96,11 @@ Organized by major workflow. "Behaviour" is stated as defined wherever a source 
 
 | Scenario | Behaviour | Source |
 |---|---|---|
-| Database file corruption or unreadable at launch | **Not explicitly addressed in any source document.** Recommendation: detect on launch, present a clear recovery-from-backup path rather than a silent crash — this is standard practice for an offline single-file-DB app, but needs explicit design before M5/M8 hardening is considered complete. | Not derivable — flagged, see [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) LOW item |
+| Database file corrupted or unreadable at launch | **Full-screen data-recovery state**, shown in place of sign-in. States that nothing has been lost, lists the most recent retained backups by the month they hold (marking corrected months), offers restore-from-backup and a retry, and states plainly that anything recorded after the chosen backup will need entering again. Never appears in normal use. | Decided and built 6 Aug 2026 (LOW-3, design D) |
 | Application crash mid-transaction (e.g. during chain-upward recalculation or during close) | Protected by SQLite's own transactional guarantees — a crash mid-transaction rolls back cleanly, no partial recalculation or partial close state can persist | `architecture.md` §9.1, "either the whole chain updates consistently or none of it does" |
 | Disk full during backup write | Covered by the same write-verify mechanism as any backup failure — verification fails, close aborts (Rule-18) | Rule-18 |
 | Timeout / retry | **Not applicable** — no network calls exist anywhere in the system; every operation is local disk I/O with no remote timeout surface | Structural (ADR-001) |
 
 ## Summary
 
-Most error and edge-case behaviour across the eight major workflows is explicitly defined in the approved artifacts — a strong signal for readiness. Three items are genuinely undefined and are carried into [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md) as LOW-priority items (empty slab table, corrupted DB file at launch, settings-warning UI gap already tracked as MEDIUM). None of the three block starting implementation; all three should be resolved before the specific module they touch (M7, M8, M7 respectively) is marked done.
+Error and edge-case behaviour across all eight major workflows is now explicitly defined. The three items originally left undefined by the source artifacts — the empty slab table, a corrupted database file at launch, and the missing settings warning — were decided and built on 6 August 2026; see [11-open-questions-and-decisions.md](11-open-questions-and-decisions.md). **No undefined behaviour remains** in the workflows covered here.

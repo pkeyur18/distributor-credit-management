@@ -6,8 +6,8 @@
 | **Client** | Siddharth Patel |
 | **Prepared by** | Keyur Patel — Business Analysis & Solution Architecture |
 | **Document type** | User Needs Document (business review) |
-| **Version** | 1.0 |
-| **Date** | 3 August 2026 |
+| **Version** | 1.1 |
+| **Date** | 3 August 2026 · amended 7 August 2026 (CR-1, CR-2, CR-3 — see §6 and §10.2 RQ-11) |
 | **Status** | For client review — not yet approved |
 | **Companion document** | [Client Requirements Validation Document](client-requirements-validation.md) |
 | **Source material** | [requirement-draft.md](../draft/requirement-draft.md), [requirement-spec.md](../draft/requirement-spec.md), [open-questions-checklist.md](../draft/open-questions-checklist.md) |
@@ -220,7 +220,7 @@ flowchart TD
     end
 
     subgraph CLOSE["Month end"]
-        C1["Month ends — alert appears,<br/>recording is locked"]
+        C1["Month ends — alert appears.<br/>That month still accepts entries;<br/>the new month waits for the close"]
         C2["Trigger the close for<br/>the oldest open month"]
         C3["Take the backup"]
         C4{"Backup safe?"}
@@ -253,6 +253,13 @@ a restatement of it — and how we will know it has been met.
 
 Priority scale: **Must** — the system fails its purpose without it. **Should** — significant business value,
 but the system functions without it. **Could** — desirable, deferrable.
+
+**UN-29, UN-30 and UN-31 were added on 7 August 2026**, from three change requests the client raised after
+reviewing the approved specification: searching by phone number, recording a purchase reported after the
+month has turned, and seeing the whole structure at once. **UN-15 and UN-19 were amended on the same date** —
+UN-19 materially, because the change to how recording behaves at a month end **reverses the client's own
+earlier answer to [RQ-11](#rq-11--the-operational-cost-of-the-recording-lock)**. Both amendments carry a note
+saying so.
 
 ---
 
@@ -484,15 +491,16 @@ but the system functions without it. **Could** — desirable, deferrable.
 
 | | |
 |---|---|
-| **Need statement** | The client needs to reach any member from the home screen by typing their name or their number. |
+| **Need statement** | The client needs to reach any member from the home screen by typing their name, their number, or their phone number. |
 | **Reason** | Search is the entry point to almost everything else — recording activity, answering a query, checking a structure. If finding a person is slow, every task built on it is slow. |
 | **Business value** | Reduces the time cost of the most common starting action. |
 | **Priority** | 🟢 **Must** |
 | **Success criteria** | Any member can be reached from the home screen in one step. |
-| **Acceptance criteria** | Search accepts a name or a six-digit number. Selecting a result opens that member's detail with the people directly beneath them shown. |
+| **Acceptance criteria** | Search accepts a name, a six-digit number, or a phone number. Selecting a result opens that member's detail with the people directly beneath them shown. |
 | **Related requirements** | FR-1 — Home / Search |
-| **Business rules** | Rule 2 |
+| **Business rules** | Rule 2, Rule 44 |
 | **Dependencies** | UN-02 |
+| **Amended** | 7 August 2026 (CR-1) — phone number added as a third way of searching. See UN-29. |
 
 ---
 
@@ -550,14 +558,15 @@ but the system functions without it. **Could** — desirable, deferrable.
 | | |
 |---|---|
 | **Need statement** | The client needs the system to prevent an unclosed month from being skipped, rather than relying on them to remember. |
-| **Reason** | This is the single most consequential decision in the whole specification, and it follows directly from the client's choice that a close clears everything. Once figures are cleared, the permanent record is the only evidence a month happened — so a month that is never closed produces **no record of that month at all, permanently**. The alert and the recording lock exist for that reason alone. |
+| **Reason** | This is the single most consequential decision in the whole specification, and it follows directly from the client's choice that a close clears everything. Once figures are cleared, the permanent record is the only evidence a month happened — so a month that is never closed produces **no record of that month at all, permanently**. The alert exists for that reason alone. |
 | **Business value** | Makes the total loss of a month's data structurally impossible. |
 | **Priority** | 🟢 **Must** |
 | **Success criteria** | No month can pass unrecorded. |
-| **Acceptance criteria** | Once a month ends, an alert appears as an undismissable banner on every screen and as a notification entry, naming the month. It clears only on a completed close. All recording of Business Volume is locked until then. Where several months are open, all are listed and only the oldest can be closed; each keeps its own backup and its own record. |
+| **Acceptance criteria** | Once a month ends, an alert appears as an undismissable banner on every screen and as a notification entry, naming the month. It clears only on a completed close. Recording of figures **dated in that month** continues throughout; recording into the **current** month waits until it is closed. Where several months are open, all are listed and only the oldest can be closed; each keeps its own backup and its own record. |
 | **Related requirements** | FR-5 — Business Volume entry, FR-7 — Monthly reset |
-| **Business rules** | Rule 20, Rule 36 |
-| **Dependencies** | UN-18, UN-21 · [RQ-11](#rq-11--the-operational-cost-of-the-recording-lock) confirmed 3 August 2026 — the hard stop is kept, no grace period |
+| **Business rules** | Rule 20, Rule 36 (amended) |
+| **Dependencies** | UN-18, UN-21, UN-30 |
+| **Amended** | 7 August 2026 (CR-2) — the undismissable alert now carries this need on its own. It was previously reinforced by a total recording lock, which the client asked to be narrowed; [RQ-11](#rq-11--the-operational-cost-of-the-recording-lock)'s answer of 3 August 2026 is reversed. What still pushes the client to close is the alert, plus the fact that the new month cannot be recorded into until they do. |
 
 ---
 
@@ -689,12 +698,79 @@ but the system functions without it. **Could** — desirable, deferrable.
 
 ---
 
+### UN-28 — The whole console, safe and movable
+
+| | |
+|---|---|
+| **Need statement** | The client needs the entire console — every member, entry, monthly record and setting, not just one month — backed up on its own schedule, and able to be restored onto a different computer entirely, so a lost, damaged or replaced machine does not put the business's whole record at risk. |
+| **Reason** | UN-20 already protects a single month at the moment it closes, but nothing protects the console *between* closes, and nothing today lets it move to a new machine at all. This is a new, wider requirement, raised directly by the client: they want to install the software on another desktop or laptop and have it come up in exactly the state the old one was in — new client requirement, confirmed 7 August 2026. |
+| **Business value** | The business's entire record survives the loss of any single machine, and the client is never tied to one physical computer. |
+| **Priority** | 🟢 **Must** |
+| **Success criteria** | A fresh install, given only a backup file, comes up in exactly the state the original machine held at the moment that backup was taken — settings, structure, records and login alike. |
+| **Acceptance criteria** | A full backup can be scheduled off/daily/weekly/monthly, or taken on demand at any time. The most recent backups are kept — a client-adjustable count, default 10 — with older ones pruned automatically. Restoring always states plainly what will be replaced and requires a deliberate confirmation; the console takes one more backup of its own current state immediately beforehand, so a restore is itself never a one-way door. A brand-new install, with no console set up yet, offers restoring from a backup file as an explicit alternative to first-time setup. |
+| **Related requirements** | FR-7 — Monthly reset (extends the same backup-and-restore machinery to the whole console, not one month) |
+| **Business rules** | New — see RQ-23 and M8.6/M8.7 in the companion validation document |
+| **Dependencies** | UN-20 · confirmed 7 August 2026, does not alter UN-20's month-close mechanism |
+
+---
+
+### UN-29 — Finding a member by the number they are calling from
+
+| | |
+|---|---|
+| **Need statement** | The client needs to find a member by typing their phone number, as well as by name or member number. |
+| **Reason** | When a member telephones or walks in, the phone number is often the handle the client already has in front of them — and because a phone number belongs to exactly one member (Rule 34), it identifies that person without ambiguity in a way a name cannot. A name has to be spelled, may be shared, and may be remembered wrongly. Raised directly by the client on 7 August 2026: *"phone number is unique to member so it is easy to search member by mobile number."* |
+| **Business value** | Removes the most common moment of friction in the client's day — identifying who they are talking to before recording anything against them. |
+| **Priority** | 🟢 **Must** |
+| **Success criteria** | Any member can be found from their phone number alone, in one step, wherever a member is searched for in the console. |
+| **Acceptance criteria** | Search accepts a phone number written however the client happens to type it — with or without spaces, dashes or a country code. A partial number of four digits or more is enough to find them; shorter than that, only names and member numbers are matched, so a two- or three-digit query does not return half the network. Search results show each member's phone number alongside their name and number, so the client can confirm they have the right person before selecting. The same behaviour applies in every place a member is searched for, not only the home screen. |
+| **Related requirements** | FR-1 — Home / Search |
+| **Business rules** | Rule 34 (uniqueness, which is what makes this safe), Rule 44 (new) |
+| **Dependencies** | UN-15, UN-03 · new client requirement, confirmed 7 August 2026 (CR-1) |
+| **Note the client should hold in mind** | Phone numbers will now appear on the home screen's results, which is where the client works most of the day. This is personal data. It is visible only to the client's own single login — the same login that already sees it on the member screen and in every extract — and nothing about it leaves the machine. |
+
+---
+
+### UN-30 — Recording a purchase reported after the month has turned
+
+| | |
+|---|---|
+| **Need statement** | The client needs to record activity that took place on the last days of a month, when it is reported to them a few days later, after that month has already ended. |
+| **Reason** | A member who buys on the 30th or 31st commonly reports it two or three days into the next month. Under the original rule the client could record nothing at all until they had closed the month — so that figure could not be entered when it arrived, and the month could not be closed accurately without it. The rule and the reality worked against each other. Raised directly by the client on 7 August 2026, with the condition stated in their own terms: the previous month stays open to entry until it is closed, and the current month waits until it is. |
+| **Business value** | A late-reported figure lands in the month it actually belongs to, so the month closes accurate and nothing has to be corrected afterwards. |
+| **Priority** | 🟢 **Must** |
+| **Success criteria** | A figure dated in a month that has ended but not been closed can be recorded at any time before that close, and it counts towards that month. |
+| **Acceptance criteria** | While a month is waiting to be closed, figures dated within it can still be recorded, and they update that month's totals and rewards immediately. Figures dated in the current month are refused until that older month is closed, and the refusal says plainly which month is in the way. Every recording screen names the month it is recording into, so it is never ambiguous. Once the older month is closed, the current month opens for recording straight away. There is no time limit on this — the grace lasts exactly as long as the month stays unclosed. |
+| **Related requirements** | FR-5 — Business Volume entry, FR-7 — Monthly reset |
+| **Business rules** | Rule 36 (amended) |
+| **Dependencies** | UN-07, UN-18, UN-19 · new client requirement, confirmed 7 August 2026 (CR-2) |
+| **⚠️ What this changes** | This **reverses** the answer the client gave to [RQ-11](#rq-11--the-operational-cost-of-the-recording-lock) on 3 August 2026, when the hard stop was confirmed with no grace period. The stop is not removed — it is narrowed to the current month only. UN-19's protection against losing a month is unaffected, because the undismissable alert stays exactly as it is, and the new month still cannot be recorded into until the old one is closed. |
+
+---
+
+### UN-31 — Seeing the whole structure at once
+
+| | |
+|---|---|
+| **Need statement** | The client needs to see the entire structure, every branch open at the same time, without the console they work in becoming slow. |
+| **Reason** | The structure chart deliberately opens one branch at a time (UN-16), which is right for daily use but cannot show the shape of the whole network — how wide it has grown, where it is deep and where it is thin. That is a different question, asked occasionally rather than daily, and it deserves its own answer rather than compromising the everyday one. The client was explicit that the main console must not be slowed down to provide it. |
+| **Business value** | An occasional whole-network view, for planning and for conversations about the shape of the business, at no cost to the screen the client uses every day. |
+| **Priority** | 🟢 **Should** |
+| **Success criteria** | The client can see the whole structure expanded, and the console they were working in behaves exactly as it did before. |
+| **Acceptance criteria** | A "view full hierarchy" action on the structure screen opens the whole structure, from the top member, in a **separate window**, with every branch already open. Each node shows the same three items as the structure chart — name, number and own Business Volume — and nothing more. The window states when it was drawn, so a printed copy always says what it is a picture of. It can be zoomed out far enough to take a large network in at once, fitted to the width, searched, and printed. It does not update once it is open: it is a picture of a moment, and it says so. Closing it discards it. If the structure is large, the client is told exactly how many members are about to be drawn and can decide not to. |
+| **Related requirements** | FR-2 — Hierarchy chart, FR-10 — Full hierarchy view |
+| **Business rules** | Rule 45 (new) |
+| **Dependencies** | UN-16 · new client requirement, confirmed 7 August 2026 (CR-3) |
+| **⚠️ Consequence the client should hold in mind** | The chart is drawn top-down, like the structure screen, and the client chose that over a narrower list-style layout after being shown the trade-off. A top-down chart gets **wider** with every additional person at the bottom of the network, not taller — so on a very large network it becomes extremely wide, needs a lot of zooming out, and prints across many pages. This is understood and accepted; the zoom, fit-width and search controls exist to make it workable. |
+
+---
+
 ### 6.1 Needs by priority
 
 | Priority | Count | Needs |
 |---|---|---|
-| 🟢 **Must** | 23 | UN-01 to UN-15, UN-17 to UN-23, UN-25 to UN-27 |
-| 🟢 **Should** | 2 | UN-16, UN-24 |
+| 🟢 **Must** | 26 | UN-01 to UN-15, UN-17 to UN-23, UN-25 to UN-30 |
+| 🟢 **Should** | 3 | UN-16, UN-24, UN-31 |
 | **Could** | 0 | — |
 
 ---
@@ -777,7 +853,7 @@ Every item below was inferred by us and is **not** stated by the client. Each na
 | **R-1** | **A month's record is lost entirely.** The close clears everything, so a close that proceeds on a failed backup, or a month never closed, leaves no evidence the month occurred. | Low | **Critical** | 🟢 **Resolved 3 August 2026** — the retained in-system copy is the gate for a successful backup. [RQ-6](#rq-6--what-counts-as-a-successful-backup) confirmed. |
 | **R-2** | **An edited threshold table produces negative rewards.** The guarantee that rewards cannot go negative depends on the table always rising — which nothing currently enforces. | **Medium** | **High** | 🔶 **Accepted by the client, 3 August 2026 — not mitigated in software.** The client has declined the validation we recommended and confirmed they will keep the table monotonic themselves. This risk stands as a knowing exception. See [RQ-1](#rq-1--protecting-the-threshold-table-from-an-invalid-edit). |
 | **R-3** | **A wrong figure cannot be traced.** With one shared account, immediate recalculation and no record of who changed what, a mis-recorded figure is undetectable after the fact and unexplainable. | **Medium** | **High** | 🟢 **Resolved 3 August 2026** — a minimal recording log will be built. See [RQ-9](#rq-9--no-record-of-what-was-changed). |
-| **R-4** | **The business stops recording.** Recording locks the instant a month ends. If the client is unavailable — travel, illness — nothing can be recorded at all until they return and close the month. | **Medium** | **High** | 🟢 **Resolved 3 August 2026** — the hard stop is kept deliberately, with no grace period. See [RQ-11](#rq-11--the-operational-cost-of-the-recording-lock). |
+| **R-4** | **The business stops recording.** If the client is unavailable — travel, illness — nothing can be recorded until they return and close the month. | **Low** *(was Medium)* | **Low–Medium** *(was High)* | ✅ **Mitigated 7 August 2026 (CR-2).** Recording no longer stops when a month ends: figures dated in the ended month can still be entered throughout, which is exactly the case this risk described. What remains is narrower — the **new** month waits until the old one is closed, so a long absence defers new-month recording and those figures are entered afterwards, dated correctly. Originally resolved 3 August 2026 as an accepted hard stop; see [RQ-11](#rq-11--the-operational-cost-of-the-recording-lock) and UN-30. |
 | **R-5** | **Total loss of access.** One account, one credential, no recovery route specified. Lost credentials lock the client out of their own system permanently. | Low | **Critical** | 🟢 **Resolved 3 August 2026** — recovery codes issued at setup. See [RQ-10](#rq-10--continuity-of-the-single-account). **Strengthened 4 August 2026** — a PIN and a complex password can both be set, either one authenticating. |
 | **R-6** | **Personal data exposure.** Several thousand people's names, contact numbers and addresses sit behind one PIN, with no retention policy and no consent record. | Low | **High** | 🟢 **Resolved 3 August 2026** — retention stays permanent; mandatory failed-attempt lockout already agreed. See [RQ-8](#rq-8--personal-data-handling). **Follow-through 4 August 2026** — the client now confirms consent is asked of every member at onboarding; whether the system records that consent is a separate, narrower question — see [R-14](#9-risks-) and [RQ-22](#rq-22--should-consent-be-captured-in-the-system-or-only-obtained-outside-it). |
 | **R-7** | ~~**Deactivation produces wrong figures.** How an inactive member's own volume, and the team beneath them, behave in the rollup is undefined.~~ 🟢 **Resolved 4 August 2026** — inactive status has no calculation effect at all; it is a display-only flag. [RQ-2](#rq-2--how-inactive-members-behave-in-the-structure) confirmed. | **High** | **High** | Closed. No further action. |
@@ -1072,6 +1148,21 @@ weakening the protection, since the month being closed is already fully determin
 
 🟢 **Confirmed by the client, 3 August 2026 — the hard stop is kept, no grace period.**
 
+⚠️ **Reversed by the client, 7 August 2026 (CR-2).** The client returned to this with the practical case the
+recommendation above anticipated: a member who buys on the last day of a month commonly reports it two or
+three days later, and under the hard stop that figure could not be recorded at all. The client's own
+condition, in substance: *while the previous month is unclosed I can add entries for the previous month, but
+I cannot add current-month entries; to add current-month entries the previous month must be closed.*
+
+**What was decided.** The stop is **narrowed, not removed**. A month that has ended but is not closed keeps
+accepting figures dated within it, for as long as it stays unclosed. The current month is refused until that
+older month is closed, and the refusal names it. This is *not* the "short grace period" our recommendation
+offered — that version would have counted late figures **into the new month**, which would have put them in
+the wrong month. Here a figure always counts into the month its own date falls in.
+
+**No clock.** There is no day limit, no configurable grace window and no countdown. A configurable
+"grace days" setting was offered and declined. See Rule 36 as amended, and UN-30.
+
 ---
 
 #### RQ-12 — What the reference unit value applies to
@@ -1279,11 +1370,15 @@ Add Member screen, as described.
 | **BO-2** | UN-05 History survives departure | FR-4 | Rule 28 |
 | **BO-2** | UN-06 Advisory structure limits | FR-4, FR-6 | Rule 1, Rule 32 |
 | **BO-3** Deliberate, permanent close | UN-18 A month means one thing | FR-7 | Rule 21 |
-| **BO-3** | UN-19 Cannot skip a month | FR-5, FR-7 | Rule 20, Rule 36 |
+| **BO-3** | UN-19 Cannot skip a month | FR-5, FR-7 | Rule 20, Rule 36 (amended) |
+| **BO-3** | UN-30 Record a late-reported purchase | FR-5, FR-7 | Rule 36 (amended) |
 | **BO-3** | UN-20 Close cannot destroy | FR-7 | Rule 18, Rule 31 |
 | **BO-3** | UN-21 Permanent monthly record | FR-7, FR-8 | Rule 38 |
-| **BO-4** Performance visibility | UN-15 Find a person | FR-1 | Rule 2 |
+| **BO-3** | UN-28 Whole console, safe and movable | FR-7 | New — RQ-23, M8.6/M8.7 |
+| **BO-4** Performance visibility | UN-15 Find a person | FR-1 | Rule 2, Rule 44 |
+| **BO-4** | UN-29 Find a member by phone | FR-1 | Rule 34, Rule 44 |
 | **BO-4** | UN-16 See the structure | FR-2 | Checklist Q11 |
+| **BO-4** | UN-31 See the whole structure at once | FR-2, FR-10 | Rule 45 |
 | **BO-4** | UN-17 Explain a member | FR-3 | Rule 6, Rule 12 |
 | **BO-4** | UN-22 Monthly extract | FR-8 | Rule 19, Rule 33 |
 | **BO-4** | UN-23 Fair yearly average | FR-8 | Rule 23 |
@@ -1317,6 +1412,7 @@ flowchart LR
     N_CFG["UN-25<br/>Settings"]
     N_LANG["UN-27<br/>Vocabulary"]
     N_ACC["UN-26<br/>Access"]
+    N_BACKUP["UN-28<br/>Whole-console backup & restore"]
 
     F_ENTRY["FR-5 Business Volume entry"]
     F_MEMBER["FR-4 Add member"]
@@ -1331,6 +1427,7 @@ flowchart LR
     N_CALC --> F_DETAIL
     BO2 --> N_STRUCT --> F_MEMBER
     BO3 --> N_CLOSE --> F_RESET
+    BO3 --> N_BACKUP --> F_RESET
     BO4 --> N_VIEW --> F_SEARCH
     N_VIEW --> F_DETAIL
     BO4 --> N_REPORT --> F_EXPORT

@@ -424,6 +424,44 @@ responsible for telling the client when an update exists, since the system will 
 
 ---
 
+### ADR-012 — Whole-console backup generalizes the `backups` table rather than introducing a second one
+
+**Context.** A new client requirement (confirmed 7 August 2026, [RQ-23](../business/client-requirements-validation.md#rq-23--protecting-the-whole-console-not-just-one-month)
+in the validation document) asks for the entire console — not one month — backed up on a configurable
+schedule (off/daily/weekly/monthly) or on demand, and restorable on a different machine entirely, including a
+brand-new install with nothing set up yet. This sits alongside the month-close backup (ADR-006, §15.1–15.4),
+which must keep working exactly as designed — a corrected closed month's versioned backup chain is unrelated
+to whether the console as a whole is also being backed up on a schedule.
+
+**Options considered.**
+1. A second table (e.g. `console_backups`) parallel to `backups`, with its own checksum/versioning logic
+   duplicated from ADR-006.
+2. Generalize the existing `backups` table: make `period_id` nullable, add a `kind` column
+   (`period_close` / `scheduled` / `manual` / `pre_restore_safety`) and a `schedule_kind` column
+   (`daily`/`weekly`/`monthly`, set only when `kind = scheduled`).
+3. Export a bespoke archive format (e.g. a zip of CSVs) distinct from the raw encrypted file.
+
+**Decision.** Option 2. Every kind of whole-console backup is a verified copy of the single SQLCipher file
+(ADR-003) — the same artifact a month-close backup already is, just not scoped to one period — so it reuses
+the same `backups` table, the same checksum-and-verify write path, and the same `is_original`/`version`
+columns where they're meaningful. Option 3 is rejected outright: the file already contains everything
+(members, entries, snapshots, settings, slab table, audit log, and the `auth` credential row), so a bespoke
+export format would need to reconstruct that same completeness while adding real work and a second format to
+maintain, for no benefit — a raw file copy is both the simplest and the most complete option available.
+
+**Rationale.** A `kind = period_close` row is exactly today's row, unchanged. A `kind = scheduled|manual`
+row is the same file-copy-and-verify mechanism, just with `period_id NULL`. A `kind = pre_restore_safety` row
+(new, §15.5) is written automatically immediately before any restore overwrites the live file — cheap
+insurance that makes a restore itself one step back from irreversible. One table, one write path, one
+restore path, regardless of why the backup was taken.
+
+**Consequences.** Every query that currently assumes `backups.period_id` is non-null (e.g. `list_backups` in
+M6) must filter on `kind = 'period_close'` explicitly rather than relying on the column being populated.
+Restoring from *any* kind of backup uses the same underlying mechanism as the existing unauthenticated
+`restore_from_backup` (M8, §7) — this generalizes rather than replaces it; see §7 M7/M8 and §15.5.
+
+---
+
 ## 5. System Context
 
 ```mermaid
@@ -537,7 +575,9 @@ validation (V1.1–V1.9).
 ### M2 — Business Volume Entry
 
 **Responsibilities.** Record BV against a member; edit/reverse an existing entry, in any period, open or
-closed (M2.4); enforce the entry lock while any month is outstanding (Rule 36).
+closed (M2.4); decide **which months may be recorded into** while any month is outstanding (Rule 36, as
+amended 7 Aug 2026 by CR-2 — an ended-but-unclosed month keeps accepting entries; the *current* month is
+refused until that month closes).
 
 **Key design points.**
 - An entry's `period_month` is fixed at creation from its date and does not move across a month boundary on
@@ -548,7 +588,12 @@ closed (M2.4); enforce the entry lock while any month is outstanding (Rule 36).
   ever represents the current open period) — it triggers an isolated recalculation of that historical
   period's chain and a new `monthly_snapshots` version (§9, §10).
 
-**Commands**: `record_entry`, `edit_entry`, `reverse_entry`, `get_period_lock_status`.
+**Commands**: `record_entry`, `edit_entry`, `get_period_lock_status`.
+
+> **Revised 6 August 2026.** `reverse_entry` has been removed. No requirement document ever described a
+> reversal that was functionally distinct from an edit — RQ-7 treats "edited or reversed" as the same
+> action — and the approved prototype implements only editing. `edit_entry`, append-only and fully
+> audited, is the complete correction mechanism for both open and closed periods.
 
 ### M3 — Calculation Engine
 
@@ -562,15 +607,27 @@ loading the chain, invoking the engine, and persisting the result inside one dat
 separation is what makes the engine unit-testable against the five worked scenarios without touching a
 database at all (§16).
 
-**Commands.** M3 exposes no direct commands — it is invoked internally by M2 and M5 on every write. This is
-deliberate: there is no "recalculate" button anywhere in the product (Rule 26), so there should be no
-command surface that could become one.
+**Commands**: `preview_settings_impact`.
+
+No command *triggers* a calculation. That remains deliberate: there is no "recalculate" button anywhere in
+the product (Rule 26), so there is no command surface that could become one — the engine runs only as an
+internal consequence of a write in M2, M5 or M7.
+
+> **Revised 6 August 2026.** This section previously stated that M3 exposed no commands at all. That held
+> while the only thing anyone could want from the engine was to *run* it. The settings pre-save warning
+> (RQ-18/V7.6) asks a different question — what the engine *would* produce under candidate settings,
+> without committing — and only the Rust side can answer it. Hence one read-only command,
+> `preview_settings_impact`, which persists nothing: it swaps the candidate settings in, recomputes, and
+> restores them in a `finally` block so a panic can never leave live settings holding uncommitted values.
+> Because slab and royalty settings never feed `rollupTBV`, the preview reuses the live Total Business
+> Volume and re-runs only the rewards computation. Full contract in `04-api-specification.md` (API-33).
 
 ### M4 — Search & Structure Visualisation
 
-**Responsibilities.** Home search (name or ID), member detail (contact details, reward breakdown per RQ-13,
-direct team, team total, leg count), hierarchy chart (name/ID/own-BV only, per Q11/UN-16), inactive-member
-colour coding (M4.5).
+**Responsibilities.** Home search (name, ID **or phone** — Rule 44, added 7 Aug 2026 by CR-1), member detail
+(contact details, reward breakdown per RQ-13, direct team, team total, leg count), hierarchy chart
+(name/ID/own-BV only, per Q11/UN-16), **the full hierarchy window** (Rule 45/FR-10, added 7 Aug 2026 by
+CR-3), inactive-member colour coding (M4.5).
 
 **Key design points.** The reward-detail breakdown (RQ-13) is generated by re-running the differential/
 royalty computation for display purposes — one line per direct child (name, number, their team figure,
@@ -578,13 +635,28 @@ their band, this member's band, the difference, the resulting amount), then roya
 This is the same shape of computation as M3 but read-only and presentation-oriented, so it's implemented as
 a thin formatting layer over M3's output rather than a second calculation path.
 
-**Commands**: `search_members` (shared with M1), `get_member_detail`, `get_direct_children_chart`.
+**Commands**: `search_members` (shared with M1), `get_member_detail`, `get_direct_children_chart` (with
+`full_tree: false` for the one-depth chart and `full_tree: true` for the full hierarchy window — no separate
+command exists for the full view).
+
+**The full hierarchy window (Rule 45/FR-10).** A separate top-level `WebviewWindow`, not a route in the main
+app. It fetches the whole subtree once, renders once, and thereafter holds no connection to the console — no
+refresh, no polling, no handle on live state. This isolation is the client's binding constraint on CR-3, not
+an optimisation: the main window's DOM, layout and paint budget are untouched by however large the draw is.
+Node positions come from a **single post-order layout pass** (subtree width accumulation), with the connector
+geometry emitted as one pre-computed path during that same pass — never measured back out of the rendered DOM
+as the main Structure screen does. Opening is gated above 60 descendants by a confirmation naming the exact
+member count. Accepted scale limit: TR-7.
 
 ### M5 — Monthly Close & Permanent Record
 
-**Responsibilities.** Alert/lock lifecycle (Rule 20/36), the gated close flow (Rule 18), permanent snapshot
+**Responsibilities.** Alert lifecycle and **entry eligibility** (Rule 20/36 — publishing which periods are
+recordable, and releasing the current month on close), the gated close flow (Rule 18), permanent snapshot
 writing (Rule 38), correction of a closed month (M2.4/M5.9), backup versioning (M5.10), on-demand manual
 backup of the in-progress month (M5.8).
+
+Since CR-2 (7 Aug 2026) this module no longer gates M2 wholesale — it gates only *which month* M2 may write
+into. M2 is never fully unavailable.
 
 **Key design points.** The close is one database transaction with an external side-effect (the backup file
 write) sequenced *before* the transaction commits — detailed in §10 (state machine) and §15 (backup design).
@@ -616,7 +688,13 @@ of that period only (not closed periods, which are immutable except via the expl
 — this is a deliberate, narrower recalculation trigger than M2's per-entry chain walk, since a threshold
 change can affect every member in the tree, not just one chain.
 
-**Commands**: `get_settings`, `update_settings`, `add_slab_row`, `remove_slab_row`, `update_slab_row`.
+**Commands**: `get_settings`, `update_settings`, `add_slab_row`, `remove_slab_row`, `update_slab_row`,
+`get_console_backup_settings`, `update_console_backup_settings`.
+
+> **Revised 7 August 2026.** The last two commands are new ([RQ-23](../business/client-requirements-validation.md#rq-23--protecting-the-whole-console-not-just-one-month),
+> M7.7): the schedule (off/daily/weekly/monthly) and retention count (default 10) for the whole-console
+> backup introduced by ADR-012. M7 owns the *setting*; M8 owns actually taking and restoring one — the same
+> division already in place between M7 (configures the scheme) and M3/M5 (act on it).
 
 ### M8 — Access & Alerts
 
@@ -628,7 +706,54 @@ process memory for the session's lifetime — the inactivity lock (§11.3) drops
 re-derivation (i.e. re-entry of the credential) to resume, rather than merely hiding the UI.
 
 **Commands**: `setup_first_run`, `login`, `lock_session`, `unlock_session`, `use_recovery_code`,
-`get_outstanding_alert`.
+`get_outstanding_alert`, `check_data_readable`, `list_restore_points`, `restore_from_backup`,
+`run_console_backup_now`, `restore_from_backup_file`.
+
+> **Added 7 August 2026 — whole-console backup and cross-device restore.** [RQ-23](../business/client-requirements-validation.md#rq-23--protecting-the-whole-console-not-just-one-month)
+> (M8.6/M8.7) extends this module's existing backup/restore mechanics (ADR-012) beyond one month:
+>
+> - **`run_console_backup_now`** — authenticated. Takes an immediate whole-console backup
+>   (`kind = manual`). The same function also runs the scheduled check: on every successful `login`, the
+>   session checks whether a backup is due per `settings.console_backup_schedule` and, if so, calls this
+>   internally (`kind = scheduled`, `schedule_kind` recorded) before returning control to the UI. There is no
+>   background service (§2, driver row 1) — this login-time check is the only point the schedule can fire
+>   from, and a missed day simply catches up at the next login. After writing, retention is enforced:
+>   `kind IN ('scheduled', 'manual')` rows beyond `settings.console_backup_retention_count` (oldest first) are
+>   deleted; `kind = 'period_close'` rows are never touched by this (Rule 31 permanence is unaffected).
+> - **`restore_from_backup_file`** — **unauthenticated**, new. Takes a file path the frontend obtained from a
+>   native file-open dialog (not a path the WebView constructs itself — consistent with §11.3's capability
+>   model), verifies its checksum, writes one `kind = pre_restore_safety` backup of the *current* live file,
+>   then replaces it. This single command backs three surfaces: a plain "Restore from a backup file instead"
+>   link on the ordinary first-run setup screen (no console exists yet — nothing to authenticate against —
+>   see the revised §17 note below), the same screen the db-error recovery path uses, reworded rather than
+>   duplicated for the voluntary case (heading/sub-copy and back-link change; the internal restore-points list
+>   is skipped since a brand-new machine has none of its own yet), and the authenticated Settings "Restore"
+>   card's "Restore from a file…" action (the frontend still requires the session's own checklist-confirm
+>   modal before calling it there — the command itself doesn't distinguish who's calling).
+> - **`list_restore_points`/`restore_from_backup`** are widened, not replaced: both now read every `kind` in
+>   `backups`, not only `period_close`, so the recovery screen's db-error path and the new Settings "Restore"
+>   card list from one merged, labelled set ("Weekly console backup — 3 Aug 2026" alongside "March 2026 —
+>   closed month") — the voluntary first-run path does not use this list at all (see above).
+> - Every restore path — `restore_from_backup` or `restore_from_backup_file` — drops any authenticated
+>   session immediately afterward and routes to `login`: the restored file may carry a different credential
+>   (ADR-008's key is derived from whatever is now on disk), so re-authentication is mandatory, not optional.
+
+> **Added 6 August 2026 — data recovery at launch.** Nothing in the source documents said what should
+> happen if the encrypted database cannot be opened at startup. Left undefined, the operator would see
+> whatever the underlying database error produced, which for persona P-1 is indistinguishable from the
+> application being broken for good. The last three commands back a full-screen recovery state shown in
+> place of sign-in: a pre-flight readability check, the list of retained backups (labelled by the month
+> each holds), and the restore itself.
+>
+> These three are **unauthenticated of necessity, not convenience** — the screen exists precisely because
+> the database could not be opened, and the credential hashes live inside that database, so there is
+> nothing available to authenticate against. This is the only addition to §11.3's unauthenticated set
+> since it was written. What it exposes is bounded: the first two reveal only that backups exist and which
+> months they cover; `restore_from_backup` is the sole destructive unauthenticated command, but it
+> destroys no backup (every version is retained, Rule 31), reveals nothing, and the restored database
+> still requires the credential to open. It must verify the backup's stored checksum before overwriting —
+> restoring a corrupt file over a corrupt file helps nobody. Physical device access is already out of
+> scope in §11.5's threat model, which is the boundary this sits inside.
 
 ### M9 — Audit & Technical Logging *(architecture-introduced, cross-cutting)*
 
@@ -728,7 +853,7 @@ erDiagram
 |---|---|---|
 | `id` | INTEGER PK | |
 | `period_month` | TEXT NOT NULL UNIQUE | `YYYY-MM` |
-| `status` | TEXT NOT NULL | `open` / `ended_locked` / `closed` (§10) |
+| `status` | TEXT NOT NULL | `open` / `awaiting_close` / `closed` (§10). Renamed from `ended_locked` on 7 Aug 2026 (CR-2) — the period is ended and *still accepting entries* |
 | `ended_at` | TEXT NULL | Set when the calendar month elapses |
 | `closed_at` | TEXT NULL | Set when the close transaction commits |
 
@@ -753,18 +878,20 @@ erDiagram
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER PK | |
-| `period_id` | INTEGER NOT NULL, FK → periods.id | |
-| `version` | INTEGER NOT NULL | Matches the snapshot version it proves (RQ-20) |
-| `internal_retained_path` | TEXT NOT NULL | The actual gate (RQ-6) |
+| `period_id` | INTEGER NULL, FK → periods.id | NULL for every kind except `period_close` (ADR-012) |
+| `kind` | TEXT NOT NULL | `period_close` / `scheduled` / `manual` / `pre_restore_safety` (ADR-012) |
+| `schedule_kind` | TEXT NULL | `daily`/`weekly`/`monthly`; set only when `kind = 'scheduled'` |
+| `version` | INTEGER NOT NULL | Matches the snapshot version it proves, for `period_close` rows (RQ-20); `1` for every other kind |
+| `internal_retained_path` | TEXT NOT NULL | The actual gate for `period_close` (RQ-6); the retained copy for every other kind |
 | `external_medium_path` | TEXT NULL | User-chosen, physically separate (RQ-19) |
 | `checksum` | TEXT NOT NULL | Integrity verification |
-| `is_original` | BOOLEAN NOT NULL | `true` for version 1; never modified thereafter |
+| `is_original` | BOOLEAN NOT NULL | `true` for version 1 of a `period_close` row; never modified thereafter |
 | `created_at` | TEXT NOT NULL | |
 
 **`settings`** *(key/value)*
 | Column | Type | Notes |
 |---|---|---|
-| `key` | TEXT PK | e.g. `royalty_min_children`, `royalty_rate`, `hierarchy_depth`, `level_widths` (JSON), `reference_unit_value`, `yearly_cycle_start`, `yearly_cycle_end`, `low_contribution_threshold`, `default_export_columns` (JSON) |
+| `key` | TEXT PK | e.g. `royalty_min_children`, `royalty_rate`, `hierarchy_depth`, `level_widths` (JSON), `reference_unit_value`, `yearly_cycle_start`, `yearly_cycle_end`, `low_contribution_threshold`, `default_export_columns` (JSON), `console_backup_schedule`, `console_backup_retention_count`, `console_backup_folder` |
 | `value` | TEXT NOT NULL | Serialised; typed at the application boundary |
 
 **`auth`** *(single row)*
@@ -883,16 +1010,32 @@ direct payoff of ADR-005's decision against full-tree recomputation.
 ```mermaid
 stateDiagram-v2
     [*] --> open: system start / previous period closed
-    open --> ended_locked: calendar month elapses (Rule 36)
-    ended_locked --> closed: backup confirmed + snapshot written (Rule 18/38)
-    ended_locked --> ended_locked: backup fails/cancelled — abort, alert stays (AC-22)
+    open --> awaiting_close: calendar month elapses (Rule 36)
+    awaiting_close --> closed: backup confirmed + snapshot written (Rule 18/38)
+    awaiting_close --> awaiting_close: backup fails/cancelled — abort, alert stays (AC-22)
     closed --> [*]
 ```
 
-At most one period is ever `open` for new entries (Rule 36's hard lock prevents a second one starting while
-any prior period is `ended_locked`). Multiple periods can sit at `ended_locked` simultaneously (Rule 20's
-outstanding-months queue); only the oldest is closable at a time, and each closes through its own instance
-of this same state machine — closing one does not touch the others' state.
+**Renamed 7 Aug 2026 (CR-2): `ended_locked` → `awaiting_close`.** The old name described a total entry lock
+that Rule 36 no longer imposes; leaving it would have made the schema state the opposite of the behaviour.
+Documentation-only — no implementation exists yet.
+
+**Entry eligibility by state (Rule 36 as amended):**
+
+| State | Accepts new entries? |
+|---|---|
+| `awaiting_close` | ✅ Yes, for as long as it stays unclosed — this is the point of the amendment |
+| `open` (the current month) | ✅ Only when **no** earlier period is `awaiting_close`; otherwise refused, naming it |
+| `closed` | ❌ Never via `record_entry` — corrections only, through `edit_entry` (Rule 39) |
+
+A period row for the current month exists as `open` from the start of the calendar month whether or not it
+can yet be written to; its writability is a function of what sits behind it, not of its own state. Multiple
+periods can sit at `awaiting_close` simultaneously (Rule 20's outstanding-months queue) and **each of them
+accepts entries**; only the oldest is closable at a time, and each closes through its own instance of this
+same state machine — closing one does not touch the others' state. `member_period_totals` may therefore hold
+rows for more than one not-yet-closed period; a recalculation must stay confined to the period its triggering
+entry belongs to. More than one live period at once is expected to be rare — it requires a month to be left
+unclosed past the end of the next one.
 
 ### 10.2 Member lifecycle
 
@@ -989,7 +1132,7 @@ live system (RQ-8, RQ-22).
 | 11.10 Reporting | 3 extracts, spreadsheet format | M6, ADR-007 (Rust-side `.xlsx` generation) |
 | 11.11 Logging | Technical log distinct from audit log, never client-visible | M9 — separate rotating file, no UI surface |
 | 11.12 Monitoring | Declined by client — not built | Deliberately absent; noted here so it is not mistaken for an oversight |
-| 11.13 Backup & recovery | On-demand manual backup; two physically independent copies; versioned on correction | §15, ADR-006, `backups` table (§8) |
+| 11.13 Backup & recovery | On-demand manual backup; two physically independent copies; versioned on correction; whole-console scheduled/on-demand backup, restorable on any machine | §15 (§15.1–15.4 month-close, §15.5 whole-console), ADR-006, ADR-012, `backups` table (§8) |
 | 11.14 Hosting & deployment | Standalone offline desktop, no network | ADR-001, ADR-011 |
 | 11.15 Browser/device support | No browser, no phone/tablet | Tauri native desktop app (ADR-002) — no web deployment target exists |
 | 11.16 Data migration | None — starts empty | No import tooling built; `members`/related tables start empty at first run |
@@ -1022,7 +1165,7 @@ row's "Superseded/retained" note are implemented as originally stated.
 | 17 | Manual reset, prompted not forced | M5 `begin_close` triggered by user action, not a scheduler |
 | 18 | Close gated on backup | §10.1, §15 |
 | 19 | Every export carries basic fields | M6 export queries always select the four defaults regardless of chosen columns |
-| 20 | Persistent alert, oldest-first | M8 `get_outstanding_alert`; `periods.status = ended_locked` queue ordered by `period_month` |
+| 20 | Persistent alert, oldest-first | M8 `get_outstanding_alert`; `periods.status = awaiting_close` queue ordered by `period_month` |
 | 21 | Period = calendar month | `periods.period_month` |
 | 22 | 2-decimal precision, round at display only | ADR-004 |
 | 23 | Yearly average ÷ actual snapshot count | M6 `export_yearly_average` — `COUNT(monthly_snapshots)` per member, not a fixed 12 |
@@ -1038,7 +1181,9 @@ row's "Superseded/retained" note are implemented as originally stated.
 | 33 | Configurable export columns | M6, `settings.default_export_columns` |
 | 34 | Phone uniqueness, reactivation offer | `members.phone UNIQUE`; M1 `add_member` checks inactive matches |
 | 35 | Random 6-digit ID, 100001–999999, never reissued | M1 ID generation (rejection sampling against existing IDs, including inactive) |
-| 36 | Entry locked once month ends | M2 checks `periods.status` before accepting `record_entry` |
+| 36 | An ended-but-unclosed month keeps accepting entries; the **current** month is refused while an earlier one is outstanding (amended 7 Aug 2026, CR-2) | M2 derives the target period from `entry_date` and checks `periods.status` before accepting `record_entry`: `awaiting_close` accepts, `open` accepts only when nothing older is `awaiting_close`, `closed` refuses and directs to `edit_entry` |
+| 44 | Phone number is a search key, four-digit floor, canonical-key comparison | M1/M4 `search_members`; `members.phone` (already `UNIQUE`, indexed) matched by canonical-key substring (digits, then an international prefix or trunk zero dropped) inside the Rust core, never by filtering in the WebView |
+| 45 | Full hierarchy view is a read-only, point-in-time draw, gated above 60 descendants | M4 `get_direct_children_chart` with `full_tree: true`, rendered in a separate `WebviewWindow` (§7 M4) |
 | 37 | Introducer fixed at creation | `members.introducer_member_id` has no `UPDATE` path exposed by any command |
 | 38 | Reset zeroes everything, snapshot first | §10.1 state machine; M5 transaction order (snapshot write → zero → status flip) |
 
@@ -1053,9 +1198,13 @@ row's "Superseded/retained" note are implemented as originally stated.
   Rust-side), consistent with §11's security boundary.
 - **Error surface.** Commands return a typed `Result<T, AppError>` across the IPC boundary; `AppError`
   variants map to the specific validation rule that failed (e.g. `PhoneAlreadyInUse { existing_member_id }`,
-  `IntroducerNotActive`, `PeriodLocked { outstanding_month }`), so the frontend can render the exact,
-  vocabulary-safe message the rule requires (e.g. Rule 34's "name that person and offer to reactivate them")
-  without re-deriving the reason from a generic error string.
+  `IntroducerNotActive`, `PeriodNotAcceptingEntries { month, blocking_month }`, `PeriodClosed { month }`), so
+  the frontend can render the exact, vocabulary-safe message the rule requires (e.g. Rule 34's "name that
+  person and offer to reactivate them") without re-deriving the reason from a generic error string.
+  **Amended 7 Aug 2026 (CR-2):** `PeriodLocked { outstanding_month }` is **retired**. It described a total
+  lock that no longer exists, and naming only one month cannot express the new refusal, which has to name
+  both the month attempted and the month that must be closed first. Do not reintroduce it under a new
+  meaning.
 - **Transactional integrity.** Every write that touches more than one table (an entry write plus its chain
   recalculation; a close plus its snapshot writes; a correction plus its audit entry) happens inside one
   SQLite transaction — partial application of a write (e.g. figures updated but no audit entry written) is
@@ -1097,6 +1246,44 @@ M5.8 (manual backup of the in-progress, not-yet-closed month) uses the same writ
 the close-time backup, but writes to a distinct file (clearly dated/labelled as an in-progress snapshot,
 not a period-close record) and does not affect `periods.status` or trigger any zeroing.
 
+### 15.5 Full-console backup & cross-device restore
+
+Per [RQ-23](../business/client-requirements-validation.md#rq-23--protecting-the-whole-console-not-just-one-month)
+(M7.7/M8.6/M8.7) and ADR-012 — a second, orthogonal backup mechanism to §15.1–15.4's month-close gate, not a
+replacement for it.
+
+**What's backed up.** The single encrypted SQLCipher file, in full — every table, the credential row
+included. A restored console needs no re-setup: the same PIN/password that unlocked the original machine
+unlocks the restored one, because it's the same file.
+
+**Schedule.** `settings.console_backup_schedule` (`off`/`daily`/`weekly`/`monthly`) is checked once, at every
+successful `login` — the only moment the process is reliably running, since the application has no
+background service while closed (driver row 1, §2). A due backup runs via `run_console_backup_now`
+(`kind = scheduled`) before the UI takes over; a day the client never opens the console simply catches up at
+the next login. `run_console_backup_now` is also callable directly for an on-demand backup (`kind = manual`).
+
+**Retention.** After every `scheduled`/`manual` write, rows of those two kinds beyond
+`settings.console_backup_retention_count` (default 10) are deleted, oldest first. `period_close` rows
+(Rule 31) and `pre_restore_safety` rows are never pruned by this rule — the former is permanent by client
+decision, the latter is rare enough that unbounded retention costs nothing in practice.
+
+**Restore, and its safety net.** `restore_from_backup_file` (unauthenticated) is the single mechanism behind
+three surfaces: a plain "Restore from a backup file instead" link on the ordinary first-run setup screen (a
+brand-new machine has no console to log into yet, and no local backups of its own to choose from, so this
+path skips straight to the file picker), the same recovery screen the db-error path uses — reworded, not
+duplicated, for the voluntary case — and the authenticated Settings "Restore" card's "Restore from a file…"
+action (gated behind the frontend's own checklist-confirm modal before the command is ever called). Every
+restore path — this one or the existing `restore_from_backup` — writes one `kind = pre_restore_safety` backup
+of whatever is currently live
+*before* overwriting it, so a restore is never a true one-way door, and drops any live session immediately
+after completing, since the restored file may hold a different credential than the one that was just
+authenticated.
+
+**What this doesn't change.** The month-close backup gate (§15.1), correction versioning (§15.2), and the
+single-machine caveat (§15.3) all continue to apply to `period_close` rows exactly as before — a
+whole-console restore rolls back *everything*, including which months are closed, but does not alter how a
+month is closed or corrected.
+
 ---
 
 ## 16. Testing & Verification Strategy
@@ -1134,9 +1321,12 @@ not a period-close record) and does not affect `periods.status` or trigger any z
 - **No auto-update**: consistent with the no-network constraint; version upgrades are a new installer, run
   manually. The maintainer is responsible for proactively notifying the client of an available update, since
   the application will never check for one itself.
-- **First-run setup**: on first launch, the application detects no existing encrypted database, runs the
+- **First-run setup**: on first launch, the application detects no existing encrypted database and runs the
   setup wizard (create PIN/password, generate and display recovery codes once, create the root member,
-  review default settings) rather than presenting an empty, unexplained main screen.
+  review default settings) — unconditionally, exactly as it did before the whole-console backup requirement
+  existed. A plain "Restore from a backup file instead" link on that same screen (§7 M8, RQ-23) is the only
+  addition: it leads to `restore_from_backup_file`, reusing the recovery screen already built for the
+  db-error case rather than a competing setup choice — see §15.5's "Restore, and its safety net."
 - **Install footprint**: ~10–20MB installer (Tauri baseline), no bundled browser runtime.
 
 ---
@@ -1152,6 +1342,9 @@ management_system/
 ├── src/                     # React + TypeScript frontend
 │   ├── screens/             # Home/Search, MemberDetail, AddEditMember, BVEntry,
 │   │                        # HierarchyChart, Settings, MonthlyClose, Reports, Auth
+│   ├── windows/             # FullHierarchy — the separate-window entry point (Rule 45/FR-10).
+│   │                        # Its own root and render; shares the node component and design
+│   │                        # tokens with the main app, never live state
 │   ├── components/          # shadcn/ui-based shared components
 │   └── lib/                 # typed IPC command wrappers, formatting helpers
 └── src-tauri/
@@ -1188,6 +1381,7 @@ Architecture-level risks, distinct from the business risks already tracked in th
 | TR-4 | Single-machine data loss if the client never takes the external-medium backup (§15.3) | Medium | Critical | Architecture prompts and reminds at every close; ultimately a client process discipline, stated plainly rather than assumed solved |
 | TR-5 | Fixed-point arithmetic bugs (an off-by-one in a ×100 conversion) are subtle and could silently misstate every downstream figure | Low (if §9's tests are followed) | Critical | The five-scenario unit test suite (§16.1) exists specifically to catch this class of bug before any UI is built on top of the engine |
 | TR-6 | Solo maintainer, no second reviewer — a design flaw or security gap could ship unnoticed | Medium | Medium–High | This document itself is the primary mitigation: decisions are recorded with rationale so they can be re-examined later, including by a future external reviewer if the client ever wants one |
+| TR-7 | The full hierarchy view (Rule 45/FR-10) is a **top-down** chart, whose width grows with the number of leaves rather than with depth. At the 25,000-member ceiling the canvas is tens of thousands of pixels wide, a print spans many pages, and the first draw takes noticeably longer than a normal screen | Medium (large networks only) | Medium (usability of one view; no data risk) | **Chosen deliberately by the client on 7 Aug 2026** over a width-stable indented outline, to match the Structure screen's visual language. Agreed mitigations: a 10% zoom floor (against the main chart's 50%), fit-width, in-window search-and-scroll, and the >60-descendant confirmation naming the exact count before anything is drawn. Isolation in a separate window keeps the cost off the main console entirely. Fallback if it proves unusable at scale: the indented-outline layout — a presentation change, not a data-path change |
 
 ---
 
@@ -1249,7 +1443,7 @@ CREATE TABLE slab_table (
 CREATE TABLE periods (
     id            INTEGER PRIMARY KEY,
     period_month  TEXT NOT NULL UNIQUE,
-    status        TEXT NOT NULL CHECK (status IN ('open','ended_locked','closed')),
+    status        TEXT NOT NULL CHECK (status IN ('open','awaiting_close','closed')),
     ended_at      TEXT NULL,
     closed_at     TEXT NULL
 );
@@ -1284,7 +1478,9 @@ CREATE TABLE monthly_snapshots (
 
 CREATE TABLE backups (
     id                       INTEGER PRIMARY KEY,
-    period_id                INTEGER NOT NULL REFERENCES periods(id),
+    period_id                INTEGER NULL REFERENCES periods(id),
+    kind                      TEXT NOT NULL CHECK (kind IN ('period_close','scheduled','manual','pre_restore_safety')),
+    schedule_kind             TEXT NULL CHECK (schedule_kind IN ('daily','weekly','monthly')),
     version                  INTEGER NOT NULL,
     internal_retained_path    TEXT NOT NULL,
     external_medium_path      TEXT NULL,
@@ -1337,6 +1533,9 @@ CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id);
 | 11 | Low-contribution threshold | 100 | Rule 24 |
 | 12 | Default export columns | name, ID, phone, Business Volume | Rule 33 |
 | 13 | Session inactivity timeout | — (set at setup) | §11.3 |
+| 14 | Whole-console backup schedule | Off | RQ-23, M7.7 |
+| 15 | Whole-console backup retention count | 10 | RQ-23, M7.7 |
+| 16 | Whole-console backup folder | App-data `backups/` subfolder | RQ-23, M7.7 |
 
 ---
 
@@ -1349,13 +1548,13 @@ CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id);
 | M1 | `edit_member` | Rule 28 |
 | M1 | `deactivate_member` | Rule 28; refused for root (RQ-3) |
 | M1 | `reactivate_member` | Rule 34 |
-| M1/M4 | `search_members` | Rule 2 |
-| M2 | `record_entry` | Rule 15/16; triggers §9 chain recalc |
-| M2 | `edit_entry` | M2.4; open or closed period |
-| M2 | `reverse_entry` | M2.4 |
-| M2 | `get_period_lock_status` | Rule 36 |
+| M1/M4 | `search_members` | Rule 2, **Rule 44** (name / ID / phone; returns `phone` for display) |
+| M2 | `record_entry` | Rule 15/16; target period derived from `entry_date` (**Rule 36 as amended**); triggers §9 chain recalc within that period only |
+| M2 | `edit_entry` | M2.4; open or closed period — the only correction mechanism |
+| M2 | `get_period_lock_status` | Rule 36 — returns **which months accept entries**, not a boolean (amended 7 Aug 2026, CR-2) |
+| M3 | `preview_settings_impact` | RQ-18/V7.6 dry run; read-only, persists nothing |
 | M4 | `get_member_detail` | RQ-13 breakdown |
-| M4 | `get_direct_children_chart` | Q11/UN-16 |
+| M4 | `get_direct_children_chart` | Q11/UN-16 with `full_tree: false`; **Rule 45/FR-10** with `full_tree: true` (the full hierarchy window) — no separate command |
 | M5 | `get_outstanding_periods` | Rule 20 queue |
 | M5 | `begin_close` | Rule 21 confirmation |
 | M5 | `confirm_backup_and_close` | Rule 18/38 gated transaction |
@@ -1366,14 +1565,38 @@ CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id);
 | M6 | `list_backups` / `redownload_backup` | Rule 31 |
 | M7 | `get_settings` / `update_settings` | Rule 4/14 |
 | M7 | `add_slab_row` / `remove_slab_row` / `update_slab_row` | Rule 27 |
+| M7 | `get_console_backup_settings` / `update_console_backup_settings` | RQ-23, M7.7 |
 | M8 | `setup_first_run` | ADR-008 |
 | M8 | `login` / `lock_session` / `unlock_session` | Rule 29 |
 | M8 | `use_recovery_code` | RQ-10 |
 | M8 | `get_outstanding_alert` | Rule 20 |
+| M8 | `check_data_readable` | Launch pre-flight — **unauthenticated** |
+| M8 | `list_restore_points` | Retained backups available to restore, every `kind` (ADR-012) — **unauthenticated** |
+| M8 | `restore_from_backup` | Checksum-verified restore, any `kind` — **unauthenticated, destructive** |
+| M8 | `run_console_backup_now` | RQ-23, M8.6 — scheduled check (at login) and manual trigger alike |
+| M8 | `restore_from_backup_file` | RQ-23, M8.7 — restore from a user-picked file path — **unauthenticated, destructive** |
 | M9 | `get_audit_log` | RQ-9, read-only |
 
 Every command above is the **only** way its module's data can be reached from the UI — there is no
 general-purpose query or filesystem command exposed, consistent with §6 and §11.3.
+
+**Authentication.** All commands require an authenticated session except seven: `setup_first_run`, `login`,
+`use_recovery_code`, `restore_from_backup_file`, and the three pre-flight/recovery commands. That set is
+closed — see §M8 for why the recovery three (and now `restore_from_backup_file`) cannot be authenticated, and
+`06-security-authorization-matrix.md` §3 for the exposure it creates. An eighth unauthenticated command
+should not be added without revisiting both.
+
+> **Appendix revised 7 August 2026.** `get_console_backup_settings`/`update_console_backup_settings` (M7),
+> `run_console_backup_now` and `restore_from_backup_file` (M8) added — RQ-23/ADR-012, the whole-console
+> backup and cross-device restore requirement. `restore_from_backup_file` joins the unauthenticated set for
+> the same reason the original three do: it exists precisely for when there is nothing to authenticate
+> against yet (a brand-new install) or the database can't be opened at all.
+>
+> **Appendix revised 6 August 2026.** `reverse_entry` removed (§M2); `preview_settings_impact` added (§M3);
+> the three pre-flight/recovery commands added (§M8). Each change has its rationale recorded inline in the
+> module section rather than applied silently. Full per-command contracts — request, response, validation,
+> transaction and audit requirements — are in `documents/implementation-readiness/04-api-specification.md`,
+> which this table summarises rather than duplicates.
 
 ---
 

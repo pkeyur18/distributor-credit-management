@@ -84,8 +84,9 @@ A private, single-user dashboard that does five things:
    no mode to pick, no currency.
 3. **Works everything out immediately.** The moment you save, every affected figure up to the top of the
    structure is correct — team totals, bands, differential rewards and royalty.
-4. **Closes each month safely.** You are alerted the moment a month ends and recording is locked until it is
-   closed. Closing takes a backup first, refuses to proceed without one, writes a permanent record of the
+4. **Closes each month safely.** You are alerted the moment a month ends. Figures dated in that month can
+   still be recorded; the new month waits until it is closed *(amended 7 Aug 2026 — see [§18](#18-change-requests--7-august-2026), CR-2)*.
+   Closing takes a backup first, refuses to proceed without one, writes a permanent record of the
    month, and only then clears the live figures.
 5. **Produces your reports.** The month's figures, yearly averages per member, and a list of members whose
    personal contribution has fallen below your threshold — all as spreadsheets.
@@ -226,7 +227,7 @@ be traced from any member to the top; a message naming a returning member where 
 |---|---|
 | M2.1 | Search for a member by name or six-digit number |
 | M2.2 | Record a Business Volume figure against the selected member |
-| M2.3 | Show the recording lock, and the month waiting to be closed, whenever a close is outstanding |
+| M2.3 | Name the month being recorded into on every entry, and state which month must be closed before the current month can be recorded ⚠️ *amended 7 Aug 2026, CR-2 — was "show the recording lock, and the month waiting to be closed, whenever a close is outstanding"* |
 | M2.4 | 🟢 **New, confirmed 4 August 2026** ([RQ-7](#rq-7--correcting-a-wrong-figure)). Edit or reverse a previously recorded entry, at any time, in any month — open **or already closed**. Editing an entry in a closed month shows an explicit warning naming that month before the change is made |
 | M2.5 | 🟢 **New, confirmed 4 August 2026.** Every entry carries a date, defaulting automatically to the day it is recorded. The date is editable afterward, through the same edit action as M2.4 — see [RQ-21](#rq-21--can-an-entrys-date-move-it-across-a-month-boundary) for whether that edit can move the entry into a different month |
 
@@ -239,7 +240,7 @@ be traced from any member to the top; a message naming a returning member where 
 | **Rule 15** | Search by name or number, select the member, record against them |
 | **Rule 16** | Business Volume is entered directly and is the only thing entered. Up to two decimal places. No currency field anywhere |
 | **Rule 22** | Two decimal places are held throughout; rounding happens only where a figure is displayed |
-| **Rule 36** | Once a month ends, all recording is locked until that month is closed |
+| **Rule 36** | A month that has ended but is not closed keeps accepting figures dated within it; the current month is refused until that older month is closed ⚠️ *amended 7 Aug 2026, CR-2 — was "once a month ends, all recording is locked until that month is closed"* |
 
 > ⚠️ **A tension worth naming.** Rule 16 says Business Volume "is entered directly and is the only thing
 > entered" — a deliberate choice, recorded under [UN-07](user-needs-document.md#un-07--activity-recording-with-nothing-in-the-way)
@@ -383,7 +384,7 @@ flowchart TD
 | # | Function |
 |---|---|
 | M5.1 | Raise an undismissable alert the moment a month ends, naming it |
-| M5.2 | Lock all recording until the outstanding month is closed |
+| M5.2 | Keep the outstanding month open for entry, and the current month closed to entry, until that outstanding month is closed ⚠️ *amended 7 Aug 2026, CR-2 — was "lock all recording until the outstanding month is closed"* |
 | M5.3 | List every outstanding month, allowing only the oldest to be closed |
 | M5.4 | Prompt for a backup and refuse to proceed unless it succeeds |
 | M5.5 | Write a permanent record of the closing month for every member |
@@ -393,7 +394,8 @@ flowchart TD
 | M5.9 | 🟢 **New, confirmed 4 August 2026** ([RQ-7](#rq-7--correcting-a-wrong-figure)). Editing an entry that belongs to an already-closed month (via M2.4) recalculates the affected chain and **rewrites that month's permanent record in place**. The corrected month is immediately re-extractable through the existing M6.1 / [V6.4](#66-module-m6--reporting--extracts) path — no separate export function is needed |
 | M5.10 | 🟢 **New, confirmed 4 August 2026** ([RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected)). Whenever M5.9 corrects a closed month, the **original backup for that month is never touched**; a new, separately dated backup **version** is created and retained alongside it (extends M5.7 — every version kept permanently, none deleted). Extracts and all future reporting read the latest version |
 
-**Dependencies.** M2 (recording is locked by this module), M3 (figures must be current before the record is
+**Dependencies.** M2 (this module decides *which month* recording writes into — ⚠️ amended 7 Aug 2026, CR-2;
+it no longer stops recording altogether), M3 (figures must be current before the record is
 written), M6 (the record is the source of all reporting).
 
 **Business rules**
@@ -404,8 +406,8 @@ written), M6 (the record is the source of all reporting).
 | **Rule 18** | The close is gated: no confirmed backup, no close. A failed or cancelled backup abandons the close with nothing cleared |
 | **Rule 20** | An undismissable alert appears as a banner on every screen and as a notification entry, naming the outstanding month. It clears only on a completed close. Where several are outstanding, all are listed and only the oldest can be closed; each keeps its own backup and its own record |
 | **Rule 21** | A period is a calendar month. The close closes whichever month it belongs to — pressed on 5 September, it closes August. The confirmation screen names that month explicitly |
-| **Rule 31** | Each backup is downloaded to your computer **and** retained permanently inside the system. Nothing is ever deleted automatically. 🟢 **Resolved 4 August 2026** ([RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected)): the downloaded copy also goes to a physically separate medium, per [RQ-19](#rq-19--backup-independence-on-a-single-machine). If a closed month is later corrected, the **original backup for that month is never touched** — a new, separately dated backup **version** is created instead, and every backup version is retained permanently (extends M5.7). Going forward, the software uses the latest version |
-| **Rule 36** | Recording is locked from the moment a month ends until that month is closed |
+| **Rule 31** | Each backup is downloaded to your computer **and** retained permanently inside the system. Nothing is ever deleted automatically. 🟢 **Resolved 4 August 2026** ([RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected)): the downloaded copy also goes to a physically separate medium, per [RQ-19](#rq-19--backup-independence-on-a-single-machine). If a closed month is later corrected, the **original backup for that month is never touched** — a new, separately dated backup **version** is created instead, and every backup version is retained permanently (extends M5.7). Going forward, the software uses the latest version. 🟢 **Extended 7 August 2026** ([RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month)): this same mechanism now also produces a backup of the **entire console**, not only a closing month — see M8.6/M8.7. The two remain one mechanism at different scope, not two separate systems |
+| **Rule 36** | From the moment a month ends until it is closed, recording continues **into that month** but not into the current one ⚠️ *amended 7 Aug 2026, CR-2 — was "recording is locked from the moment a month ends until that month is closed"* |
 | **Rule 38** | The close clears **everything** — Business Volume, Total Business Volume, Rewards and royalty. Before anything is cleared, a permanent record is written per member capturing Business Volume, Total Business Volume, band percentage, Rewards, royalty earned and active/inactive status. All yearly reporting reads from these records only |
 
 **Validation rules**
@@ -480,6 +482,7 @@ low-contribution report. Plus retrieval of any past backup.
 | M7.4 | Set the yearly cycle and the low-contribution threshold |
 | M7.5 | Set the reference unit value |
 | M7.6 | Set which columns are ticked by default on extracts |
+| M7.7 | 🟢 **New, confirmed 7 August 2026** ([RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month)). Set the whole-console backup schedule (off/daily/weekly/monthly) and how many recent backups to keep (default 10) — the actual backing-up and restoring is M8.6/M8.7 |
 
 **Dependencies.** M3 and M6 both read from here.
 
@@ -537,6 +540,8 @@ low-contribution report. Plus retrieval of any past backup.
 | M8.3 | Show the outstanding-month banner on every screen |
 | M8.4 | Keep a notification list |
 | M8.5 | 🟢 **New, confirmed 4 August 2026.** Support a PIN and a complex password configured **at the same time**, not just one or the other. If both are set, a login succeeds with **either** credential, giving a self-managed backup on top of the recovery codes (RQ-10) |
+| M8.6 | 🟢 **New, confirmed 7 August 2026** ([RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month)). Back up the **entire console** — every member, entry, monthly record and setting, not one month — on a schedule you set (off/daily/weekly/monthly) or on demand at any time. The most recent backups are kept, a count you can change (default 10), older ones pruned automatically |
+| M8.7 | 🟢 **New, confirmed 7 August 2026** ([RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month)). Restore the console from any such backup file — including on a different computer, with nothing set up yet — bringing it back to exactly the state it held at that backup. Always states plainly what will be replaced and requires deliberate confirmation; the console takes one more backup of its own current state immediately beforehand, so a restore is itself never a one-way door |
 
 **Dependencies.** M5 raises the alerts this module displays.
 
@@ -555,8 +560,9 @@ low-contribution report. Plus retrieval of any past backup.
 | V8.2 | The alert cannot be dismissed by navigating away, logging out, or acknowledging it | — |
 | 🟢 V8.3 | **Resolved:** recovery codes, issued at setup and kept safe by you, are the route back in after a lockout or forgotten credential | [RQ-10](#rq-10--continuity-of-your-single-login) — confirmed 3 August 2026 |
 | 🟢 V8.4 | **New, resolved:** setting a password does not require removing the PIN, and vice versa; either credential set unlocks the account | M8.5 — confirmed 4 August 2026 |
+| 🟢 V8.5 | **New, resolved:** restoring the console always names what will be replaced and requires a deliberate confirmation, never a single stray click; the console backs up its own current state immediately before overwriting it | M8.6/M8.7 — [RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month), confirmed 7 August 2026 |
 
-**Expected outputs.** An authenticated session; a persistent alert while any month is outstanding.
+**Expected outputs.** An authenticated session; a persistent alert while any month is outstanding; a restored console, on request, matching exactly the state its backup was taken from.
 
 ### 6.9 Module dependency map
 
@@ -725,7 +731,7 @@ says what changes.
 | **R-1** | **A month's record is lost entirely.** The close clears everything, so a close on a failed backup — or a month never closed — leaves no evidence the month happened | Low | **Critical** | 🟢 **Resolved 3 August 2026** — the retained in-system copy is the gate for a successful backup. [RQ-6](#rq-6--what-counts-as-a-successful-backup) confirmed |
 | **R-2** | **An edited threshold table produces negative rewards.** Rule 9's guarantee depends on the table always rising, which nothing enforces | **Medium** | **High** | 🔶 **Accepted by the client, 3 August 2026 — not mitigated in software.** You have declined the validation we recommended and confirmed you will not create a non-monotonic table yourself. This risk stands as a knowing exception, not a build item. [RQ-1](#rq-1--protecting-the-threshold-table-from-an-invalid-edit) |
 | **R-3** | **A wrong figure cannot be traced.** One login, instant recalculation, no record of what changed | **Medium** | **High** | 🟢 **Resolved 3 August 2026** — a simple recording log will be built. [RQ-9](#rq-9--no-record-of-what-changed) confirmed |
-| **R-4** | **The business stops being recorded.** Recording locks the instant a month ends; if you are away, nothing can be recorded until you return and close it | **Medium** | **High** | 🟢 **Resolved 3 August 2026** — the hard stop is kept deliberately, with no grace period. [RQ-11](#rq-11--the-cost-of-the-recording-lock) confirmed |
+| **R-4** | **The business stops being recorded.** If you are away over a month end, nothing can be recorded until you return and close it | **Low** *(was Medium)* | **Low–Medium** *(was High)* | ✅ **Mitigated 7 August 2026 (CR-2).** Figures dated in the ended month can still be recorded throughout — exactly the case this risk described. What remains is narrower: the **new** month waits until the old one is closed. Originally resolved 3 August 2026 as an accepted hard stop; [RQ-11](#rq-11--the-cost-of-the-recording-lock) reversed |
 | **R-5** | **Total loss of access.** One login, one credential, no recovery route defined | Low | **Critical** | 🟢 **Resolved 3 August 2026** — recovery codes issued at setup. [RQ-10](#rq-10--continuity-of-your-single-login) confirmed. **Strengthened 4 August 2026** — a PIN and a complex password can now both be set, either one authenticating, so there is a second self-managed credential as well as the recovery codes |
 | **R-6** | **Personal data exposure.** Several thousand people's names, contact numbers and addresses behind one PIN, with no retention rule | Low | **High** | 🟢 **Resolved 3 August 2026** — retention stays permanent; mandatory lockout already agreed. [RQ-8](#rq-8--personal-data) confirmed |
 | **R-7** | ~~**Deactivation produces wrong figures.** How an inactive member and their team behave in the rollup is undefined~~ 🟢 **Resolved 4 August 2026** — inactive status has no calculation effect at all; it is a display-only flag. [RQ-2](#rq-2--how-inactive-members-behave-in-the-structure) confirmed | **High** | **High** | Closed. No further action |
@@ -1063,6 +1069,12 @@ the protection, since the month being closed is already fully determined.
 
 🟢 **Confirmed by the client, 3 August 2026 — the hard stop is kept, no grace period.**
 
+⚠️ **Reversed by the client, 7 August 2026 — see [§18 Change requests](#18-change-requests--7-august-2026), CR-2.** The
+hard stop is narrowed: a month that has ended but is not closed keeps accepting figures dated within it, and
+only the **current** month is refused until that older month is closed. Note this is not the grace period our
+recommendation above offered — that version would have counted late figures into the *new* month, which would
+have put them in the wrong one.
+
 ---
 
 #### RQ-12 — What the reference unit value applies to
@@ -1292,6 +1304,39 @@ Add Member screen, as described. Closes [R-14](#9-identified-risks-).
 
 ---
 
+#### RQ-23 — Protecting the whole console, not just one month
+
+**What we need to know.** Everything settled so far about backups — Rule 31, [RQ-19](#rq-19--backup-independence-on-a-single-machine),
+[RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected) — protects one month at
+the moment it closes. You separately asked for something wider: the entire installation backed up on its own
+schedule, and the ability to install the software on a different desktop or laptop entirely and have it come
+back to exactly the state the old one was in. Three things needed settling: what such a backup should
+contain, how a schedule can run given the software has no background process while it's closed, and how a
+restore — which is more consequential than anything else in the system, since it replaces everything currently
+in the console — should be gated.
+
+**Why it matters.** The existing backups protect against losing a month's figures. They do nothing for the
+console itself between closes, and nothing today lets it move to a new machine at all — the single point of
+failure is still the one machine it's installed on. Without this, replacing a damaged or lost computer would
+mean starting the whole record over.
+
+**Our recommendation.** Because the console already keeps every table — members, entries, monthly records,
+settings and the login credential — in one single encrypted file, the backup is simply a verified copy of
+that file; nothing needs re-entering after a restore, credentials included. The schedule (off/daily/weekly/
+monthly) is checked once each time you log in, since that is the only moment the software is reliably running;
+a due backup runs quietly in the background. The most recent backups are kept, a count you can change
+(default 10), older ones pruned automatically. Restoring — whether from Settings on a running console, or via
+a link on the first-run screen of a brand-new install — always states plainly what it will replace and needs
+a deliberate confirmation, and the console takes one more backup of its own current state immediately
+beforehand, so even a restore can be stepped back from.
+
+🟢 **Confirmed by the client, 7 August 2026 — agreed with our recommendation.** The whole encrypted file is the
+backup, schedule checked at login, keep-last-10 default and adjustable, checklist-style restore confirmation
+with an automatic safety backup first. A brand-new install offers restoring from a backup file as an explicit
+alternative to first-time setup. See M8.6/M8.7, M7.7, and Rule 31 (extended).
+
+---
+
 ### 10.3 Carried forward from earlier
 
 | Item | Status | Impact |
@@ -1323,7 +1368,7 @@ rather than invent a target.**
 | **11.10** | **Reporting** | Three extracts fully specified: monthly, yearly average, low contribution. All in spreadsheet format | 🟢 **Addressed** by Rules 19, 23, 24, 33 |
 | **11.11** | **Logging** | Nothing stated | 🟢 **Confirmed by the client, 3 August 2026.** Technical logging exists, distinct from the audit log, and is never visible to you |
 | **11.12** | **Monitoring** | Nothing stated. Notably, nothing monitors whether the permanent monthly record was actually written | 🔶 **Declined by the client, 3 August 2026** — not named directly, but covered by "any other NFR not required." To be precise about the consequence: we recommended this specifically as the safeguard that would catch a close silently failing to write its record or backup, which is the mechanism behind [R-1](#9-identified-risks-)'s Critical impact. Without it, such a failure would only be discovered when the record is actually needed |
-| **11.13** | **Backup & recovery** | Monthly backups are downloaded and retained permanently. Nothing stated about backing up the live system itself | 🟢 **Fully resolved, 4 August 2026.** Manual backup of the current (in-progress) month's data on demand (M5.8), the two Rule 31 backup copies now confirmed physically independent ([RQ-19](#rq-19--backup-independence-on-a-single-machine)), and a corrected closed month now creates a new, dated backup version rather than touching the original ([RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected), M5.10) |
+| **11.13** | **Backup & recovery** | Monthly backups are downloaded and retained permanently. Nothing stated about backing up the live system itself | 🟢 **Fully resolved, 4 August 2026,** for one month at a time: manual backup of the current (in-progress) month's data on demand (M5.8), the two Rule 31 backup copies now confirmed physically independent ([RQ-19](#rq-19--backup-independence-on-a-single-machine)), and a corrected closed month now creates a new, dated backup version rather than touching the original ([RQ-20](#rq-20--what-happens-to-the-retained-backup-when-a-closed-month-is-corrected), M5.10). 🟢 **Extended 7 August 2026** to the whole console — scheduled or on-demand backup of the entire installation, restorable on any machine, including a brand-new install ([RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month), M7.7, M8.6, M8.7) |
 | **11.14** | **Hosting & deployment** | Nothing stated originally. Listed as not covered | 🟢 **Resolved 3 August 2026 — major decision.** A standalone desktop application only. Fully offline: no network, no server, no internet dependency of any kind |
 | **11.15** | **Browser and device support** | Nothing stated | 🟢 **Resolved 3 August 2026 — "No."** No browser is used (native desktop application); no phone or tablet support. Consistent with 11.14 and [BA-5](#8-business-assumptions-) |
 | **11.16** | **Data migration** | Nothing stated | 🟢 **Resolved 3 August 2026 — "No."** No existing data to bring in; the system starts empty. Confirms [BA-2](#8-business-assumptions-) |
@@ -1393,7 +1438,7 @@ the scheme self-limiting.
 | # | Criterion |
 |---|---|
 | **AC-18** | Once a month ends, an undismissable banner appears on every screen naming it, plus a notification entry |
-| **AC-19** | All recording is locked while any month is outstanding, and the entry screen names the month waiting |
+| **AC-19** | ⚠️ *Amended 7 Aug 2026, CR-2 — see [§18](#18-change-requests--7-august-2026).* While a month is outstanding, entries dated in **that** month are still accepted, and an entry dated in the current month is refused naming the month that must be closed first. The entry screen always names the month it is recording into. *(Originally: "all recording is locked while any month is outstanding, and the entry screen names the month waiting.")* |
 | **AC-20** | The alert clears only on a completed close — not on navigation, logout or acknowledgement |
 | **AC-21** | With several months outstanding, all are listed and only the oldest can be closed |
 | **AC-22** | A failed or cancelled backup abandons the close. Nothing is cleared and the alert stays up |
@@ -1421,6 +1466,14 @@ the scheme self-limiting.
 | **AC-34** | Exactly one login exists. There is no member login and no second account |
 | **AC-35** | Repeated failed attempts lock the account |
 | **AC-36** | No excluded term appears in any screen label, button, column heading, extract filename, error message or tooltip |
+
+### 13.7 Console backup & restore
+
+| # | Criterion |
+|---|---|
+| **AC-37** | The whole console — every member, entry, monthly record and setting — can be backed up on a schedule (off/daily/weekly/monthly) or on demand, and the most recent backups (default 10, adjustable) are kept with older ones pruned automatically |
+| **AC-38** | Installing on a different computer and restoring from a backup file brings it to exactly the state the original held, with no separate setup step and the same login credential working unchanged |
+| **AC-39** | Restoring always names what will be replaced and requires deliberate confirmation, and the console backs up its own current state immediately beforehand |
 
 ---
 
@@ -1473,7 +1526,7 @@ specification appears here, grouped by module.
 | C-09 | Find a member by name or number, then record against them | Rule 15 | ☐ | ☐ |
 | C-10 | Business Volume is the only thing entered, up to two decimal places. No currency field anywhere | Rule 16 | ☐ | ☐ |
 | C-11 | Two decimal places throughout; rounding only at display, never at an intermediate step | Rule 22 | ☐ | ☐ |
-| C-12 | All recording is locked from the moment a month ends until that month is closed | Rule 36 | ☐ | ☐ |
+| C-12 | ⚠️ *Superseded 7 August 2026 by CR-2 — see [§18](#18-change-requests--7-august-2026).* Now: recording of figures **dated in the ended month** continues until that month is closed; recording into the **current** month waits until it is. Originally: "all recording is locked from the moment a month ends until that month is closed" | Rule 36 (amended) | ☐ | ☐ |
 
 ### 15.3 Calculation — Module M3
 
@@ -1529,6 +1582,7 @@ specification appears here, grouped by module.
 | C-40 | The reference unit value stays on the settings screen, appears nowhere else, and takes no part in any calculation | Rule 14 | ☐ | ☐ |
 | C-41 | Band rows can be added and removed; the top band is always the highest-percentage row | Rule 27 | ☐ | ☐ |
 | C-42 | The full settings inventory in [§6.7](#67-module-m7--settings--configuration) is complete and correct | §7 of the specification | ☐ | ☐ |
+| C-85 | 🔷 **New, confirmed 7 Aug 2026** — the whole-console backup schedule (off/daily/weekly/monthly) and how many recent backups to keep (default 10) are both settings you control | [RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month), M7.7 | ☑ | ☐ |
 
 ### 15.8 Access — Module M8
 
@@ -1537,6 +1591,8 @@ specification appears here, grouped by module.
 | C-43 | One administrator account, yours alone. No other accounts, no roles, no member access | Rule 29 | ☐ | ☐ |
 | C-44 | Failed-attempt lockout is built regardless of how many credentials are set | Rule 29 | ☑ | ☐ |
 | C-45 | 🔷 **Broader than proposed, confirmed 4 Aug 2026** — both a PIN and a complex password may be set at once; either one logs in | Rule 29, M8.5 | ☑ | ☐ |
+| C-86 | 🔷 **New, confirmed 7 Aug 2026** — the whole console (not just one month) can be backed up on schedule or on demand, kept as the whole encrypted file, credentials included | [RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month), M8.6 | ☑ | ☐ |
+| C-87 | 🔷 **New, confirmed 7 Aug 2026** — that backup can be restored on a different computer with nothing set up yet, or deliberately rolled back on a running console with confirmation and an automatic safety backup first | [RQ-23](#rq-23--protecting-the-whole-console-not-just-one-month), M8.7 | ☑ | ☐ |
 
 ### 15.9 Language
 
@@ -1709,7 +1765,7 @@ deliberate, confirmed decision with its mitigation attached:
 > mitigated by the backup gate, and RQ-6 confirms the retained in-system copy is what makes that gate real.
 > **One login**, now with a defined recovery route — RQ-10 confirms recovery codes issued at setup.
 > **No record of what changed** — RQ-9 confirms a recording log will be built.
-> **Recording is hard-locked** the instant a month ends — RQ-11 confirms this is deliberate and is being kept, not an oversight.
+> **Recording changes shape** the instant a month ends: figures dated in that month can still be entered, while the current month waits until it is closed. ⚠️ Amended 7 August 2026 (CR-2) — it was previously a hard lock on all recording, which RQ-11 confirmed as deliberate on 3 August. See [§18](#18-change-requests--7-august-2026).
 > **Deactivation's effect on the rollup** — RQ-2 confirms it has none; it is a display flag only.
 > **Correcting a wrong figure** — RQ-7 confirms this works in any month, open or closed.
 > **Backup independence on a single machine** — RQ-19 confirms the downloaded copy goes to a separate medium.
@@ -1764,7 +1820,131 @@ list to come back to. Every question raised across seven rounds of this review �
 twenty-one Round 2 questions, sixteen non-functional items, three sizing details and RQ-22 — is answered.
 This document and its companion are ready for the client approval section below.
 
+**Later addendum, not covered by the above.** [§18 Change requests](#18-change-requests--7-august-2026)
+records three changes the client raised after this recommendation and the approval below were signed. All
+three are designed and specified, but — unlike everything above — **not yet client-confirmed**: see §18's own
+confirmation table. CR-2 specifically reverses this document's own RQ-11 answer, so implementation should
+treat CR-1/CR-2/CR-3 as pending, not settled, until that table is ticked.
+
+---
+
+## 18. Change requests — 7 August 2026
+
+Three changes raised by the client after this document and the full specification set were approved. They are
+recorded here as an addendum rather than by rewriting the sections above, so that what was originally agreed
+stays visible alongside what changed. Where a section above is affected, it carries a ⚠️ pointing here.
+
+**None of the three changes the calculation in any way.** The five worked scenarios still produce 35 / 22 /
+450 / 1,000 / 980. No threshold, percentage, rate or formula moves.
+
+### CR-1 — Search by phone number
+
+**What you asked for.** *"Home page → client can search by phone number as well along with member id and name.
+Since phone number is unique to member so it is easy to search member by mobile number."*
+
+**What we have specified.**
+
+| | |
+|---|---|
+| Where it applies | **Every** place you search for a member — the home screen, the structure screen, the recording screen, the correction screen, and the reference-number lookup when adding a member. One search that behaves the same everywhere, rather than one screen behaving differently from the rest |
+| How it matches | Type the number however you like — with or without spaces, dashes or a country code. Four digits or more is enough to find someone by phone; below four digits only names and member numbers are matched, so a two-digit query does not return half your network |
+| What you see | Search results now show each member's **phone number** alongside their name and member number, so you can confirm you have the right person before selecting them |
+| Why it is safe | A phone number already belongs to exactly one member and cannot be reused (Rule 34) — that is what makes it usable as a way of finding someone, rather than just a check against duplicates |
+| One thing to note | Phone numbers will now be on the home screen, which is where you work most of the day. This is personal information. It is visible only to your own login — the same login that already sees it on the member screen and in every extract — and nothing about it leaves your machine |
+
+**Module affected:** M1 (search), M2 (recording). **New business rule:** Rule 44. **Nothing else changes.**
+
+### CR-2 — Recording into a month that has ended but is not closed
+
+**What you asked for.** Remove the hard block on recording when the previous month is not closed, because a
+member who buys on the last day of a month often reports it two or three days later. Your condition, stated
+in your own terms: *while the previous month is unclosed I can add entries for the previous month, but I
+cannot add current-month entries; to add current-month entries the previous month needs to be closed.*
+
+**What we have specified — exactly that, and nothing wider.**
+
+| Which month the figure is dated in | Can you record it? |
+|---|---|
+| A month that has **ended but is not closed** | ✅ **Yes** — for as long as it stays unclosed. This is the change |
+| The **current** month, with nothing older outstanding | ✅ Yes, as always |
+| The **current** month, while an older month is still outstanding | ❌ Refused — and the message names the month you need to close first |
+| A month already **closed** | ❌ Not from the recording screen — the correction screen is the route, as before (Rule 39) |
+| A date in the future | ❌ Refused, as before |
+
+**What this reverses.** ⚠️ Your answer to [RQ-11](#rq-11--the-cost-of-the-recording-lock) on 3 August 2026,
+where the hard stop was confirmed with no grace period. It also amends C-12, M2.3, M5.2 and risk R-4 above.
+**The block is narrowed, not removed** — recording never becomes a free-for-all.
+
+**There is no time limit.** We offered a fixed grace window — a settable number of days after the month end,
+after which the block returns — and you chose not to have one. The grace lasts exactly as long as the month
+stays unclosed. There is no countdown, no cutoff and no new setting to maintain.
+
+**Why this is safe.** A figure belongs to the month its own date falls in. A figure dated in the ended month
+was always going to count towards that month, so recording it late changes nothing about where it lands — the
+month simply closes more accurately than it would have. A **current-month** figure is different: it would mix
+into a month that has not yet had its permanent record written, which is why that one stays blocked.
+
+**What has not changed.** The undismissable month-end alert stays exactly as it is. Months still close oldest
+first. The backup gate before a close is untouched. A closed month is still only correctable through the
+correction screen, and still writes a new version rather than overwriting the original.
+
+**What still pushes you to close on time.** The alert, which cannot be dismissed — and the fact that the new
+month cannot be recorded into until you do.
+
+**If two months are ever outstanding at once** — which you noted will not happen in practice — both stay open
+for recording, and the recording screen offers a month to choose between them. That choice only appears when
+there is genuinely more than one month in play; in the normal case nothing new appears on screen at all.
+
+**Module affected:** M2 (recording), M5 (monthly close). **Business rule amended:** Rule 36. **No new rule.**
+
+### CR-3 — "View full hierarchy" in a separate window
+
+**What you asked for.** *"In structure screen, I want you to add one more button — 'View Full Hierarchy'. If I
+click on this button, it should open new window with full hierarchy expanded. Our original software should not
+be affected by performance. It just opens new window with expanded full hierarchy with all data and forgets."*
+
+**What we have specified.**
+
+| | |
+|---|---|
+| Where it opens | A **separate window** of its own. The console you were working in is untouched — it does no work while the new window draws, which is your stated condition |
+| What it shows | The whole structure, from the **top member**, with every branch already open. Each card shows the same three things as the structure screen — name, member number and own Business Volume — and nothing more |
+| Where it starts from | Always the top member, wherever you happened to be in the structure screen. A full view is a view of the whole network, not of a branch |
+| What you can do in it | Zoom out far enough to take a large network in at once, fit it to the width, search for a member and jump to them, and print it |
+| What it does not do | It does not update. It draws once, at the moment you open it, and states the date and time it was drawn — so a printed copy always says what moment it is a picture of. Nothing in it can be edited, and closing it discards it entirely |
+| Before it opens | If the structure has more than 60 people in it, we tell you **exactly** how many are about to be drawn and let you decide. Cancelling opens nothing at all |
+
+**⚠️ One consequence to hold in mind.** You chose the top-down chart layout — the same shape as the structure
+screen — over a narrower list-style layout, after we showed you the trade-off. A top-down chart grows
+**wider** with every additional person at the bottom of the network, not taller. On a network of a few
+hundred people it is comfortable. On a very large one it becomes extremely wide, needs a lot of zooming out
+to take in, and prints across many pages. The zoom, fit-width and search controls exist to make that
+workable, and putting the whole thing in its own window is what keeps that cost away from your daily screens.
+If it ever proves unworkable at your real size, the narrower list layout remains available as a change — the
+information in it would be identical.
+
+**Module affected:** M4 (search and structure). **New business rule:** Rule 45. **Nothing else changes.**
+
+### What these three changes do *not* affect
+
+- The calculation, in any respect — the five worked scenarios are untouched.
+- The monthly close, its backup gate, or the permanent record it writes.
+- The undismissable month-end alert.
+- Anything to do with members, the structure, settings, extracts, or access.
+- The vocabulary — no new commercial term appears anywhere on screen.
+
+### Confirmation
+
+| Change | What you are confirming | Client ☑ |
+|---|---|---|
+| **CR-1** | Members can be found by phone number in every search box, and phone numbers are shown in search results | ☐ |
+| **CR-2** | A month that has ended but is not closed keeps accepting figures dated within it, with no time limit; the current month is refused until that older month is closed. This reverses your answer to RQ-11 | ☐ |
+| **CR-3** | A "view full hierarchy" action opens the whole structure, from the top member, in a separate read-only window, drawn once and dated; and you accept that the top-down layout becomes very wide on a large network | ☐ |
+
 ---
 
 *Prepared by Keyur Patel · 3 August 2026 · Version 1.0 · All open items confirmed by the client,
 4 August 2026 · Ready for architecture and design*
+
+*Addendum §18 — change requests CR-1, CR-2, CR-3 · 7 August 2026 · Version 1.1 · Awaiting client
+confirmation of the three items above*

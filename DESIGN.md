@@ -220,6 +220,8 @@ Two further tiers exist below and above those two steps — not drift, but real 
 
 **The Half-Height Bar Rule.** Thin bar/track elements (the slab-distribution bar track and fill) round to half their own height, giving true pill end-caps at any thickness, rather than reusing `rounded.sm`/`rounded.lg`.
 
+**Reused, not duplicated (8 August 2026):** the Home "Rewards by slab" chart (CR-5) is the same bar-list/bar-row component as "Members by slab," reused verbatim — same track/fill/label shapes, just summing Rewards per slab bucket instead of counting members. No new chart component was introduced for it.
+
 ## Components
 
 ### Buttons
@@ -253,12 +255,60 @@ Two further tiers exist below and above those two steps — not drift, but real 
 - **Sidebar item:** 13.5px body weight, 6px radius, full-width hit target, icon at 16px/0.75 opacity. Hover shifts background to `--bg`; the active item gets the indigo-weak fill, indigo text, 600 weight, and full-opacity icon — the single strongest "you are here" signal in the system.
 - **Breadcrumb:** 12.5px muted trail with `›`-style separators at 0.5 opacity; only the current page is ink-colored and bold.
 
+### Modals
+- **Shape:** 480px max width (640px at `.wide`), 8px radius, `max-height: 88vh` with the body scrolling rather than the whole dialog.
+- **Elevation:** the one shadow in the system (`--shadow-modal`) — modals, toasts and the search dropdown are the only things that get it. Backdrop is ink at 50% with a 1px blur.
+- **Structure:** header (15px/650 title, hairline below, ✕ at the right), body at 18px/20px padding, footer with a hairline above and actions right-aligned — **Cancel first, then the action**, never reversed.
+- **Focus:** Cancel takes focus on open, never the confirming button. A destructive action should require a deliberate move to reach, not sit under a stray Enter press.
+- **Dismissal:** backdrop click and Escape both close a dismissable modal. Modals that must not be dismissed accidentally (add/edit member) opt out of both and can only be closed by Cancel or ✕.
+- **Motion:** 0.14s rise-and-settle (`translateY(6px) scale(0.98)` → none), clamped to nothing under `prefers-reduced-motion`.
+
+### Toasts
+- **Style:** ink fill with page-background text by default; `--success` fill for confirmations, `--danger` for refusals. 15px icon, 12.5px label, 6px radius, the modal shadow.
+- **Placement:** bottom-right stack, 8px gaps, `aria-live="polite"` so a confirmation is announced without stealing focus.
+- **Lifetime:** ~3.4s, then a 0.2s fade. Toasts confirm; they never carry information the operator must act on — anything actionable belongs in a banner or a modal, which do not disappear.
+
+### Alert notes (in-modal)
+- **Variants:** `.modal-warn` (amber — a consequence worth reading) and `.modal-danger-note` (red — a refusal or a risk).
+- **Style:** the **Blended Alert Border Rule** in component form — weak-tinted fill, border mixed 35% status colour into `--border`, 6px radius, 12.5px copy. Never a solid status-coloured border.
+- **Contrast:** copy on the amber variant uses `--warning-text` (`#92400e`), not `--warning` — the fill colour measures ≈3.2:1 on white and fails AA for body text.
+- **Composition:** 15px status-coloured icon, 9px gap, text with the consequence in **650** weight and the qualification in normal weight. The severe half of the sentence should be readable on its own.
+
+### Impact summary
+- **Purpose:** shows what a pending change would do, before it is committed — used by the settings pre-save warning.
+- **Style:** bordered 6px container, rows separated by hairlines, muted label left, value right.
+- **Before/after:** the old figure in muted normal weight, a muted arrow, the new figure in 650 — so the direction of travel reads at a glance without colour. Tabular numerals throughout, per the Tabular Rule.
+- **Unchanged state:** shows the single current figure followed by a muted "unchanged" rather than an identical pair either side of an arrow, which reads as a change that isn't one.
+
+### Restore option list
+- **Purpose:** picking one item from a small set of consequential choices (backups to restore from) where a native radio would be too small a target and too quiet.
+- **Style:** full-width card rows, 6px radius, 1px `--border`, 10px/12px padding, stacked with 8px gaps. Custom 15px round radio at the left, filled indigo when selected.
+- **Selection:** border shifts to indigo plus the 3px indigo-weak glow — **the same treatment as input focus**, deliberately reused rather than inventing a second selection language.
+- **Content:** a 13px/600 primary line naming the thing in the operator's own terms (the month a backup holds, not its filename), and an 11.5px muted line for provenance (version, whether it was corrected).
+- **Reused, not duplicated (7 August 2026):** the Settings "Restore" card lists whole-console backups in this exact component — a scheduled/manual backup's primary line names *when* it was taken ("Weekly — 3 Aug 2026, 6:02 PM") in place of a month, same provenance line underneath. One list component for every kind of backup, not a second one for the new kind. The voluntary first-run path (reached via a plain link on the setup screen, not a competing button) skips this list entirely and goes straight to a file-browse action — a brand-new machine has no local backups of its own to list yet, only the one the operator brings with them.
+
+### Restore confirmation (checklist)
+- **Purpose:** confirming a whole-console restore — replacing everything currently in the console — before it happens.
+- **Style:** reuses the month-close wizard's checklist pattern exactly: a `.modal-warn` note naming what will be replaced, one checklist checkbox ("I understand this overwrites all current data and cannot be undone"), Cancel first then a disabled-until-checked `.btn-danger` Restore action. No new confirmation pattern was introduced for this — this action earns the same weight already given to closing a month, not a heavier or lighter one.
+- **Safety net:** the console takes one more backup of its own current state immediately before overwriting it, on every restore path, regardless of entry point — stated here because it's a property of the action, not of this particular modal.
+
 ### Structure Tree Node (signature component)
 - **Shape:** 172px-wide card (190px for the root node), 8px radius, 1.5px border (heavier than the system's usual 1px, since these sit inside a busy diagram).
 - **Root distinction:** the root node alone gets an indigo border and indigo-weak fill — every other node is neutral until interacted with.
 - **Content:** exactly three fields, per FR-2/UN-16 — name (13px/650), member number (11px muted), and own Business Volume as a tabular numeric value with a small uppercase label above a 1px top-border divider.
 - **Interaction:** hover lifts the border to indigo and nudges the card up 1px (`translateY(-1px)`) — a small, honest affordance that it's clickable, not a shadow-based lift.
 - **Connector lines:** drawn as thin (`1.5px`) `--border`-colored SVG lines, never colored, so the tree's data (the nodes) always reads louder than its scaffolding (the connectors).
+- **Reused verbatim in the Full Hierarchy Window** (below). Same card, same three fields, same connector rule. Showing more of the tree never means showing more per node — FR-2's constraint belongs to the component, not to the screen it sits on.
+
+### Full Hierarchy Window (FR-10/UN-31/Rule 45)
+- **What it is:** a separate top-level window showing the whole structure from the top member, every branch expanded, drawn once and never updated. Not a modal, not a route — its own window, so its rendering cost never lands on the console.
+- **Header:** the top member's name, the total member count, and an **"as at &lt;date, time&gt;"** stamp at page-title weight. The stamp is not decoration — it is what makes a printed copy honest about when it was true, and it must survive printing.
+- **Toolbar:** the Structure screen's zoom control, extended — the zoom **floor drops to 10%** (against the main chart's 50%) because a whole network has to be takeable-in at once; the ceiling stays 150%. Plus fit-width, a search field, and Print. Same control shapes and sizes as the Structure toolbar; nothing new is invented here.
+- **Search highlight:** the matched node gets a 2px indigo ring and is scrolled to centre. A focus treatment, not a fill — its three fields must stay exactly as legible as every other node's.
+- **Size gate:** above 60 descendants, a confirmation names the **exact** count before anything is drawn ("This will draw 4,182 members in a new window. It may take a moment."), Cancel first, then the primary Open action. The count must be real — never an estimate, never rounded.
+- **Print:** a print stylesheet drops the toolbar, keeps the header and stamp on the first page, and lets the chart break across pages. A wide chart spans many pages by nature; do not scale it to fit one page, which would make the node text unreadable.
+- **Theme:** inherits the console's light/dark theme as at the moment it opens, through the same tokens. It does not follow later theme changes — consistent with it not following data changes either.
+- **Read-only, visibly:** no node is a link, no control writes anything, nothing hovers as though clickable. The absence of affordances is the design — **do not** add the node's `translateY(-1px)` hover lift here, since that affordance means "opens a branch" and there are no branches left to open.
 
 ## Do's and Don'ts
 
@@ -269,7 +319,9 @@ Two further tiers exist below and above those two steps — not drift, but real 
 - **Do** keep the outstanding-month banner undismissable — no close icon, no auto-hide, ever (Rule 20).
 - **Do** stay inside the restricted vocabulary (*member, Business Volume, Rewards, royalty, volume, slab, level, leg*) in every visible string, including placeholder/empty-state copy and error messages.
 - **Do** reserve shadow for things that float temporarily above the page (modal, toast, search dropdown), plus the one narrow control-lift exception on a segmented control's active state — nothing beyond those.
-- **Do** gate any view that renders an unbounded number of nodes at once (the structure screen's full hierarchy) behind an explicit confirmation once the count passes a readable threshold — a scrollable container is not the same thing as a readable one.
+- **Do** gate any view that renders an unbounded number of nodes at once behind an explicit confirmation naming the real count once it passes a readable threshold (>60) — a scrollable container is not the same thing as a readable one. In this system that view is the **Full Hierarchy Window**, which is where the gate lives; the Structure screen's one-branch-at-a-time chart is bounded by a single generation and needs none.
+- **Do** show the phone number in member search results (Rule 44) — the operator has to confirm they picked the right person, and a name alone does not do that. It is personal data on a landing screen, deliberately, visible only to the one administrator who already sees it everywhere else.
+- **Do** keep any view that could be slow in its own window rather than making the main console carry it, and say plainly, before it opens, how much work it is about to do.
 
 ### Don't:
 - **Don't** add a shadow to a card, table row, or sidebar — flat-by-default is load-bearing to this system's density, not a stylistic default that can flex.
