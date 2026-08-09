@@ -15,6 +15,12 @@ export default defineConfig(async () => ({
     },
   },
 
+  // scripts/*.test.mjs uses node:test, not vitest — excluded so vitest's
+  // own runner doesn't misreport it as a suite with zero tests.
+  test: {
+    exclude: ["**/node_modules/**", "**/dist/**", "**/src-tauri/**", "scripts/**"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
