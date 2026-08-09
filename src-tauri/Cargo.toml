@@ -1,0 +1,37 @@
+[package]
+name = "bvconsole"
+version = "0.1.0"
+description = "Business Volume Console"
+authors = ["Keyur Patel"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "bvconsole_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.5", features = [] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+# TR-1: bundled-sqlcipher-vendored-openssl pinned exactly — SQLCipher's bundled
+# build is fragile across toolchain updates, so this version is the known-good
+# one recorded at Sprint 1 (rustc 1.97.1, verified 2026-08-09).
+rusqlite = { version = "=0.40.2", features = ["bundled-sqlcipher-vendored-openssl"] }
+thiserror = "2.0.20"
+
+[profile.release]
+# panic stays "unwind" (the default) — §3.2's preview_settings_impact restores
+# live settings from inside a panic-safe guard, which needs unwinding to run.
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+
