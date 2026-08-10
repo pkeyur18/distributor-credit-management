@@ -21,8 +21,10 @@ export interface AddMemberInput extends CreateRootMemberInput {
 // API-02 — Rule-34: a phone matching an inactive member is not an error,
 // it's a reactivation offer. No member is created in that case; the caller
 // decides whether to follow through (editMember + reactivateMember, S5).
+// `warnings` (Rule-1/Rule-32) is advisory only — never a reason to refuse or
+// undo the save that already happened.
 export type AddMemberOutcome =
-  | { status: "created"; member: Member }
+  | { status: "created"; member: Member; warnings: string[] }
   | { status: "reactivation_offer"; existingMember: Member };
 
 export function addMember(input: AddMemberInput): Promise<AddMemberOutcome> {

@@ -181,7 +181,7 @@ fn add_member_end_to_end_through_the_command_layer() {
     .unwrap();
 
     match outcome {
-        AddMemberOutcome::Created { member } => {
+        AddMemberOutcome::Created { member, .. } => {
             assert_eq!(member.introducer_member_id, Some(root.id));
         }
         AddMemberOutcome::ReactivationOffer { .. } => panic!("expected Created"),

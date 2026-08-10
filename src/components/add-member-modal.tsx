@@ -42,16 +42,27 @@ function AddMemberModal({ open, onOpenChange, onSubmit = addMember, onCreated }:
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<AppErrorPresentation | null>(null);
   const [reactivationOffer, setReactivationOffer] = useState<Member | null>(null);
+  // Rule-1/Rule-32: advisory-only warnings pause the close (once) so the
+  // operator actually sees them — the save already happened either way.
+  const [savedWithWarnings, setSavedWithWarnings] = useState<{ member: Member; warnings: string[] } | null>(
+    null,
+  );
 
   function reset() {
     setForm(EMPTY_FORM);
     setError(null);
     setReactivationOffer(null);
+    setSavedWithWarnings(null);
   }
 
   function handleOpenChange(next: boolean) {
     if (!next) reset();
     onOpenChange(next);
+  }
+
+  function handleDone() {
+    if (savedWithWarnings) onCreated?.(savedWithWarnings.member);
+    handleOpenChange(false);
   }
 
   async function handleSave() {
@@ -76,6 +87,8 @@ function AddMemberModal({ open, onOpenChange, onSubmit = addMember, onCreated }:
       });
       if (outcome.status === "reactivation_offer") {
         setReactivationOffer(outcome.existingMember);
+      } else if (outcome.warnings.length > 0) {
+        setSavedWithWarnings({ member: outcome.member, warnings: outcome.warnings });
       } else {
         onCreated?.(outcome.member);
         handleOpenChange(false);
@@ -97,6 +110,14 @@ function AddMemberModal({ open, onOpenChange, onSubmit = addMember, onCreated }:
             <AlertNote variant="warn">
               This number matches an inactive member — <strong>{reactivationOffer.name}</strong> (#
               {reactivationOffer.id}). Reactivation isn't available in this build yet.
+            </AlertNote>
+          )}
+          {savedWithWarnings && (
+            <AlertNote variant="warn">
+              <strong>{savedWithWarnings.member.name}</strong> was added (#{savedWithWarnings.member.id}).
+              {savedWithWarnings.warnings.map((w) => (
+                <div key={w}>{w}</div>
+              ))}
             </AlertNote>
           )}
           <div>
@@ -167,10 +188,18 @@ function AddMemberModal({ open, onOpenChange, onSubmit = addMember, onCreated }:
         </div>
       </ModalBody>
       <ModalFooter>
-        <ModalCancel />
-        <Button variant="primary" disabled={!form.consentGiven || submitting} onClick={handleSave}>
-          Save
-        </Button>
+        {savedWithWarnings ? (
+          <Button variant="primary" onClick={handleDone}>
+            Done
+          </Button>
+        ) : (
+          <>
+            <ModalCancel />
+            <Button variant="primary" disabled={!form.consentGiven || submitting} onClick={handleSave}>
+              Save
+            </Button>
+          </>
+        )}
       </ModalFooter>
     </Modal>
   );

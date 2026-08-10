@@ -38,6 +38,7 @@ describe("AddMemberModal", () => {
     const onSubmit = vi.fn<(input: unknown) => Promise<AddMemberOutcome>>().mockResolvedValue({
       status: "created",
       member: MEMBER,
+      warnings: [],
     });
     const onCreated = vi.fn();
     render(<AddMemberModal open onOpenChange={() => {}} onSubmit={onSubmit} onCreated={onCreated} />);
@@ -55,6 +56,28 @@ describe("AddMemberModal", () => {
         consentGiven: true,
       }),
     );
+  });
+
+  it("pauses on an advisory warning, then completes on Done", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn<(input: unknown) => Promise<AddMemberOutcome>>().mockResolvedValue({
+      status: "created",
+      member: MEMBER,
+      warnings: ["Level 2 now has 10 members, above the configured width of 9."],
+    });
+    const onCreated = vi.fn();
+    render(<AddMemberModal open onOpenChange={() => {}} onSubmit={onSubmit} onCreated={onCreated} />);
+
+    await fillRequiredFields(user);
+    await user.click(screen.getByLabelText(/consented/));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(/above the configured width/)).toBeInTheDocument();
+    expect(onCreated).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(onCreated).toHaveBeenCalledWith(MEMBER);
   });
 
   it("shows the reactivation-offer note without closing, and does not call onCreated", async () => {
