@@ -95,8 +95,16 @@ pub struct AddMemberInput {
     rename_all_fields = "camelCase"
 )]
 pub enum AddMemberOutcome {
-    Created { member: Member },
-    ReactivationOffer { existing_member: Member },
+    // Rule-1/Rule-32: `warnings` is informational only — its presence never
+    // changes whether this variant is returned. Always empty for a root
+    // member (level 1 has no configured width and never exceeds depth).
+    Created {
+        member: Member,
+        warnings: Vec<String>,
+    },
+    ReactivationOffer {
+        existing_member: Member,
+    },
 }
 
 struct BaseFields<'a> {
@@ -223,6 +231,65 @@ fn insert_member(
     })
 }
 
+// Rule-1 (level width) / Rule-32 (depth): advisory only, computed after the
+// insert already succeeded — never a precondition to save. D-5 suppresses
+// the width warning for any level with no configured `level_N_width` (5+).
+fn advisory_warnings(
+    conn: &Connection,
+    level: i64,
+    introducer_id: i64,
+) -> Result<Vec<String>, AppError> {
+    let mut warnings = Vec::new();
+
+    let width: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            [format!("level_{level}_width")],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if let Some(width) = width.and_then(|w| w.parse::<i64>().ok()) {
+        let sibling_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM members WHERE introducer_member_id = ?1",
+            [introducer_id],
+            |r| r.get(0),
+        )?;
+        if sibling_count > width {
+            warnings.push(format!(
+                "Level {level} now has {sibling_count} members, above the configured width of {width}."
+            ));
+        }
+    }
+
+    let depth: i64 = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'hierarchy_depth'",
+            [],
+            |r| r.get::<_, String>(0),
+        )?
+        .parse()
+        .unwrap_or(i64::MAX);
+    if level > depth {
+        warnings.push(format!(
+            "Level {level} exceeds the configured hierarchy depth of {depth}."
+        ));
+    }
+
+    Ok(warnings)
+}
+
+// API-01/API-02 both audit as cause `entry` (04-technical-architecture.md
+// §6, M1 table) — one row per onboarding, not per field, since there's no
+// "before" value for a brand-new member.
+fn write_onboarding_audit(conn: &Connection, member_id: i64) -> Result<(), AppError> {
+    conn.execute(
+        "INSERT INTO audit_log (entity_type, entity_id, field, old_value, new_value, changed_at, cause)
+         VALUES ('member', ?1, 'member', NULL, 'Onboarded', ?2, 'entry')",
+        rusqlite::params![member_id, today_iso()],
+    )?;
+    Ok(())
+}
+
 /// API-01. Callable exactly once — guarded by "no member with a NULL
 /// introducer already exists", not by any auth-mode distinction (S4 has no
 /// setup wizard yet; that's US-M8.1, S5).
@@ -264,7 +331,9 @@ pub fn create_root_member(
     }
 
     let id = allocate_member_id(conn)?;
-    insert_member(conn, id, &f, None, 1)
+    let member = insert_member(conn, id, &f, None, 1)?;
+    write_onboarding_audit(conn, member.id)?;
+    Ok(member)
 }
 
 /// API-02. Rule-30 (active-introducer resolution), Rule-34 (phone
@@ -320,8 +389,11 @@ pub fn add_member(conn: &Connection, input: AddMemberInput) -> Result<AddMemberO
     }
 
     let id = allocate_member_id(conn)?;
-    let member = insert_member(conn, id, &f, Some(introducer.id), introducer.level + 1)?;
-    Ok(AddMemberOutcome::Created { member })
+    let level = introducer.level + 1;
+    let member = insert_member(conn, id, &f, Some(introducer.id), level)?;
+    write_onboarding_audit(conn, member.id)?;
+    let warnings = advisory_warnings(conn, level, introducer.id)?;
+    Ok(AddMemberOutcome::Created { member, warnings })
 }
 
 #[cfg(test)]
@@ -379,7 +451,7 @@ mod tests {
         let root = create_root_member(&conn, root_input()).unwrap();
         let outcome = add_member(&conn, add_input(root.id, "9876500002")).unwrap();
         match outcome {
-            AddMemberOutcome::Created { member } => {
+            AddMemberOutcome::Created { member, .. } => {
                 assert_eq!(member.introducer_member_id, Some(root.id));
                 assert_eq!(member.level, 2);
                 assert!((100_001..=999_999).contains(&member.id));
@@ -394,7 +466,7 @@ mod tests {
         let conn = open_seeded_in_memory().unwrap();
         let root = create_root_member(&conn, root_input()).unwrap();
         let child = match add_member(&conn, add_input(root.id, "9876500003")).unwrap() {
-            AddMemberOutcome::Created { member } => member,
+            AddMemberOutcome::Created { member, .. } => member,
             _ => panic!("expected Created"),
         };
         conn.execute("UPDATE members SET is_active = 0 WHERE id = ?1", [child.id])
@@ -426,7 +498,7 @@ mod tests {
         let conn = open_seeded_in_memory().unwrap();
         let root = create_root_member(&conn, root_input()).unwrap();
         let existing = match add_member(&conn, add_input(root.id, "9876500007")).unwrap() {
-            AddMemberOutcome::Created { member } => member,
+            AddMemberOutcome::Created { member, .. } => member,
             _ => panic!("expected Created"),
         };
         conn.execute(
@@ -465,7 +537,7 @@ mod tests {
             let phone = format!("98765990{i:02}");
             let outcome = add_member(&conn, add_input(parent_id, &phone)).unwrap();
             parent_id = match outcome {
-                AddMemberOutcome::Created { member } => member.id,
+                AddMemberOutcome::Created { member, .. } => member.id,
                 _ => panic!("expected Created"),
             };
         }
@@ -530,5 +602,101 @@ mod tests {
 
         let result = add_member(&conn, add_input(root.id, "+91 98765 43210"));
         assert!(matches!(result, Err(AppError::Conflict { .. })));
+    }
+
+    #[test]
+    fn no_warnings_within_configured_limits() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        match add_member(&conn, add_input(root.id, "9876599990")).unwrap() {
+            AddMemberOutcome::Created { warnings, .. } => assert!(warnings.is_empty()),
+            _ => panic!("expected Created"),
+        }
+    }
+
+    #[test]
+    fn width_warning_fires_once_the_configured_level_width_is_exceeded() {
+        // Default level_2_width is 9 (02-business-rules.md §6) — the 10th
+        // direct child of the root crosses it.
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let mut last_warnings = Vec::new();
+        for i in 0..10 {
+            let phone = format!("98765970{i:02}");
+            match add_member(&conn, add_input(root.id, &phone)).unwrap() {
+                AddMemberOutcome::Created { warnings, .. } => last_warnings = warnings,
+                _ => panic!("expected Created"),
+            }
+        }
+        assert!(
+            last_warnings.iter().any(|w| w.contains("width")),
+            "expected a width warning on the 10th level-2 child, got {last_warnings:?}"
+        );
+    }
+
+    #[test]
+    fn depth_warning_fires_past_the_configured_hierarchy_depth_but_never_blocks() {
+        // Default hierarchy_depth is 4 (D-3) — level 5 is the first to warn.
+        let conn = open_seeded_in_memory().unwrap();
+        let mut parent_id = create_root_member(&conn, root_input()).unwrap().id;
+        let mut warnings_by_level = Vec::new();
+        for i in 0..5 {
+            let phone = format!("98765980{i:02}");
+            match add_member(&conn, add_input(parent_id, &phone)).unwrap() {
+                AddMemberOutcome::Created { member, warnings } => {
+                    parent_id = member.id;
+                    warnings_by_level.push((member.level, warnings));
+                }
+                _ => panic!("expected Created"),
+            }
+        }
+        let (level_5, warnings_5) = &warnings_by_level[3];
+        assert_eq!(*level_5, 5);
+        assert!(warnings_5.iter().any(|w| w.contains("depth")));
+    }
+
+    #[test]
+    fn onboarding_writes_exactly_one_audit_log_row_per_member_with_cause_entry() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        add_member(&conn, add_input(root.id, "9876588888")).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 2, "one row for the root, one for the added member");
+
+        let causes: Vec<String> = {
+            let mut stmt = conn.prepare("SELECT cause FROM audit_log").unwrap();
+            stmt.query_map([], |r| r.get(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect()
+        };
+        assert!(causes.iter().all(|c| c == "entry"), "{causes:?}");
+    }
+
+    #[test]
+    fn a_reactivation_offer_writes_no_audit_row() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let existing = match add_member(&conn, add_input(root.id, "9876577777")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+        conn.execute(
+            "UPDATE members SET is_active = 0 WHERE id = ?1",
+            [existing.id],
+        )
+        .unwrap();
+
+        let before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))
+            .unwrap();
+        add_member(&conn, add_input(root.id, "9876577777")).unwrap();
+        let after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(before, after, "no member was created, so nothing to audit");
     }
 }

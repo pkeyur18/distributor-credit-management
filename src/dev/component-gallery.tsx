@@ -136,7 +136,7 @@ function AddMemberModalTriggers() {
               message: "This phone number is already in use by Rahul Shah (#512004).",
             };
           }
-          return { status: "created", member: { ...MOCK_MEMBER, isActive: true } };
+          return { status: "created", member: { ...MOCK_MEMBER, isActive: true }, warnings: [] };
         }}
       />
     </>
