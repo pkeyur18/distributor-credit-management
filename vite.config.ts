@@ -19,6 +19,8 @@ export default defineConfig(async () => ({
   // own runner doesn't misreport it as a suite with zero tests.
   test: {
     exclude: ["**/node_modules/**", "**/dist/**", "**/src-tauri/**", "scripts/**"],
+    environment: "jsdom",
+    setupFiles: ["./src/test-setup.ts"],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
