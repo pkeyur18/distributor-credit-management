@@ -26,6 +26,12 @@ serde_json = "1.0.151"
 # one recorded at Sprint 1 (rustc 1.97.1, verified 2026-08-09).
 rusqlite = { version = "=0.40.2", features = ["bundled-sqlcipher-vendored-openssl"] }
 thiserror = "2.0.20"
+rand = "0.9.2"
+chrono = { version = "0.4.42", default-features = false, features = ["clock"] }
+
+[dev-dependencies]
+proptest = "1.8.0"
+tauri = { version = "2.11.5", features = ["test"] }
 
 [profile.release]
 # panic stays "unwind" (the default) — §3.2's preview_settings_impact restores

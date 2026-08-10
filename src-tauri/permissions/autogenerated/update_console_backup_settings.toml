@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-console-backup-settings"
+description = "Enables the update_console_backup_settings command without any pre-configured scope."
+commands.allow = ["update_console_backup_settings"]
+
+[[permission]]
+identifier = "deny-update-console-backup-settings"
+description = "Denies the update_console_backup_settings command without any pre-configured scope."
+commands.deny = ["update_console_backup_settings"]

@@ -25,6 +25,9 @@ import { StructureTreeNode } from "@/components/structure-tree-node";
 import { BarListChart } from "@/components/bar-list-chart";
 import { ImpactRow, ImpactSummary, ImpactValue } from "@/components/impact-summary";
 import { RestoreOptionList } from "@/components/restore-option-list";
+import { AddMemberModal } from "@/components/add-member-modal";
+import type { AddMemberOutcome } from "@/lib/ipc/m1-members";
+import type { Member } from "@/lib/ipc/entities";
 
 // Sprint 3 (US-UI.3/US-UI.4) DoD item 13 verification aid: every component
 // this sprint built, in every documented variant, in one place — so the
@@ -84,6 +87,58 @@ function ModalTriggers() {
           <Button variant="commit">Close month</Button>
         </ModalFooter>
       </Modal>
+    </>
+  );
+}
+
+const MOCK_MEMBER: Member = {
+  id: 284913,
+  name: "Asha Patel",
+  phone: "9876543210",
+  email: null,
+  address: "1 Main Street",
+  introducerMemberId: 100001,
+  level: 2,
+  isActive: false,
+  joiningDate: "2026-01-01",
+  consentGiven: true,
+  consentDate: "2026-01-01",
+  createdAt: "2026-01-01",
+};
+
+// Sprint 4 (US-M1.1): no login/DB wiring exists yet (S5), so the real
+// `addMember` IPC call can't round-trip here — each trigger below injects a
+// mocked `onSubmit` via the modal's own dependency-injection prop instead,
+// covering the three outcomes T-M1.1-3/4 define.
+function AddMemberModalTriggers() {
+  const [mode, setMode] = useState<"created" | "reactivation" | "conflict" | null>(null);
+  return (
+    <>
+      <Button variant="secondary" onClick={() => setMode("created")}>
+        Add member — success
+      </Button>
+      <Button variant="secondary" onClick={() => setMode("reactivation")}>
+        Add member — reactivation offer
+      </Button>
+      <Button variant="secondary" onClick={() => setMode("conflict")}>
+        Add member — phone conflict
+      </Button>
+      <AddMemberModal
+        open={mode !== null}
+        onOpenChange={(open) => !open && setMode(null)}
+        onSubmit={async (): Promise<AddMemberOutcome> => {
+          if (mode === "reactivation") {
+            return { status: "reactivation_offer", existingMember: MOCK_MEMBER };
+          }
+          if (mode === "conflict") {
+            throw {
+              kind: "conflict",
+              message: "This phone number is already in use by Rahul Shah (#512004).",
+            };
+          }
+          return { status: "created", member: { ...MOCK_MEMBER, isActive: true } };
+        }}
+      />
     </>
   );
 }
@@ -184,6 +239,10 @@ export function ComponentGallery() {
 
         <Section title="Modal">
           <ModalTriggers />
+        </Section>
+
+        <Section title="Add member modal">
+          <AddMemberModalTriggers />
         </Section>
 
         <Section title="Toast">

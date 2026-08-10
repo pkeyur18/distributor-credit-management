@@ -5,16 +5,30 @@
 // here now so that story plugs into an existing pattern instead of inventing
 // its own per-screen error handling.
 //
+// `validation`/`not_found`/`conflict`/`auth_required`/`not_implemented`
+// land in S4 with the command-surface scaffold (error.rs, src-tauri) —
+// see AppError there for the Rust side of each.
+//
 // The retired `period_locked` variant must never be reintroduced under a new
 // meaning — it falls through to "unknown" like any other unrecognized kind.
 
-export type AppErrorKind = "database" | "io" | "period_not_accepting_entries" | "period_closed";
+export type AppErrorKind =
+  | "database"
+  | "io"
+  | "period_not_accepting_entries"
+  | "period_closed"
+  | "validation"
+  | "not_found"
+  | "conflict"
+  | "auth_required"
+  | "not_implemented";
 
 export interface AppErrorPresentation {
   kind: AppErrorKind | "unknown";
   message: string;
   month?: string;
   blockingMonth?: string;
+  field?: string;
 }
 
 interface RawAppError {
@@ -22,6 +36,7 @@ interface RawAppError {
   message?: string;
   month?: string;
   blockingMonth?: string;
+  field?: string;
 }
 
 const PRESENTATIONS: Record<AppErrorKind, (raw: RawAppError) => string> = {
@@ -33,6 +48,11 @@ const PRESENTATIONS: Record<AppErrorKind, (raw: RawAppError) => string> = {
     } is closed.`,
   period_closed: (raw) =>
     `${raw.month ?? "That month"} is closed — use the correction panel instead.`,
+  validation: (raw) => raw.message ?? "Check the highlighted field and try again.",
+  not_found: (raw) => raw.message ?? "That couldn't be found.",
+  conflict: (raw) => raw.message ?? "That conflicts with an existing record.",
+  auth_required: () => "Sign in to do that.",
+  not_implemented: () => "This isn't built yet.",
 };
 
 function isKnownKind(kind: string | undefined): kind is AppErrorKind {
@@ -54,5 +74,6 @@ export function toErrorPresentation(raw: unknown): AppErrorPresentation {
     message: PRESENTATIONS[err.kind](err),
     month: err.month,
     blockingMonth: err.blockingMonth,
+    field: err.field,
   };
 }

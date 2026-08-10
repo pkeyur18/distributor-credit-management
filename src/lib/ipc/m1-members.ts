@@ -18,8 +18,14 @@ export interface AddMemberInput extends CreateRootMemberInput {
   introducerMemberId: number;
 }
 
-// API-02
-export function addMember(input: AddMemberInput): Promise<Member> {
+// API-02 — Rule-34: a phone matching an inactive member is not an error,
+// it's a reactivation offer. No member is created in that case; the caller
+// decides whether to follow through (editMember + reactivateMember, S5).
+export type AddMemberOutcome =
+  | { status: "created"; member: Member }
+  | { status: "reactivation_offer"; existingMember: Member };
+
+export function addMember(input: AddMemberInput): Promise<AddMemberOutcome> {
   return invokeCommand("add_member", { ...input });
 }
 

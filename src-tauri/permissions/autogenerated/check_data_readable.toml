@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-data-readable"
+description = "Enables the check_data_readable command without any pre-configured scope."
+commands.allow = ["check_data_readable"]
+
+[[permission]]
+identifier = "deny-check-data-readable"
+description = "Denies the check_data_readable command without any pre-configured scope."
+commands.deny = ["check_data_readable"]

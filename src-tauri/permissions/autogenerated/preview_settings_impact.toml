@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preview-settings-impact"
+description = "Enables the preview_settings_impact command without any pre-configured scope."
+commands.allow = ["preview_settings_impact"]
+
+[[permission]]
+identifier = "deny-preview-settings-impact"
+description = "Denies the preview_settings_impact command without any pre-configured scope."
+commands.deny = ["preview_settings_impact"]
