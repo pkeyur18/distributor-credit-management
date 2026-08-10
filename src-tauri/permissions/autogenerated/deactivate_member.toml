@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-deactivate-member"
+description = "Enables the deactivate_member command without any pre-configured scope."
+commands.allow = ["deactivate_member"]
+
+[[permission]]
+identifier = "deny-deactivate-member"
+description = "Denies the deactivate_member command without any pre-configured scope."
+commands.deny = ["deactivate_member"]

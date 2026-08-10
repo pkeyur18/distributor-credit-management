@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-restore-from-backup-file"
+description = "Enables the restore_from_backup_file command without any pre-configured scope."
+commands.allow = ["restore_from_backup_file"]
+
+[[permission]]
+identifier = "deny-restore-from-backup-file"
+description = "Denies the restore_from_backup_file command without any pre-configured scope."
+commands.deny = ["restore_from_backup_file"]

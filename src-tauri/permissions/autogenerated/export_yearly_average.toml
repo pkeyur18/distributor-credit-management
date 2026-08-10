@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-export-yearly-average"
+description = "Enables the export_yearly_average command without any pre-configured scope."
+commands.allow = ["export_yearly_average"]
+
+[[permission]]
+identifier = "deny-export-yearly-average"
+description = "Denies the export_yearly_average command without any pre-configured scope."
+commands.deny = ["export_yearly_average"]

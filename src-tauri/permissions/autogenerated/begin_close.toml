@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-begin-close"
+description = "Enables the begin_close command without any pre-configured scope."
+commands.allow = ["begin_close"]
+
+[[permission]]
+identifier = "deny-begin-close"
+description = "Denies the begin_close command without any pre-configured scope."
+commands.deny = ["begin_close"]

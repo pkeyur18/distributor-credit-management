@@ -35,4 +35,29 @@ describe("toErrorPresentation", () => {
     expect(result.kind).toBe("unknown");
     expect(result.message).toBe("Something went wrong.");
   });
+
+  it("carries the field name through a validation error", () => {
+    const result = toErrorPresentation({
+      kind: "validation",
+      message: "Name is required.",
+      field: "name",
+    });
+    expect(result.kind).toBe("validation");
+    expect(result.field).toBe("name");
+    expect(result.message).toBe("Name is required.");
+  });
+
+  it("surfaces a conflict error's message verbatim", () => {
+    const result = toErrorPresentation({
+      kind: "conflict",
+      message: "This phone number is already in use by Asha Patel (#284913).",
+    });
+    expect(result.message).toContain("Asha Patel");
+  });
+
+  it("maps auth_required to a generic sign-in prompt", () => {
+    const result = toErrorPresentation({ kind: "auth_required" });
+    expect(result.kind).toBe("auth_required");
+    expect(result.message).toBe("Sign in to do that.");
+  });
 });

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-manual-backup-current-period"
+description = "Enables the manual_backup_current_period command without any pre-configured scope."
+commands.allow = ["manual_backup_current_period"]
+
+[[permission]]
+identifier = "deny-manual-backup-current-period"
+description = "Denies the manual_backup_current_period command without any pre-configured scope."
+commands.deny = ["manual_backup_current_period"]

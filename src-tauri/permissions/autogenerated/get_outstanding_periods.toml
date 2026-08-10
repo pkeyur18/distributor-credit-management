@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-outstanding-periods"
+description = "Enables the get_outstanding_periods command without any pre-configured scope."
+commands.allow = ["get_outstanding_periods"]
+
+[[permission]]
+identifier = "deny-get-outstanding-periods"
+description = "Denies the get_outstanding_periods command without any pre-configured scope."
+commands.deny = ["get_outstanding_periods"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unlock-session"
+description = "Enables the unlock_session command without any pre-configured scope."
+commands.allow = ["unlock_session"]
+
+[[permission]]
+identifier = "deny-unlock-session"
+description = "Denies the unlock_session command without any pre-configured scope."
+commands.deny = ["unlock_session"]

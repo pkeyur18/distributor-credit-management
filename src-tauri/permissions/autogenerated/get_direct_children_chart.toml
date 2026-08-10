@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-direct-children-chart"
+description = "Enables the get_direct_children_chart command without any pre-configured scope."
+commands.allow = ["get_direct_children_chart"]
+
+[[permission]]
+identifier = "deny-get-direct-children-chart"
+description = "Denies the get_direct_children_chart command without any pre-configured scope."
+commands.deny = ["get_direct_children_chart"]

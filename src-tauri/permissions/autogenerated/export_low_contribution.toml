@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-export-low-contribution"
+description = "Enables the export_low_contribution command without any pre-configured scope."
+commands.allow = ["export_low_contribution"]
+
+[[permission]]
+identifier = "deny-export-low-contribution"
+description = "Denies the export_low_contribution command without any pre-configured scope."
+commands.deny = ["export_low_contribution"]

@@ -24,6 +24,18 @@ pub fn open_encrypted(path: &Path, key: &str) -> Result<Connection, AppError> {
     Ok(conn)
 }
 
+/// An unencrypted, migrated-and-seeded in-memory connection — the fixture
+/// every module's tests build against (S4 onward), including integration
+/// tests in `tests/`, which can't reach this crate's `#[cfg(test)]` items.
+/// Not gated behind `cfg(test)` for that reason; it opens nothing on disk
+/// and carries no secret, so exposing it in a normal build is harmless.
+pub fn open_seeded_in_memory() -> Result<Connection, AppError> {
+    let mut conn = Connection::open_in_memory()?;
+    migrations::run(&mut conn)?;
+    seed::run(&conn)?;
+    Ok(conn)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
