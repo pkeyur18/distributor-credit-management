@@ -40,6 +40,19 @@ const router = createBrowserRouter([
   { path: "/auth/locked", element: <Locked /> },
   { path: "/auth/recovery", element: <Recovery /> },
   { path: "/auth/data-recovery", element: <DataRecovery /> },
+  // Sprint 3 (US-UI.3/US-UI.4) DoD item 13 verification aid — never linked
+  // from the sidebar, stripped from production builds.
+  ...(import.meta.env.DEV
+    ? [
+        {
+          path: "/dev/components",
+          lazy: async () => {
+            const { ComponentGallery } = await import("./dev/component-gallery");
+            return { Component: ComponentGallery };
+          },
+        },
+      ]
+    : []),
 ]);
 
 function App() {
