@@ -1,8 +1,19 @@
--- Migration 0001 — full 10-entity schema.
--- Source: documents/refinement/04-technical-architecture.md §4.4, with three
+-- Migration 0001 — full 9-entity schema.
+-- Source: documents/refinement/04-technical-architecture.md §4.4, with
 -- corrections from PI/05-decisions-and-gaps.md applied as published (D-14
--- below is a real column removal; D-11/D-12/D-13 are Rust-side enum/lookup
+-- is a real column removal; D-11/D-12/D-13 are Rust-side enum/lookup
 -- corrections with no DDL shape change — see src-tauri/src/db/mod.rs).
+--
+-- No `auth` table: the published DDL had one, but S5 (US-M8.1/M8.2) traced
+-- the login sequence and found it unreadable in principle — it would live
+-- inside the SQLCipher-encrypted file, whose own key can't be recovered
+-- without reading a row out of that same file first. Credential envelopes
+-- and lockout state live in an unencrypted sidecar file instead (safe: it
+-- holds only AES-GCM-wrapped copies of a random master key, never a
+-- credential or the key itself — see src-tauri/src/m8_auth/store.rs).
+-- Pre-deployment squash: this table briefly existed and was dropped by a
+-- since-removed migration 0002; folded back into 0001 here since no real
+-- database has ever been built from that intermediate state.
 
 CREATE TABLE members (
     id                    INTEGER PRIMARY KEY,
@@ -106,16 +117,8 @@ CREATE TABLE settings (
     value  TEXT NOT NULL
 );
 
--- D-14: no session_timeout_minutes column — settings is the only source of
--- truth for the session timeout, never duplicated here.
-CREATE TABLE auth (
-    id                        INTEGER PRIMARY KEY CHECK (id = 1),
-    pin_hash                  TEXT NULL,
-    password_hash             TEXT NULL,
-    failed_attempts           INTEGER NOT NULL DEFAULT 0,
-    locked_until              TEXT NULL,
-    recovery_codes            TEXT NOT NULL
-);
+-- D-14: settings is the only source of truth for the session timeout
+-- (relevant now that there's no `auth` table for a stray copy to live on).
 
 -- D-12/D-13: entity_type/cause have no CHECK enum here (none did in the
 -- published DDL) — the Rust-side AuditEntityType/AuditCause enums are the

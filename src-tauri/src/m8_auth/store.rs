@@ -3,8 +3,8 @@
 // key, salts and nonces, plus lockout bookkeeping — never the master key
 // or a credential in the clear. Safe to leave unencrypted for the same
 // reason a disk-encryption tool's keyslot header is: ciphertext without the
-// wrapping credential reveals nothing. See migration 0002's comment for why
-// this can't live inside the encrypted database instead.
+// wrapping credential reveals nothing. See migrations/0001_initial.sql's
+// header comment for why this can't live inside the encrypted database.
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};

@@ -1,9 +1,6 @@
 use rusqlite::{Connection, Result as SqlResult};
 
-const MIGRATIONS: &[(u32, &str)] = &[
-    (1, include_str!("migrations/0001_initial.sql")),
-    (2, include_str!("migrations/0002_drop_auth_table.sql")),
-];
+const MIGRATIONS: &[(u32, &str)] = &[(1, include_str!("migrations/0001_initial.sql"))];
 
 pub fn run(conn: &mut Connection) -> SqlResult<()> {
     conn.execute_batch(
@@ -50,9 +47,8 @@ mod tests {
 
     #[test]
     fn creates_all_nine_entity_tables_on_a_fresh_database() {
-        // Ten in the original DDL, minus `auth` — dropped by migration 0002
-        // (S5): credential state moved to an unencrypted sidecar file, see
-        // that migration's comment for why.
+        // Nine, not the published DDL's ten — no `auth` table; see
+        // 0001_initial.sql's header comment for why.
         let mut conn = Connection::open_in_memory().unwrap();
         super::run(&mut conn).unwrap();
 
@@ -82,14 +78,14 @@ mod tests {
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM schema_migrations", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 2, "each migration should be recorded exactly once");
+        assert_eq!(count, 1, "each migration should be recorded exactly once");
     }
 
     #[test]
-    fn auth_table_is_dropped_by_migration_0002() {
-        // S5: credential/lockout state moved to an unencrypted sidecar file
-        // (m8_auth::store) — see 0002_drop_auth_table.sql for why the
-        // in-database table was unreadable in principle.
+    fn no_auth_table_exists() {
+        // Credential/lockout state lives in an unencrypted sidecar file
+        // (m8_auth::store) — see 0001_initial.sql's header comment for why
+        // an in-database table is unreadable in principle.
         let mut conn = Connection::open_in_memory().unwrap();
         super::run(&mut conn).unwrap();
 

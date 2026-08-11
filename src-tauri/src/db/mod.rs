@@ -72,7 +72,8 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        // Nine, not the original ten — `auth` was dropped by migration 0002 (S5).
+        // Nine, not the published DDL's ten — no `auth` table; see
+        // migrations/0001_initial.sql's header comment for why.
         assert_eq!(table_count, 9);
 
         let slab_count: i64 = conn
