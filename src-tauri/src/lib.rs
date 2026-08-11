@@ -7,6 +7,7 @@ pub mod db;
 pub mod db_state;
 pub mod error;
 pub mod m1_members;
+pub mod m3_calc;
 pub mod m8_auth;
 pub mod paths;
 pub mod session;
