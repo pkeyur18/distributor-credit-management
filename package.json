@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "overrides": {
+    "serialize-javascript": "^7.1.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "npm run vocab-grep && tsc && vite build",
