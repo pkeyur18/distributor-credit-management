@@ -101,14 +101,23 @@ export interface AuditLogEntry {
   cause: AuditCause;
 }
 
-// API-11's node shape — exactly three displayed fields (name/ID/own BV) plus
-// the identity data needed to render the tree; never Total Business Volume.
+// API-11's node shape. The Structure/Full-Hierarchy tree node still shows
+// exactly three fields (name/ID/own BV), never Total Business Volume — that
+// display rule lives in StructureTreeNode, not here. slabPct/rewards ride
+// along on every node because Home's slab-distribution charts (US-M4.4)
+// reuse this same command (full_tree: true, rooted at ROOT_ID) for their
+// aggregation — no dedicated IPC command exists for either chart.
 export interface ChartNode {
   memberId: number;
   name: string;
   ownBusinessVolume: number;
   isActive: boolean;
   introducerMemberId: number | null;
+  slabPct: number;
+  rewards: number;
+  /** Direct-child count — lets the Structure screen show the leaf/expand
+   *  affordance before that node's own children have been fetched. */
+  legCount: number;
 }
 
 export interface SearchResult {

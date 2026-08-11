@@ -9,7 +9,7 @@ import { completeFirstRunSetup, addRootMember, addMember, navigateTo } from "../
 describe("Business Volume Entry", () => {
   it("records an entry against a newly onboarded member", async () => {
     await completeFirstRunSetup("482913");
-    await addRootMember({
+    const rootId = await addRootMember({
       name: "Root Member",
       phone: "9876500001",
       address: "1 Main Street",
@@ -18,7 +18,7 @@ describe("Business Volume Entry", () => {
       name: "Asha Patel",
       phone: "9876500002",
       address: "2 Side Street",
-      referenceId: "100001",
+      referenceId: rootId,
     });
 
     await navigateTo("Business Volume Entry");

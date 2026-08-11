@@ -48,7 +48,7 @@ fn top_slab_percentage(slabs: &[(i64, i64)]) -> i64 {
 /// term back in ×100 fixed point. Symmetric on negative input so a
 /// misconfigured slab table (Rule-41) can't panic here — Rule-9 guarantees
 /// this never happens in normal operation.
-fn round_half_up_div100(n: i64) -> i64 {
+pub(crate) fn round_half_up_div100(n: i64) -> i64 {
     if n >= 0 {
         (n + 50) / 100
     } else {

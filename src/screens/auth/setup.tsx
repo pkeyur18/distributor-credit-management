@@ -6,6 +6,7 @@ import { AuthBrandMark } from "@/components/auth-brand-mark";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Input, InputHint } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { AlertNote } from "@/components/ui/alert-note";
 import { setupFirstRun } from "@/lib/ipc/m8-auth";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { useAuth } from "@/lib/auth-context";
@@ -95,6 +96,14 @@ export function Setup() {
             If you ever forget your {mode === "pin" ? "PIN" : "password"}, these are the only way
             back in. Each code works once. They are shown only here.
           </p>
+
+          {/* T-M8.4-3 (US-M8.4, S8) / ADR-008: the permanently-unrecoverable
+              consequence, stated plainly at setup — not buried in Settings. */}
+          <AlertNote variant="danger" className="mt-3">
+            If you lose both your {mode === "pin" ? "PIN" : "password"} and these codes, there is
+            no way back in. No vendor backdoor, no email reset — nobody but you can ever recover
+            this console.
+          </AlertNote>
 
           <div className="mt-4 grid grid-cols-2 gap-1.5 rounded-sm border border-border bg-bg p-3">
             {recoveryCodes.map((code) => (

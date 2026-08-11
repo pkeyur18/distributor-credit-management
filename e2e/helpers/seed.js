@@ -14,16 +14,42 @@ export async function completeFirstRunSetup(pin) {
   await $("button=Enter the console").click();
 }
 
+export async function navigateTo(navLabel) {
+  await $(`nav a=${navLabel}`).click();
+}
+
+// T-M1.1-1: member IDs are random (100001-999999), never sequential — a
+// helper can't just guess the ID a save produced. Search by the phone
+// number the caller chose (deterministic, under the caller's control),
+// click through to Member Detail, and read the ID back off the URL.
+async function idOfPhone(phone) {
+  await navigateTo("Home");
+  await $("#home-search").setValue(phone);
+  const row = $(`button*=${phone}`);
+  await row.waitForExist({ timeout: 3000 });
+  await row.click();
+  const url = await browser.getUrl();
+  const match = url.match(/\/member\/(\d+)/);
+  return match[1];
+}
+
+// US-M8.1's setup wizard creates no member of its own — the first member
+// still has to go through Add Member, which (US-M1.1, fixed S8) skips the
+// introducer requirement when the directory is genuinely empty and calls
+// `create_root_member` instead of `add_member`.
 export async function addRootMember({ name, phone, address }) {
+  await navigateTo("Home");
   await $("button=Add member").click();
   await $("#member-name").setValue(name);
   await $("#member-phone").setValue(phone);
   await $("#member-address").setValue(address);
   await $("#member-consent").click();
   await $("button=Save").click();
+  return idOfPhone(phone);
 }
 
 export async function addMember({ name, phone, address, referenceId }) {
+  await navigateTo("Home");
   await $("button=Add member").click();
   await $("#member-name").setValue(name);
   await $("#member-phone").setValue(phone);
@@ -37,8 +63,19 @@ export async function addMember({ name, phone, address, referenceId }) {
   await resultRow.click();
   await $("#member-consent").click();
   await $("button=Save").click();
+  return idOfPhone(phone);
 }
 
-export async function navigateTo(navLabel) {
-  await $(`nav a=${navLabel}`).click();
+// US-M2.1 (§5.4). One amount field, the fast path — no currency, no mode
+// toggle. Defaults to today's date, which is always within the current
+// (only) recordable month until US-M2.3/M2.5 (S12/S13) exist.
+export async function recordEntry({ memberName, amount }) {
+  await navigateTo("Business Volume Entry");
+  await $("#entry-search").setValue(memberName);
+  const result = $(`button*=${memberName}`);
+  await result.waitForExist({ timeout: 3000 });
+  await result.click();
+  await $("#entry-amount").setValue(amount);
+  await $("button=Save entry").click();
+  await $("div=Recorded this session").waitForExist({ timeout: 3000 });
 }
