@@ -72,7 +72,9 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(table_count, 10);
+        // Nine, not the published DDL's ten — no `auth` table; see
+        // migrations/0001_initial.sql's header comment for why.
+        assert_eq!(table_count, 9);
 
         let slab_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM slab_table", [], |r| r.get(0))

@@ -21,7 +21,9 @@ export type AppErrorKind =
   | "not_found"
   | "conflict"
   | "auth_required"
-  | "not_implemented";
+  | "not_implemented"
+  | "invalid_credential"
+  | "account_locked";
 
 export interface AppErrorPresentation {
   kind: AppErrorKind | "unknown";
@@ -29,6 +31,8 @@ export interface AppErrorPresentation {
   month?: string;
   blockingMonth?: string;
   field?: string;
+  retryAfterSeconds?: number;
+  attemptsRemaining?: number;
 }
 
 interface RawAppError {
@@ -37,6 +41,8 @@ interface RawAppError {
   month?: string;
   blockingMonth?: string;
   field?: string;
+  retryAfterSeconds?: number;
+  attemptsRemaining?: number;
 }
 
 const PRESENTATIONS: Record<AppErrorKind, (raw: RawAppError) => string> = {
@@ -53,6 +59,16 @@ const PRESENTATIONS: Record<AppErrorKind, (raw: RawAppError) => string> = {
   conflict: (raw) => raw.message ?? "That conflicts with an existing record.",
   auth_required: () => "Sign in to do that.",
   not_implemented: () => "This isn't built yet.",
+  // Rule-29: never reveal which credential type or which part was wrong —
+  // T-M8.2-5's attempt count is the one exception, handled separately.
+  invalid_credential: (raw) => {
+    const n = raw.attemptsRemaining;
+    return `Incorrect PIN or password.${
+      n !== undefined ? ` ${n} attempt${n === 1 ? "" : "s"} remaining.` : ""
+    }`;
+  },
+  account_locked: (raw) =>
+    `Too many attempts. Try again in ${raw.retryAfterSeconds ?? 0}s.`,
 };
 
 function isKnownKind(kind: string | undefined): kind is AppErrorKind {
@@ -75,5 +91,7 @@ export function toErrorPresentation(raw: unknown): AppErrorPresentation {
     month: err.month,
     blockingMonth: err.blockingMonth,
     field: err.field,
+    retryAfterSeconds: err.retryAfterSeconds,
+    attemptsRemaining: err.attemptsRemaining,
   };
 }

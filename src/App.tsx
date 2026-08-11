@@ -1,4 +1,5 @@
-import { createBrowserRouter, RouterProvider } from "react-router";
+import type { ReactNode } from "react";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import { AppShell } from "@/components/app-shell";
 import { Home } from "@/screens/home";
 import { MemberDetail } from "@/screens/member-detail";
@@ -14,6 +15,20 @@ import { Login } from "@/screens/auth/login";
 import { Locked } from "@/screens/auth/locked";
 import { Recovery } from "@/screens/auth/recovery";
 import { DataRecovery } from "@/screens/auth/data-recovery";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { ToastProvider, Toaster } from "@/components/ui/toast";
+
+// US-M8.1/M8.2 (S5): the frontend's only signal for "is someone signed in"
+// — gates the AppShell route group behind `checkDataReadable` + a
+// successful setup/login. `loading` renders nothing rather than flashing
+// Home before the one check resolves.
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { state } = useAuth();
+  if (state === "loading") return null;
+  if (state === "needs-setup") return <Navigate to="/auth/setup" replace />;
+  if (state === "needs-login") return <Navigate to="/auth/login" replace />;
+  return <>{children}</>;
+}
 
 // T-UI.2-3: routing across the nine primary views plus the five auth
 // phases (03-functional-specification.md §5.1–5.10). The auth phases render
@@ -21,7 +36,11 @@ import { DataRecovery } from "@/screens/auth/data-recovery";
 // don't go through AppShell's sidebar/banner.
 const router = createBrowserRouter([
   {
-    element: <AppShell />,
+    element: (
+      <RequireAuth>
+        <AppShell />
+      </RequireAuth>
+    ),
     children: [
       { path: "/", element: <Home /> },
       { path: "/member/:memberId", element: <MemberDetail /> },
@@ -56,7 +75,14 @@ const router = createBrowserRouter([
 ]);
 
 function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <AuthProvider>
+      <ToastProvider>
+        <RouterProvider router={router} />
+        <Toaster />
+      </ToastProvider>
+    </AuthProvider>
+  );
 }
 
 export default App;

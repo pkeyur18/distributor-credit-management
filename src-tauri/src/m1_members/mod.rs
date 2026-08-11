@@ -1,8 +1,6 @@
 // M1 — Member & Structure (04-technical-architecture.md §3.1).
-// US-M1.1 (S4): create_root_member, add_member. edit/deactivate/reactivate
-// (US-M1.2/M1.3) and search_members (US-M1.4, Rule-44) are S5 — their
-// command slots exist as stubs in `crate::commands` but the logic lives
-// here only once its own story lands.
+// US-M1.1 (S4): create_root_member, add_member. US-M1.2/M1.3/M1.4 (S5)
+// below add edit/deactivate/reactivate/search.
 mod id;
 
 use chrono::Local;
@@ -396,6 +394,285 @@ pub fn add_member(conn: &Connection, input: AddMemberInput) -> Result<AddMemberO
     Ok(AddMemberOutcome::Created { member, warnings })
 }
 
+fn find_member(conn: &Connection, id: i64) -> Result<Member, AppError> {
+    conn.query_row(
+        "SELECT * FROM members WHERE id = ?1",
+        [id],
+        Member::from_row,
+    )
+    .optional()?
+    .ok_or(AppError::NotFound {
+        message: "Member not found.".into(),
+    })
+}
+
+fn write_field_audit(
+    conn: &Connection,
+    member_id: i64,
+    field: &str,
+    old: &str,
+    new: &str,
+) -> Result<(), AppError> {
+    conn.execute(
+        "INSERT INTO audit_log (entity_type, entity_id, field, old_value, new_value, changed_at, cause)
+         VALUES ('member', ?1, ?2, ?3, ?4, ?5, 'edit')",
+        rusqlite::params![member_id, field, old, new, today_iso()],
+    )?;
+    Ok(())
+}
+
+// V1.8: "any attempt to change an introducer → refuse outright." `deny_
+// unknown_fields` is what makes that literally true against a raw IPC call
+// bypassing the TS wrapper (e.g. a hand-crafted `invoke("edit_member", {
+// introducerMemberId: ... })`) — without it, serde's default behaviour is
+// to silently ignore a field this struct doesn't declare, which is "has no
+// effect," not "refuses." With it, the field has nowhere to land *and*
+// the attempt itself is rejected before this function ever runs.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditMemberInput {
+    pub id: i64,
+    pub name: Option<String>,
+    pub phone: Option<String>,
+    // `Option<Option<String>>`: field absent -> None (leave unchanged);
+    // `null` -> Some(None) (clear it); a string -> Some(Some(..)) (set it).
+    pub email: Option<Option<String>>,
+    pub address: Option<String>,
+}
+
+/// API-03. `input.email`'s tri-state and the complete absence of an
+/// introducer field are the two things worth re-reading before touching
+/// this function — see the struct doc comments.
+pub fn edit_member(conn: &Connection, input: EditMemberInput) -> Result<Member, AppError> {
+    let existing = find_member(conn, input.id)?;
+
+    let mut name = existing.name.clone();
+    let mut phone = existing.phone.clone();
+    let mut email = existing.email.clone();
+    let mut address = existing.address.clone();
+    let mut changes: Vec<(&'static str, String, String)> = Vec::new();
+
+    if let Some(raw) = &input.name {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::Validation {
+                field: "name".into(),
+                message: "Name is required.".into(),
+            });
+        }
+        if trimmed != name {
+            changes.push(("name", name.clone(), trimmed.to_string()));
+            name = trimmed.to_string();
+        }
+    }
+
+    if let Some(raw) = &input.phone {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::Validation {
+                field: "phone".into(),
+                message: "Phone is required.".into(),
+            });
+        }
+        // Rule-34, re-checked on edit against the same canonical key —
+        // against every *other* member, active or inactive.
+        if let Some(conflict) = find_phone_conflict(conn, trimmed)? {
+            if conflict.id != existing.id {
+                return Err(AppError::Conflict {
+                    message: format!(
+                        "This phone number is already in use by {} (#{}).",
+                        conflict.name, conflict.id
+                    ),
+                });
+            }
+        }
+        if trimmed != phone {
+            changes.push(("phone", phone.clone(), trimmed.to_string()));
+            phone = trimmed.to_string();
+        }
+    }
+
+    if let Some(email_opt) = &input.email {
+        let normalized = normalized_email(email_opt.as_deref());
+        if let Some(e) = &normalized {
+            if !is_plausible_email(e) {
+                return Err(AppError::Validation {
+                    field: "email".into(),
+                    message: "Enter a valid email address.".into(),
+                });
+            }
+        }
+        if normalized != email {
+            changes.push((
+                "email",
+                email.clone().unwrap_or_default(),
+                normalized.clone().unwrap_or_default(),
+            ));
+            email = normalized;
+        }
+    }
+
+    if let Some(raw) = &input.address {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::Validation {
+                field: "address".into(),
+                message: "Address is required.".into(),
+            });
+        }
+        if trimmed != address {
+            changes.push(("address", address.clone(), trimmed.to_string()));
+            address = trimmed.to_string();
+        }
+    }
+
+    if changes.is_empty() {
+        return Ok(existing);
+    }
+
+    conn.execute(
+        "UPDATE members SET name = ?1, phone = ?2, email = ?3, address = ?4 WHERE id = ?5",
+        rusqlite::params![name, phone, email, address, existing.id],
+    )?;
+    for (field, old, new) in &changes {
+        write_field_audit(conn, existing.id, field, old, new)?;
+    }
+
+    Ok(Member {
+        name,
+        phone,
+        email,
+        address,
+        ..existing
+    })
+}
+
+/// API-04. Rule-28 (corrected): `is_active` is a pure display flag with
+/// **zero computational effect** — this function never touches
+/// `business_volume_entries` or `member_period_totals`, and calls nothing
+/// in the calculation path (M3, S6). Implementing the superseded spec
+/// wording ("stops appearing in new periods") would silently corrupt every
+/// ancestor's Total Business Volume; the only column this ever writes is
+/// `members.is_active`.
+pub fn deactivate_member(conn: &Connection, id: i64) -> Result<(), AppError> {
+    let existing = find_member(conn, id)?;
+    if existing.introducer_member_id.is_none() {
+        return Err(AppError::Conflict {
+            message: "The root member cannot be deactivated.".into(),
+        });
+    }
+    if !existing.is_active {
+        return Ok(());
+    }
+    conn.execute("UPDATE members SET is_active = 0 WHERE id = ?1", [id])?;
+    write_field_audit(conn, id, "status", "Active", "Inactive")
+}
+
+/// API-05. Original ID, hierarchy position and full history preserved
+/// unchanged — reactivation only ever flips `is_active` back; no second
+/// record is created (that's what makes Rule-34's reactivation offer safe).
+pub fn reactivate_member(conn: &Connection, id: i64) -> Result<(), AppError> {
+    let existing = find_member(conn, id)?;
+    if existing.is_active {
+        return Ok(());
+    }
+    conn.execute("UPDATE members SET is_active = 1 WHERE id = ?1", [id])?;
+    write_field_audit(conn, id, "status", "Inactive", "Active")
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResult {
+    pub id: i64,
+    pub name: String,
+    pub phone: String,
+    // M3 (S6) and M2 (S7) don't exist yet, so `member_period_totals` is
+    // always empty today — every result reads 0 until then. The query
+    // reads whatever's there rather than special-casing "no engine yet", so
+    // real figures appear automatically once those sprints land, with no
+    // change needed here.
+    pub total_business_volume: f64,
+    pub slab_pct: f64,
+    pub is_active: bool,
+    // The row is already read in full to build the shared `Member` struct
+    // internally — carrying these three costs nothing extra and is what
+    // lets the frontend open an Edit modal straight from a search result
+    // this sprint, without `get_member_detail` (M4.1, S8) existing yet.
+    // Not displayed by `SearchResultsList`; T-M1.4-5's visible field list
+    // (name/ID/phone/TBV/slab/status) is unchanged.
+    pub email: Option<String>,
+    pub address: String,
+    pub introducer_member_id: Option<i64>,
+}
+
+/// API-06 (Rule-44). The one shared function backing every search box in
+/// the console (T-M1.4-1) — Home/Structure/Entry/Correction (S7+) and the
+/// Add-Member reference lookup, which additionally filters to active
+/// members via `active_only` (Rule-30). Empty query returns no results,
+/// never an error and never "all members" (V4.1).
+pub fn search_members(
+    conn: &Connection,
+    query: &str,
+    active_only: bool,
+) -> Result<Vec<SearchResult>, AppError> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let name_needle = trimmed.to_lowercase();
+    let query_digits: String = trimmed.chars().filter(|c| c.is_ascii_digit()).collect();
+    // V4.4: below four digits, only name/ID are matched — exactly the
+    // behaviour that existed before Rule-44.
+    let phone_floor_met = query_digits.len() >= 4;
+    let phone_key = canonical_phone_key(trimmed);
+
+    let mut stmt = conn.prepare(
+        "SELECT m.*, \
+                COALESCE(t.total_business_volume, 0) AS tbv, \
+                COALESCE(t.slab_pct, 0) AS slab_pct \
+         FROM members m \
+         LEFT JOIN member_period_totals t \
+                ON t.member_id = m.id \
+               AND t.period_id = ( \
+                    SELECT period_id FROM member_period_totals \
+                    WHERE member_id = m.id ORDER BY period_id DESC LIMIT 1 \
+                   )",
+    )?;
+    let mut rows = stmt.query([])?;
+
+    let mut results = Vec::new();
+    while let Some(row) = rows.next()? {
+        let member = Member::from_row(row)?;
+        if active_only && !member.is_active {
+            continue;
+        }
+
+        let name_match = member.name.to_lowercase().contains(&name_needle);
+        let id_match = !query_digits.is_empty() && member.id.to_string().contains(&query_digits);
+        let phone_match =
+            phone_floor_met && canonical_phone_key(&member.phone).contains(&phone_key);
+
+        if !(name_match || id_match || phone_match) {
+            continue;
+        }
+
+        let tbv: i64 = row.get("tbv")?;
+        let slab_pct: i64 = row.get("slab_pct")?;
+        results.push(SearchResult {
+            id: member.id,
+            name: member.name,
+            phone: member.phone,
+            total_business_volume: tbv as f64 / 100.0,
+            slab_pct: slab_pct as f64 / 100.0,
+            is_active: member.is_active,
+            email: member.email,
+            address: member.address,
+            introducer_member_id: member.introducer_member_id,
+        });
+    }
+    Ok(results)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -698,5 +975,500 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))
             .unwrap();
         assert_eq!(before, after, "no member was created, so nothing to audit");
+    }
+
+    // US-M1.2 — edit_member
+
+    #[test]
+    fn edit_member_updates_only_the_fields_sent() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+
+        let updated = edit_member(
+            &conn,
+            EditMemberInput {
+                id: root.id,
+                name: Some("Top Member Renamed".into()),
+                phone: None,
+                email: None,
+                address: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.name, "Top Member Renamed");
+        assert_eq!(
+            updated.phone, root.phone,
+            "untouched fields must be unchanged"
+        );
+    }
+
+    #[test]
+    fn edit_member_email_null_clears_it_but_absent_leaves_it_alone() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        edit_member(
+            &conn,
+            EditMemberInput {
+                id: root.id,
+                name: None,
+                phone: None,
+                email: Some(Some("owner@example.com".into())),
+                address: None,
+            },
+        )
+        .unwrap();
+
+        let untouched = edit_member(
+            &conn,
+            EditMemberInput {
+                id: root.id,
+                name: Some("Still Top".into()),
+                phone: None,
+                email: None,
+                address: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(untouched.email.as_deref(), Some("owner@example.com"));
+
+        let cleared = edit_member(
+            &conn,
+            EditMemberInput {
+                id: root.id,
+                name: None,
+                phone: None,
+                email: Some(None),
+                address: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(cleared.email, None);
+    }
+
+    #[test]
+    fn edit_member_introducer_cannot_be_set_through_the_api() {
+        // Rule-37: there is no field to accept it at all — the struct
+        // itself is the enforcement, this test documents that.
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let child = match add_member(&conn, add_input(root.id, "9876511100")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+
+        edit_member(
+            &conn,
+            EditMemberInput {
+                id: child.id,
+                name: Some("Renamed Child".into()),
+                phone: None,
+                email: None,
+                address: None,
+            },
+        )
+        .unwrap();
+
+        let reloaded = find_member(&conn, child.id).unwrap();
+        assert_eq!(reloaded.introducer_member_id, Some(root.id));
+    }
+
+    #[test]
+    fn a_raw_edit_payload_naming_an_introducer_is_refused_outright() {
+        // V1.8: "any attempt to change an introducer → refuse outright" —
+        // exercised at the deserialization boundary, since that's where a
+        // hand-crafted IPC call (bypassing the TS wrapper, which has no
+        // field for this either) would try to sneak the value in.
+        let raw = r#"{"id":1,"name":"X","introducerMemberId":999999}"#;
+        let result: Result<EditMemberInput, _> = serde_json::from_str(raw);
+        assert!(
+            result.is_err(),
+            "an unknown introducerMemberId field must be refused, not ignored"
+        );
+    }
+
+    #[test]
+    fn edit_member_refuses_a_phone_collision_with_another_member() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let a = match add_member(&conn, add_input(root.id, "9876511101")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+        let b = match add_member(&conn, add_input(root.id, "9876511102")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+
+        let result = edit_member(
+            &conn,
+            EditMemberInput {
+                id: b.id,
+                name: None,
+                phone: Some(a.phone),
+                email: None,
+                address: None,
+            },
+        );
+        assert!(matches!(result, Err(AppError::Conflict { .. })));
+    }
+
+    #[test]
+    fn edit_member_saving_your_own_unchanged_phone_is_not_a_conflict() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let result = edit_member(
+            &conn,
+            EditMemberInput {
+                id: root.id,
+                name: None,
+                phone: Some(root.phone.clone()),
+                email: None,
+                address: None,
+            },
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn edit_member_writes_one_audit_row_per_changed_field() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        edit_member(
+            &conn,
+            EditMemberInput {
+                id: root.id,
+                name: Some("New Name".into()),
+                phone: None,
+                email: Some(Some("new@example.com".into())),
+                address: None,
+            },
+        )
+        .unwrap();
+
+        let causes: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT cause FROM audit_log WHERE field IN ('name','email')")
+                .unwrap();
+            stmt.query_map([], |r| r.get(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect()
+        };
+        assert_eq!(causes.len(), 2);
+        assert!(causes.iter().all(|c| c == "edit"));
+    }
+
+    #[test]
+    fn edit_member_refuses_an_unknown_member() {
+        let conn = open_seeded_in_memory().unwrap();
+        let result = edit_member(
+            &conn,
+            EditMemberInput {
+                id: 999_999,
+                name: Some("Nobody".into()),
+                phone: None,
+                email: None,
+                address: None,
+            },
+        );
+        assert!(matches!(result, Err(AppError::NotFound { .. })));
+    }
+
+    // US-M1.3 — deactivate_member / reactivate_member
+
+    #[test]
+    fn deactivate_then_reactivate_round_trips_is_active() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let child = match add_member(&conn, add_input(root.id, "9876522200")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+
+        deactivate_member(&conn, child.id).unwrap();
+        assert!(!find_member(&conn, child.id).unwrap().is_active);
+
+        reactivate_member(&conn, child.id).unwrap();
+        assert!(find_member(&conn, child.id).unwrap().is_active);
+    }
+
+    #[test]
+    fn the_root_member_cannot_be_deactivated() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let result = deactivate_member(&conn, root.id);
+        assert!(matches!(result, Err(AppError::Conflict { .. })));
+        assert!(find_member(&conn, root.id).unwrap().is_active);
+    }
+
+    #[test]
+    fn deactivating_a_member_touches_no_other_member_row() {
+        // T-M1.3-5's regression, in the form available before M3 (S6)
+        // exists: since is_active has zero computational effect, and no
+        // other member's row is ever written by this function, every
+        // *other* member's row must be byte-identical before and after —
+        // the strongest statement of "zero effect" available before the
+        // calculation engine exists to compare TBV/Rewards against.
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let mid = match add_member(&conn, add_input(root.id, "9876522201")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+        let descendant = match add_member(&conn, add_input(mid.id, "9876522202")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+
+        let root_before = find_member(&conn, root.id).unwrap();
+        let descendant_before = find_member(&conn, descendant.id).unwrap();
+
+        deactivate_member(&conn, mid.id).unwrap();
+
+        let root_after = find_member(&conn, root.id).unwrap();
+        let descendant_after = find_member(&conn, descendant.id).unwrap();
+        assert_eq!(
+            (root_before.is_active, root_before.level),
+            (root_after.is_active, root_after.level)
+        );
+        assert_eq!(descendant_before.is_active, descendant_after.is_active);
+        assert_eq!(
+            descendant_before.introducer_member_id, descendant_after.introducer_member_id,
+            "the descendant's own hierarchy position must not move"
+        );
+    }
+
+    #[test]
+    fn deactivate_writes_no_row_to_any_calculation_table() {
+        // The other half of "zero computational effect": nothing is
+        // written to the tables the (not-yet-built) calculation engine
+        // reads from.
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let child = match add_member(&conn, add_input(root.id, "9876522203")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+
+        deactivate_member(&conn, child.id).unwrap();
+
+        let entries: i64 = conn
+            .query_row("SELECT COUNT(*) FROM business_volume_entries", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let totals: i64 = conn
+            .query_row("SELECT COUNT(*) FROM member_period_totals", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(entries, 0);
+        assert_eq!(totals, 0);
+    }
+
+    #[test]
+    fn deactivate_and_reactivate_each_write_exactly_one_audit_row() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let child = match add_member(&conn, add_input(root.id, "9876522204")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+
+        deactivate_member(&conn, child.id).unwrap();
+        reactivate_member(&conn, child.id).unwrap();
+
+        let status_rows: Vec<(String, String)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT old_value, new_value FROM audit_log WHERE field = 'status' ORDER BY id",
+                )
+                .unwrap();
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect()
+        };
+        assert_eq!(
+            status_rows,
+            vec![
+                ("Active".to_string(), "Inactive".to_string()),
+                ("Inactive".to_string(), "Active".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn deactivating_an_already_inactive_member_is_a_harmless_no_op() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let child = match add_member(&conn, add_input(root.id, "9876522205")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+        deactivate_member(&conn, child.id).unwrap();
+        deactivate_member(&conn, child.id).unwrap();
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM audit_log WHERE entity_id = ?1 AND field = 'status'",
+                [child.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "a repeat deactivate must not double-write");
+    }
+
+    #[test]
+    fn no_delete_command_exists_for_a_member() {
+        // TEST-R42: there is no code path that deletes a `members` row —
+        // asserted here structurally (searching this module's own public
+        // surface), and again at the command-surface level in
+        // tests/contract.rs (ALL_COMMAND_NAMES has no "delete" entry).
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        deactivate_member(&conn, root.id).ok(); // refused (root), but even if it weren't:
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM members", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "deactivating never removes a row");
+    }
+
+    // US-M1.4 — search_members (Rule-44)
+
+    #[test]
+    fn empty_query_returns_no_results_not_all_members() {
+        let conn = open_seeded_in_memory().unwrap();
+        create_root_member(&conn, root_input()).unwrap();
+        assert!(search_members(&conn, "", false).unwrap().is_empty());
+        assert!(search_members(&conn, "   ", false).unwrap().is_empty());
+    }
+
+    #[test]
+    fn matches_by_name_substring_case_insensitively() {
+        let conn = open_seeded_in_memory().unwrap();
+        create_root_member(&conn, root_input()).unwrap(); // "Top Member"
+        let results = search_members(&conn, "top mem", false).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "Top Member");
+    }
+
+    #[test]
+    fn matches_by_id_substring() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let id_str = root.id.to_string();
+        let fragment = &id_str[1..4];
+        let results = search_members(&conn, fragment, false).unwrap();
+        assert!(results.iter().any(|r| r.id == root.id));
+    }
+
+    #[test]
+    fn test_r44_phone_matching_matrix() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(
+            &conn,
+            CreateRootMemberInput {
+                phone: "+91 98765 43210".into(),
+                ..root_input()
+            },
+        )
+        .unwrap();
+
+        for query in [
+            "9876543210",
+            "98765 43210",
+            "+919876543210",
+            "09876543210",
+            "4321",
+        ] {
+            let results = search_members(&conn, query, false).unwrap();
+            assert!(
+                results.iter().any(|r| r.id == root.id),
+                "query {query:?} should have matched the stored number"
+            );
+        }
+
+        // The reverse direction: stored plainly, queried with a prefix.
+        let conn2 = open_seeded_in_memory().unwrap();
+        let plain = create_root_member(
+            &conn2,
+            CreateRootMemberInput {
+                phone: "9876543210".into(),
+                ..root_input()
+            },
+        )
+        .unwrap();
+        let results = search_members(&conn2, "+91 98765 43210", false).unwrap();
+        assert!(results.iter().any(|r| r.id == plain.id));
+
+        // Below the four-digit floor: no phone match (name/ID still work).
+        let short = search_members(&conn, "432", false).unwrap();
+        assert!(!short.iter().any(|r| r.id == root.id));
+    }
+
+    #[test]
+    fn a_query_matching_one_members_name_and_anothers_phone_returns_both() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(
+            &conn,
+            CreateRootMemberInput {
+                name: "5555 Holdings".into(),
+                ..root_input()
+            },
+        )
+        .unwrap();
+        let child = match add_member(
+            &conn,
+            AddMemberInput {
+                name: "Someone Else".into(),
+                phone: "9955551234".into(),
+                address: "2 Side Street".into(),
+                email: None,
+                consent_given: true,
+                introducer_member_id: root.id,
+            },
+        )
+        .unwrap()
+        {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+
+        let results = search_members(&conn, "5555", false).unwrap();
+        let ids: Vec<i64> = results.iter().map(|r| r.id).collect();
+        assert!(ids.contains(&root.id), "name match");
+        assert!(ids.contains(&child.id), "phone match");
+    }
+
+    #[test]
+    fn active_only_filters_out_inactive_members_for_the_reference_lookup() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let child = match add_member(&conn, add_input(root.id, "9876522299")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+        deactivate_member(&conn, child.id).unwrap();
+
+        let unfiltered = search_members(&conn, "Asha", false).unwrap();
+        let filtered = search_members(&conn, "Asha", true).unwrap();
+        assert!(unfiltered.iter().any(|r| r.id == child.id));
+        assert!(!filtered.iter().any(|r| r.id == child.id));
+    }
+
+    #[test]
+    fn inactive_members_still_appear_in_an_unfiltered_search() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        let child = match add_member(&conn, add_input(root.id, "9876522298")).unwrap() {
+            AddMemberOutcome::Created { member, .. } => member,
+            _ => panic!("expected Created"),
+        };
+        deactivate_member(&conn, child.id).unwrap();
+
+        let results = search_members(&conn, "Asha", false).unwrap();
+        let found = results.iter().find(|r| r.id == child.id).unwrap();
+        assert!(!found.is_active);
     }
 }

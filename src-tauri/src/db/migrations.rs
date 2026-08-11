@@ -46,14 +46,15 @@ mod tests {
     }
 
     #[test]
-    fn creates_all_ten_entity_tables_on_a_fresh_database() {
+    fn creates_all_nine_entity_tables_on_a_fresh_database() {
+        // Nine, not the published DDL's ten — no `auth` table; see
+        // 0001_initial.sql's header comment for why.
         let mut conn = Connection::open_in_memory().unwrap();
         super::run(&mut conn).unwrap();
 
         let tables = all_tables(&conn);
         let expected = [
             "audit_log",
-            "auth",
             "backups",
             "business_volume_entries",
             "member_period_totals",
@@ -81,17 +82,14 @@ mod tests {
     }
 
     #[test]
-    fn auth_table_has_no_session_timeout_column() {
-        // D-14: settings is the single source of truth for the session timeout.
+    fn no_auth_table_exists() {
+        // Credential/lockout state lives in an unencrypted sidecar file
+        // (m8_auth::store) — see 0001_initial.sql's header comment for why
+        // an in-database table is unreadable in principle.
         let mut conn = Connection::open_in_memory().unwrap();
         super::run(&mut conn).unwrap();
 
-        let stmt = conn.prepare("SELECT * FROM auth").unwrap();
-        let names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
-        assert!(
-            !names.contains(&"session_timeout_minutes".to_string()),
-            "auth table must not carry session_timeout_minutes (D-14)"
-        );
+        assert!(!all_tables(&conn).contains(&"auth".to_string()));
     }
 
     #[test]

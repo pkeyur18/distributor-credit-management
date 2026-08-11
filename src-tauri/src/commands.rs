@@ -7,6 +7,8 @@
 use crate::db_state::DbState;
 use crate::error::AppError;
 use crate::m1_members;
+use crate::m8_auth;
+use crate::paths::AppPaths;
 use crate::session::{require_session, SessionState};
 
 // An authenticated session implies an open database connection: nothing in
@@ -71,10 +73,66 @@ macro_rules! open_stub {
 }
 
 // M1 remainder — US-M1.2/M1.3/M1.4, S5.
-auth_stub!(edit_member);
-auth_stub!(deactivate_member);
-auth_stub!(reactivate_member);
-auth_stub!(search_members);
+
+#[tauri::command]
+pub fn edit_member(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    input: m1_members::EditMemberInput,
+) -> Result<m1_members::Member, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m1_members::edit_member(conn, input)
+}
+
+#[tauri::command]
+pub fn deactivate_member(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    id: i64,
+) -> Result<(), AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m1_members::deactivate_member(conn, id)
+}
+
+#[tauri::command]
+pub fn reactivate_member(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    id: i64,
+) -> Result<(), AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m1_members::reactivate_member(conn, id)
+}
+
+/// API-06. `active_only` defaults false — every screen searches the whole
+/// directory except the Add-Member reference lookup, which passes `true`
+/// (Rule-30).
+#[tauri::command]
+pub fn search_members(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    query: String,
+    active_only: Option<bool>,
+) -> Result<Vec<m1_members::SearchResult>, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m1_members::search_members(conn, &query, active_only.unwrap_or(false))
+}
 
 // M2 — US-M2.1/M2.2, S7; US-M2.3/M2.4, S12.
 auth_stub!(record_entry);
@@ -124,31 +182,81 @@ auth_stub!(get_audit_log);
 // Rule-29 / 06-security-authorization-matrix.md §3). None of these call
 // `require_session` — that is the property QA.2's authorization test
 // actually checks, not just the returned error.
-open_stub!(setup_first_run); // US-M8.1, S5
-open_stub!(login); // US-M8.1/M8.2, S5
+
+/// API-26 — US-M8.1, S5. Real logic, so unlike the generic stubs it takes
+/// the app handle (path resolution — `paths::auth_path`/`paths::db_path`)
+/// and opens the just-created database with the freshly-generated master
+/// key before returning. `m8_auth::setup_first_run` refuses a second call
+/// once the sidecar file exists (see its own doc comment for why that file,
+/// not an `auth` DB row, is the source of truth).
+#[tauri::command]
+pub fn setup_first_run(
+    paths: tauri::State<'_, AppPaths>,
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    input: m8_auth::SetupFirstRunInput,
+) -> Result<m8_auth::SetupFirstRunResult, AppError> {
+    let (result, master_key) = m8_auth::setup_first_run(&paths.auth_path, input)?;
+    let conn = crate::db::open_encrypted(
+        &paths.db_path,
+        &m8_auth::crypto::sqlcipher_raw_key_pragma(&master_key),
+    )?;
+    *db.0.lock().expect("db mutex poisoned") = Some(conn);
+    session.mark_authenticated();
+    Ok(result)
+}
+
+/// API-27 — US-M8.1/M8.2, S5. Generic failure message regardless of which
+/// credential type or part was wrong (Rule-29); a locked account reports
+/// `AccountLocked` instead so the login screen's countdown has something to
+/// show. Success opens the database with the recovered master key.
+#[tauri::command]
+pub fn login(
+    paths: tauri::State<'_, AppPaths>,
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    input: m8_auth::CredentialInput,
+) -> Result<(), AppError> {
+    let master_key = m8_auth::login(&paths.auth_path, input)?;
+    let conn = crate::db::open_encrypted(
+        &paths.db_path,
+        &m8_auth::crypto::sqlcipher_raw_key_pragma(&master_key),
+    )?;
+    *db.0.lock().expect("db mutex poisoned") = Some(conn);
+    session.mark_authenticated();
+    Ok(())
+}
+
 open_stub!(use_recovery_code); // US-M8.4, S8
-open_stub!(check_data_readable); // US-M8.6, S14
+
+/// API-34 — minimal slice pulled forward from US-M8.6 (S14): whether the
+/// sidecar credential file exists is exactly "has this machine been set up
+/// before", which is what the frontend needs to route Setup vs Login at
+/// launch. S14 deepens this into genuine corrupted-database detection
+/// without changing this boolean contract.
+#[tauri::command]
+pub fn check_data_readable(paths: tauri::State<'_, AppPaths>) -> Result<bool, AppError> {
+    Ok(paths.auth_path.exists())
+}
+
 open_stub!(list_restore_points); // US-M8.6, S14
 open_stub!(restore_from_backup); // US-M8.6, S14
 open_stub!(restore_from_backup_file); // US-M8.6, S14
 
 pub use crate::command_names::{ALL_COMMAND_NAMES, UNAUTHENTICATED_COMMAND_NAMES};
 
-/// QA.2's contract test needs to exercise all 38 stub commands generically
-/// by name (create_root_member/add_member have real logic and their own
-/// dedicated tests instead — see `tests/contract.rs`). Rust has no runtime
-/// reflection to call a function by string, so this is the one place that
-/// enumerates the match by hand; `ALL_COMMAND_NAMES` is what keeps it
-/// honest against gaps.
+/// QA.2's contract test needs to exercise the remaining stub commands
+/// generically by name — `create_root_member`/`add_member` (M1.1) and
+/// `setup_first_run`/`login`/`check_data_readable` (M8.1/M8.2, S5) all have
+/// real logic now and their own dedicated tests instead (see
+/// `tests/contract.rs`). Rust has no runtime reflection to call a function
+/// by string, so this is the one place that enumerates the match by hand;
+/// `ALL_COMMAND_NAMES` is what keeps it honest against gaps.
 pub fn call_stub_by_name(
     name: &str,
     session: tauri::State<'_, SessionState>,
 ) -> Result<serde_json::Value, AppError> {
     match name {
-        "edit_member" => edit_member(session),
-        "deactivate_member" => deactivate_member(session),
-        "reactivate_member" => reactivate_member(session),
-        "search_members" => search_members(session),
         "record_entry" => record_entry(session),
         "edit_entry" => edit_entry(session),
         "get_period_lock_status" => get_period_lock_status(session),
@@ -176,10 +284,7 @@ pub fn call_stub_by_name(
         "get_outstanding_alert" => get_outstanding_alert(session),
         "run_console_backup_now" => run_console_backup_now(session),
         "get_audit_log" => get_audit_log(session),
-        "setup_first_run" => setup_first_run(),
-        "login" => login(),
         "use_recovery_code" => use_recovery_code(),
-        "check_data_readable" => check_data_readable(),
         "list_restore_points" => list_restore_points(),
         "restore_from_backup" => restore_from_backup(),
         "restore_from_backup_file" => restore_from_backup_file(),
@@ -193,12 +298,23 @@ mod tests {
 
     #[test]
     fn call_stub_by_name_covers_every_stub_command() {
+        const HAS_REAL_LOGIC: &[&str] = &[
+            "create_root_member",
+            "add_member",
+            "edit_member",
+            "deactivate_member",
+            "reactivate_member",
+            "search_members",
+            "setup_first_run",
+            "login",
+            "check_data_readable",
+        ];
         let stub_names: Vec<&str> = ALL_COMMAND_NAMES
             .iter()
             .copied()
-            .filter(|n| *n != "create_root_member" && *n != "add_member")
+            .filter(|n| !HAS_REAL_LOGIC.contains(n))
             .collect();
-        assert_eq!(stub_names.len(), 38);
+        assert_eq!(stub_names.len(), 31);
         // Exercised properly (with real State fixtures) in tests/contract.rs;
         // this just proves the dispatcher doesn't panic on any known name.
     }

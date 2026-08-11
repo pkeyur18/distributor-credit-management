@@ -7,14 +7,22 @@ pub mod db;
 pub mod db_state;
 pub mod error;
 pub mod m1_members;
+pub mod m8_auth;
+pub mod paths;
 pub mod session;
 
 use db_state::DbState;
+use paths::AppPaths;
 use session::SessionState;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            app.manage(AppPaths::resolve(app.handle())?);
+            Ok(())
+        })
         .manage(SessionState::new())
         .manage(DbState::new())
         .invoke_handler(tauri::generate_handler![
