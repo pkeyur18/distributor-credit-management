@@ -60,4 +60,21 @@ describe("toErrorPresentation", () => {
     expect(result.kind).toBe("auth_required");
     expect(result.message).toBe("Sign in to do that.");
   });
+
+  it("never reveals which part of a credential was wrong, but does show attempts remaining", () => {
+    const result = toErrorPresentation({ kind: "invalid_credential", attemptsRemaining: 3 });
+    expect(result.message).toBe("Incorrect PIN or password. 3 attempts remaining.");
+  });
+
+  it("singularises 'attempt' when exactly one remains", () => {
+    const result = toErrorPresentation({ kind: "invalid_credential", attemptsRemaining: 1 });
+    expect(result.message).toBe("Incorrect PIN or password. 1 attempt remaining.");
+  });
+
+  it("maps account_locked with its countdown", () => {
+    const result = toErrorPresentation({ kind: "account_locked", retryAfterSeconds: 30 });
+    expect(result.kind).toBe("account_locked");
+    expect(result.message).toBe("Too many attempts. Try again in 30s.");
+    expect(result.retryAfterSeconds).toBe(30);
+  });
 });

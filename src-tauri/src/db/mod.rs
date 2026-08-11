@@ -72,7 +72,8 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(table_count, 10);
+        // Nine, not the original ten — `auth` was dropped by migration 0002 (S5).
+        assert_eq!(table_count, 9);
 
         let slab_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM slab_table", [], |r| r.get(0))

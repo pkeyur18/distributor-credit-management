@@ -28,6 +28,11 @@ rusqlite = { version = "=0.40.2", features = ["bundled-sqlcipher-vendored-openss
 thiserror = "2.0.20"
 rand = "0.9.2"
 chrono = { version = "0.4.42", default-features = false, features = ["clock"] }
+# US-M8.1/M8.2 (S5): Argon2id KDF + AES-256-GCM key-wrapping — see
+# m8_auth::crypto module doc comment for why a wrapped master key, not a
+# credential-derived SQLCipher key directly, is required.
+argon2 = "0.5.3"
+aes-gcm = "0.10.3"
 
 [dev-dependencies]
 proptest = "1.8.0"

@@ -31,6 +31,20 @@ pub enum AppError {
     /// hasn't shipped yet.
     #[error("not implemented: {command}")]
     NotImplemented { command: &'static str },
+    /// Rule-29: a wrong PIN, wrong password, or no auth configured yet —
+    /// always this same generic message, never which credential type or
+    /// which part was wrong. Also the failure of `unwrap_master_key`
+    /// (a malformed/mismatched envelope looks identical to a wrong
+    /// credential from the caller's side, deliberately). `attempts_remaining`
+    /// (T-M8.2-5) counts down to the *next* lockout threshold — showing it
+    /// doesn't reveal which part of the credential was wrong, only how many
+    /// tries are left, which the prototype's own login screen already does.
+    #[error("incorrect PIN or password")]
+    InvalidCredential { attempts_remaining: i64 },
+    /// D-2's lockout ladder. `retry_after_seconds` drives the login
+    /// screen's live countdown.
+    #[error("locked — try again in {retry_after_seconds}s")]
+    AccountLocked { retry_after_seconds: i64 },
 }
 
 // Tauri commands return errors to the WebView as JSON, never as an opaque
@@ -48,14 +62,29 @@ impl Serialize for AppError {
             AppError::Conflict { .. } => "conflict",
             AppError::AuthRequired => "auth_required",
             AppError::NotImplemented { .. } => "not_implemented",
+            AppError::InvalidCredential { .. } => "invalid_credential",
+            AppError::AccountLocked { .. } => "account_locked",
         };
-        let mut state = serializer.serialize_struct("AppError", 3)?;
+        let mut state = serializer.serialize_struct("AppError", 5)?;
         state.serialize_field("kind", kind)?;
         state.serialize_field("message", &self.to_string())?;
         if let AppError::Validation { field, .. } = self {
             state.serialize_field("field", field)?;
         } else {
             state.serialize_field("field", &None::<String>)?;
+        }
+        if let AppError::AccountLocked {
+            retry_after_seconds,
+        } = self
+        {
+            state.serialize_field("retryAfterSeconds", retry_after_seconds)?;
+        } else {
+            state.serialize_field("retryAfterSeconds", &None::<i64>)?;
+        }
+        if let AppError::InvalidCredential { attempts_remaining } = self {
+            state.serialize_field("attemptsRemaining", attempts_remaining)?;
+        } else {
+            state.serialize_field("attemptsRemaining", &None::<i64>)?;
         }
         state.end()
     }

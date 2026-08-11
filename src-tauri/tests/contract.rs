@@ -11,7 +11,10 @@ use bvconsole_lib::db;
 use bvconsole_lib::db_state::DbState;
 use bvconsole_lib::error::AppError;
 use bvconsole_lib::m1_members::{AddMemberInput, AddMemberOutcome, CreateRootMemberInput};
+use bvconsole_lib::m8_auth::{CredentialInput, SetupFirstRunInput};
+use bvconsole_lib::paths::AppPaths;
 use bvconsole_lib::session::SessionState;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 fn app_with_seeded_db() -> tauri::App<tauri::test::MockRuntime> {
@@ -21,6 +24,41 @@ fn app_with_seeded_db() -> tauri::App<tauri::test::MockRuntime> {
         db::open_seeded_in_memory().unwrap(),
     ));
     app
+}
+
+/// M8.1/M8.2 write real files (the sidecar credential file, then the
+/// encrypted database once a master key is recovered) — every test that
+/// exercises `setup_first_run`/`login` gets its own throwaway directory, so
+/// the suite never touches the real OS app-data directory and tests can run
+/// concurrently without colliding on the same path.
+struct TempAppDir(std::path::PathBuf);
+impl TempAppDir {
+    fn new(label: &str) -> Self {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("bvconsole-contract-{label}-{nanos}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        Self(dir)
+    }
+}
+impl Drop for TempAppDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn app_with_temp_paths(label: &str) -> (tauri::App<tauri::test::MockRuntime>, TempAppDir) {
+    let dir = TempAppDir::new(label);
+    let app = tauri::test::mock_app();
+    app.manage(SessionState::new());
+    app.manage(DbState::new());
+    app.manage(AppPaths {
+        db_path: dir.0.join("console.db"),
+        auth_path: dir.0.join("auth.json"),
+    });
+    (app, dir)
 }
 
 fn root_input(phone: &str) -> CreateRootMemberInput {
@@ -99,12 +137,25 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
     app.manage(DbState::new());
     let session = app.state::<SessionState>();
 
-    // create_root_member/add_member have real logic and their own
-    // dedicated tests below — this loop covers the 38 stub commands via
-    // `call_stub_by_name`.
+    // create_root_member/add_member (M1.1), edit_member/deactivate_member/
+    // reactivate_member/search_members (M1.2/M1.3/M1.4, S5) and
+    // setup_first_run/login/check_data_readable (M8.1/M8.2, S5) have real
+    // logic and their own dedicated tests below — this loop covers the
+    // remaining 31 stub commands via `call_stub_by_name`.
+    const HAS_REAL_LOGIC: &[&str] = &[
+        "create_root_member",
+        "add_member",
+        "edit_member",
+        "deactivate_member",
+        "reactivate_member",
+        "search_members",
+        "setup_first_run",
+        "login",
+        "check_data_readable",
+    ];
     for &name in ALL_COMMAND_NAMES
         .iter()
-        .filter(|&&n| n != "create_root_member" && n != "add_member")
+        .filter(|&&n| !HAS_REAL_LOGIC.contains(&n))
     {
         let result = commands::call_stub_by_name(name, session.clone());
         let is_unauthenticated = UNAUTHENTICATED_COMMAND_NAMES.contains(&name);
@@ -186,4 +237,264 @@ fn add_member_end_to_end_through_the_command_layer() {
         }
         AddMemberOutcome::ReactivationOffer { .. } => panic!("expected Created"),
     }
+}
+
+// US-M1.2/M1.3/M1.4 (S5) command-layer wiring — business logic is covered
+// exhaustively in m1_members::tests; this proves the session gate applies.
+
+#[test]
+fn edit_deactivate_reactivate_and_search_all_require_a_session() {
+    let app = app_with_seeded_db();
+    let edit = commands::edit_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        bvconsole_lib::m1_members::EditMemberInput {
+            id: 1,
+            name: None,
+            phone: None,
+            email: None,
+            address: None,
+        },
+    );
+    assert!(matches!(edit, Err(AppError::AuthRequired)));
+
+    let deactivate =
+        commands::deactivate_member(app.state::<SessionState>(), app.state::<DbState>(), 1);
+    assert!(matches!(deactivate, Err(AppError::AuthRequired)));
+
+    let reactivate =
+        commands::reactivate_member(app.state::<SessionState>(), app.state::<DbState>(), 1);
+    assert!(matches!(reactivate, Err(AppError::AuthRequired)));
+
+    let search = commands::search_members(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        "anyone".into(),
+        None,
+    );
+    assert!(matches!(search, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn edit_member_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876599901"),
+    )
+    .unwrap();
+
+    let updated = commands::edit_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        bvconsole_lib::m1_members::EditMemberInput {
+            id: root.id,
+            name: Some("Renamed".into()),
+            phone: None,
+            email: None,
+            address: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(updated.name, "Renamed");
+}
+
+#[test]
+fn deactivate_and_reactivate_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876599902"),
+    )
+    .unwrap();
+    let child = match commands::add_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        AddMemberInput {
+            name: "Child Member".into(),
+            phone: "9876599903".into(),
+            address: "3 Side Street".into(),
+            email: None,
+            consent_given: true,
+            introducer_member_id: root.id,
+        },
+    )
+    .unwrap()
+    {
+        AddMemberOutcome::Created { member, .. } => member,
+        _ => panic!("expected Created"),
+    };
+
+    commands::deactivate_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        child.id,
+    )
+    .unwrap();
+    commands::reactivate_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        child.id,
+    )
+    .unwrap();
+
+    let root_deactivate =
+        commands::deactivate_member(app.state::<SessionState>(), app.state::<DbState>(), root.id);
+    assert!(matches!(root_deactivate, Err(AppError::Conflict { .. })));
+}
+
+#[test]
+fn search_members_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876599904"),
+    )
+    .unwrap();
+
+    let results = commands::search_members(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        "Top Member".into(),
+        None,
+    )
+    .unwrap();
+    assert!(results.iter().any(|r| r.id == root.id));
+}
+
+// US-M8.1/M8.2 (S5) command-layer wiring — the business logic itself
+// (envelope crypto, the lockout ladder, dual-credential login) is
+// exhaustively covered by `m8_auth`'s own unit tests against temp file
+// paths directly. What's specific to the command layer, and worth proving
+// here, is: no session required to call these; a successful call actually
+// opens the database (not just recovers a key) and marks the session
+// authenticated; `check_data_readable` flips once setup has run.
+
+#[test]
+fn check_data_readable_is_false_before_setup_and_true_after() {
+    let (app, _dir) = app_with_temp_paths("check-data-readable");
+    assert!(!commands::check_data_readable(app.state::<AppPaths>()).unwrap());
+
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+
+    assert!(commands::check_data_readable(app.state::<AppPaths>()).unwrap());
+}
+
+#[test]
+fn setup_first_run_requires_no_session_and_leaves_one_authenticated_with_a_usable_database() {
+    let (app, _dir) = app_with_temp_paths("setup-first-run");
+    assert!(!app.state::<SessionState>().is_authenticated());
+
+    let result = commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(result.recovery_codes.len(), 10);
+    assert!(app.state::<SessionState>().is_authenticated());
+
+    // The database is genuinely open, not just the credential accepted —
+    // an authenticated command works immediately after.
+    let member = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876566666"),
+    );
+    assert!(member.is_ok());
+}
+
+#[test]
+fn login_requires_no_session_and_recovers_the_same_database_setup_wrote() {
+    let (app, _dir) = app_with_temp_paths("login");
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876577777"),
+    )
+    .unwrap();
+
+    // A fresh session/db, same on-disk paths — as if the app were relaunched.
+    app.state::<SessionState>().clear();
+    *app.state::<DbState>().0.lock().unwrap() = None;
+    assert!(!app.state::<SessionState>().is_authenticated());
+
+    commands::login(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        CredentialInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    assert!(app.state::<SessionState>().is_authenticated());
+
+    // The root member created before the "relaunch" is still there — same
+    // database, reopened with the recovered master key, not a fresh one.
+    let second_root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876588888"),
+    );
+    assert!(matches!(second_root, Err(AppError::Conflict { .. })));
+}
+
+#[test]
+fn login_with_the_wrong_pin_never_authenticates() {
+    let (app, _dir) = app_with_temp_paths("wrong-pin");
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    app.state::<SessionState>().clear();
+
+    let err = commands::login(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        CredentialInput {
+            pin: Some("000000".into()),
+            password: None,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(err, AppError::InvalidCredential { .. }));
+    assert!(!app.state::<SessionState>().is_authenticated());
 }

@@ -54,7 +54,9 @@ export function reactivateMember(id: number): Promise<void> {
   return invokeCommand("reactivate_member", { id });
 }
 
-// API-06 — shared with M4's search box; empty query returns an empty result, not an error.
-export function searchMembers(query: string): Promise<SearchResult[]> {
-  return invokeCommand("search_members", { query });
+// API-06 — shared with M4's search box; empty query returns an empty result,
+// not an error. `activeOnly` is Rule-30's filter for the Add-Member
+// reference lookup — every other caller leaves it false.
+export function searchMembers(query: string, activeOnly = false): Promise<SearchResult[]> {
+  return invokeCommand("search_members", { query, activeOnly });
 }

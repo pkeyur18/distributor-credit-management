@@ -118,6 +118,12 @@ export interface SearchResult {
   totalBusinessVolume: number;
   slabPct: number;
   isActive: boolean;
+  // Not displayed by SearchResultsList (T-M1.4-5's field list is unchanged)
+  // — carried so an Edit modal can open straight from a search result
+  // without get_member_detail (M4.1, S8) existing yet.
+  email: string | null;
+  address: string;
+  introducerMemberId: number | null;
 }
 
 export interface Settings {
