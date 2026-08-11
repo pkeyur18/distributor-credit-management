@@ -224,6 +224,184 @@ pub fn recalculate_chain(
     Ok(())
 }
 
+fn is_active_of(conn: &Connection, member_id: i64) -> Result<bool, AppError> {
+    conn.query_row(
+        "SELECT is_active FROM members WHERE id = ?1",
+        [member_id],
+        |r| r.get(0),
+    )
+    .optional()?
+    .ok_or_else(|| AppError::NotFound {
+        message: "Member not found.".into(),
+    })
+}
+
+/// Rule-39/§7.3's closed-period source of truth: a child's current figures
+/// come from its own latest `monthly_snapshots` version, never from
+/// `member_period_totals` — that table holds the closed period's zeroed
+/// live figures (Rule-38), not its historical record.
+fn snapshot_children_figures(
+    conn: &Connection,
+    member_id: i64,
+    period_id: i64,
+) -> Result<Vec<ChildFigures>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(t.total_business_volume, 0), COALESCE(t.slab_pct, 0)
+         FROM members m
+         LEFT JOIN monthly_snapshots t ON t.member_id = m.id AND t.period_id = ?2
+            AND t.version = (
+                SELECT MAX(version) FROM monthly_snapshots
+                WHERE member_id = m.id AND period_id = ?2
+            )
+         WHERE m.introducer_member_id = ?1",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![member_id, period_id], |r| {
+            Ok(ChildFigures {
+                total_business_volume: r.get(0)?,
+                slab_pct: r.get(1)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+fn next_snapshot_version(
+    conn: &Connection,
+    member_id: i64,
+    period_id: i64,
+) -> Result<i64, AppError> {
+    let max: Option<i64> = conn
+        .query_row(
+            "SELECT MAX(version) FROM monthly_snapshots WHERE member_id = ?1 AND period_id = ?2",
+            rusqlite::params![member_id, period_id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+    Ok(max.unwrap_or(0) + 1)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_snapshot(
+    conn: &Connection,
+    member_id: i64,
+    period_id: i64,
+    version: i64,
+    business_volume: i64,
+    figures: &NodeFigures,
+    is_active_status: bool,
+    created_at: &str,
+) -> Result<(), AppError> {
+    conn.execute(
+        "INSERT INTO monthly_snapshots
+            (member_id, period_id, version, business_volume, total_business_volume,
+             slab_pct, differential, royalty, own_reward, rewards, is_active_status, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        rusqlite::params![
+            member_id,
+            period_id,
+            version,
+            business_volume,
+            figures.total_business_volume,
+            figures.slab_pct,
+            figures.differential,
+            figures.royalty,
+            figures.own_reward,
+            figures.rewards,
+            is_active_status,
+            created_at,
+        ],
+    )?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn walk_chain_into_snapshot(
+    conn: &Connection,
+    chain: &[i64],
+    period_month: &str,
+    period_id: i64,
+    slabs: &[(i64, i64)],
+    royalty_min_children: i64,
+    royalty_rate_percent: i64,
+    created_at: &str,
+) -> Result<(), AppError> {
+    for &id in chain {
+        let business_volume = business_volume_of(conn, id, period_month)?;
+        let children = snapshot_children_figures(conn, id, period_id)?;
+        let figures = compute_node(
+            business_volume,
+            &children,
+            slabs,
+            royalty_min_children,
+            royalty_rate_percent,
+        );
+        let version = next_snapshot_version(conn, id, period_id)?;
+        let is_active = is_active_of(conn, id)?;
+        insert_snapshot(
+            conn,
+            id,
+            period_id,
+            version,
+            business_volume,
+            &figures,
+            is_active,
+            created_at,
+        )?;
+    }
+    Ok(())
+}
+
+/// Rule-39/ADR-006, §7.3: a closed-period correction recomputes the changed
+/// member's chain "in isolation" — reading every child from its latest
+/// `monthly_snapshots` version rather than the live `member_period_totals`
+/// table — and writes each ancestor's result as a **new** snapshot version,
+/// one per member on the chain, at that member's own next version number.
+/// `member_period_totals` is never touched by this path; a closed period's
+/// live totals stay zeroed (Rule-38) regardless of how many corrections
+/// follow. The caller (M2's `edit_entry`, S7) opens the transaction, the
+/// same composability contract as `recalculate_chain`.
+pub fn write_correction_snapshot(
+    conn: &Connection,
+    member_id: i64,
+    period_id: i64,
+) -> Result<(), AppError> {
+    let chain = chain_to_root(conn, member_id)?;
+    let period_month = period_month_of(conn, period_id)?;
+    let slabs = slab_table(conn)?;
+    let royalty_min_children = setting_i64(conn, "royalty_qualifying_count")?;
+    let royalty_rate_percent = setting_i64(conn, "royalty_rate_percent")?;
+    let created_at = chrono::Local::now().date_naive().to_string();
+
+    if conn.is_autocommit() {
+        let tx = conn.unchecked_transaction()?;
+        walk_chain_into_snapshot(
+            &tx,
+            &chain,
+            &period_month,
+            period_id,
+            &slabs,
+            royalty_min_children,
+            royalty_rate_percent,
+            &created_at,
+        )?;
+        tx.commit()?;
+    } else {
+        walk_chain_into_snapshot(
+            conn,
+            &chain,
+            &period_month,
+            period_id,
+            &slabs,
+            royalty_min_children,
+            royalty_rate_percent,
+            &created_at,
+        )?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,6 +629,136 @@ mod tests {
         assert!(
             !row_exists,
             "rolling back the caller's outer transaction must discard the recalculation too"
+        );
+    }
+
+    // --- write_correction_snapshot (US-M2.2, S7) ---
+
+    fn insert_snapshot_row(
+        conn: &Connection,
+        member_id: i64,
+        period_id: i64,
+        version: i64,
+        total_business_volume: i64,
+        slab_pct: i64,
+    ) {
+        conn.execute(
+            "INSERT INTO monthly_snapshots
+                (member_id, period_id, version, business_volume, total_business_volume,
+                 slab_pct, differential, royalty, own_reward, rewards, is_active_status, created_at)
+             VALUES (?1, ?2, ?3, 0, ?4, ?5, 0, 0, 0, 0, 1, '2026-08-01')",
+            rusqlite::params![
+                member_id,
+                period_id,
+                version,
+                total_business_volume,
+                slab_pct
+            ],
+        )
+        .unwrap();
+    }
+
+    fn snapshot_row(conn: &Connection, member_id: i64, period_id: i64, version: i64) -> (i64, i64) {
+        conn.query_row(
+            "SELECT total_business_volume, slab_pct FROM monthly_snapshots
+             WHERE member_id = ?1 AND period_id = ?2 AND version = ?3",
+            rusqlite::params![member_id, period_id, version],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap()
+    }
+
+    fn max_snapshot_version(conn: &Connection, member_id: i64, period_id: i64) -> i64 {
+        conn.query_row(
+            "SELECT MAX(version) FROM monthly_snapshots WHERE member_id = ?1 AND period_id = ?2",
+            rusqlite::params![member_id, period_id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_correction_reads_children_from_their_latest_snapshot_not_live_totals() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-08");
+        let parent = insert_member(&conn, None);
+        let child = insert_member(&conn, Some(parent));
+        // Simulates a prior close (S11): v1 snapshots exist, live totals do
+        // not (Rule-38 zeroes them).
+        insert_snapshot_row(&conn, child, period, 1, 10_000, 4);
+        insert_snapshot_row(&conn, parent, period, 1, 10_000, 4);
+
+        // The correction: child's entry is the source of its BV now, not
+        // the pre-seeded snapshot figure above — business_volume_of always
+        // re-sums from business_volume_entries (§5.1's own step 1).
+        insert_entry(&conn, child, "2026-08", 40_000); // ×100: 400.00
+        write_correction_snapshot(&conn, child, period).unwrap();
+
+        let (child_tbv, child_slab) = snapshot_row(&conn, child, period, 2);
+        assert_eq!(child_tbv, 40_000);
+        assert_eq!(child_slab, 4); // exactly at the 400*100 threshold
+
+        let (parent_tbv, _) = snapshot_row(&conn, parent, period, 2);
+        assert_eq!(
+            parent_tbv, 40_000,
+            "parent must roll up the child's corrected snapshot, not a stale live total"
+        );
+
+        let live_total_exists: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM member_period_totals WHERE period_id = ?1)",
+                [period],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            !live_total_exists,
+            "a closed period's member_period_totals must never be written by a correction"
+        );
+    }
+
+    #[test]
+    fn each_chain_member_advances_its_own_version_independently() {
+        // A member corrected twice already sits at v2; an ancestor never
+        // touched by a prior correction still sits at v1. One further
+        // correction must give each its own next version, not a shared one.
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-08");
+        let parent = insert_member(&conn, None);
+        let child = insert_member(&conn, Some(parent));
+        insert_snapshot_row(&conn, child, period, 1, 10_000, 4);
+        insert_snapshot_row(&conn, child, period, 2, 15_000, 4);
+        insert_snapshot_row(&conn, parent, period, 1, 15_000, 4);
+
+        insert_entry(&conn, child, "2026-08", 5_000); // ×100: 50.00
+        write_correction_snapshot(&conn, child, period).unwrap();
+
+        assert_eq!(max_snapshot_version(&conn, child, period), 3);
+        assert_eq!(max_snapshot_version(&conn, parent, period), 2);
+    }
+
+    #[test]
+    fn correction_snapshot_composes_inside_a_callers_already_open_transaction() {
+        let mut conn = seeded();
+        let period = insert_period(&conn, "2026-08");
+        let root = insert_member(&conn, None);
+        insert_snapshot_row(&conn, root, period, 1, 5_000, 2);
+
+        let tx = conn.transaction().unwrap();
+        tx.execute(
+            "INSERT INTO business_volume_entries
+                (member_id, amount, entry_date, period_month, created_at)
+             VALUES (?1, 5000, '2026-08-15', '2026-08', '2026-08-15')",
+            [root],
+        )
+        .unwrap();
+        write_correction_snapshot(&tx, root, period).unwrap();
+        tx.rollback().unwrap();
+
+        assert_eq!(
+            max_snapshot_version(&conn, root, period),
+            1,
+            "rolling back the caller's outer transaction must discard the correction too"
         );
     }
 }

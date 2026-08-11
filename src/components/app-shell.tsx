@@ -3,6 +3,7 @@ import { Sidebar } from "./sidebar";
 import { OutstandingMonthBanner } from "./outstanding-month-banner";
 import { NotificationList } from "./notification-list";
 import { useOutstandingAlert } from "@/lib/use-outstanding-alert";
+import { useInactivityLock } from "@/lib/use-inactivity-lock";
 
 /**
  * T-UI.2-1/T-UI.2-2 — fixed 236px sidebar + fluid content column, sticky at
@@ -11,6 +12,7 @@ import { useOutstandingAlert } from "@/lib/use-outstanding-alert";
  */
 export function AppShell() {
   const alert = useOutstandingAlert();
+  useInactivityLock();
 
   return (
     <div className="grid h-screen grid-cols-[236px_1fr]">

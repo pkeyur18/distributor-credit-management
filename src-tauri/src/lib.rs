@@ -1,12 +1,14 @@
 // `pub` throughout: `tests/*.rs` (QA.2's contract harness) compiles as a
 // crate external to this lib and needs to reach these directly — see
 // T-QA.2-1's "direct Tauri command-invocation" requirement.
+pub mod backup;
 pub mod command_names;
 pub mod commands;
 pub mod db;
 pub mod db_state;
 pub mod error;
 pub mod m1_members;
+pub mod m2_entries;
 pub mod m3_calc;
 pub mod m8_auth;
 pub mod paths;

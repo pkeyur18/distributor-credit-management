@@ -27,6 +27,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
   if (state === "loading") return null;
   if (state === "needs-setup") return <Navigate to="/auth/setup" replace />;
   if (state === "needs-login") return <Navigate to="/auth/login" replace />;
+  if (state === "locked") return <Navigate to="/auth/locked" replace />;
   return <>{children}</>;
 }
 
