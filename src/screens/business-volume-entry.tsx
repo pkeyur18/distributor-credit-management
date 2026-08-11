@@ -7,6 +7,7 @@ import { Input, InputHint } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import { SearchResultsList } from "@/components/search-results-list";
 import { useMemberSearch } from "@/lib/use-member-search";
+import { searchMembers } from "@/lib/ipc/m1-members";
 import { recordEntry } from "@/lib/ipc/m2-entries";
 import type { BusinessVolumeEntry as Entry } from "@/lib/ipc/entities";
 import type { SearchResult } from "@/lib/ipc/entities";
@@ -60,6 +61,17 @@ export function BusinessVolumeEntry() {
       setSessionEntries((prev) => [entry, ...prev]);
       setAmountInput("");
       toast.add({ title: `Recorded ${centsToDisplay(entry.amount)} for ${selected.name}`, type: "success" });
+
+      // T-M2.1-5: immediate on-screen update of the affected figures, no
+      // recalculate control anywhere (Rule-26). `record_entry`'s own
+      // response is just the raw entry — `search_members` (M1's shared
+      // search, already reading `member_period_totals`) is the only
+      // command today that also carries totalBusinessVolume/slabPct, so
+      // this re-fetches by ID rather than waiting on get_member_detail
+      // (S8).
+      const refreshed = await searchMembers(String(selected.id), false);
+      const match = refreshed.find((r) => r.id === selected.id);
+      if (match) setSelected(match);
     } catch (raw) {
       const presented = toErrorPresentation(raw);
       setAmountError(presented.message);
@@ -82,6 +94,17 @@ export function BusinessVolumeEntry() {
               </div>
               <div className="mono text-[11px] text-muted-text">
                 #{selected.id} · {selected.phone}
+              </div>
+              <div className="mt-1 flex items-center gap-2 text-caption">
+                <span>
+                  {/* SearchResult.totalBusinessVolume is already a real-unit
+                      decimal (search_members converts server-side), unlike
+                      BusinessVolumeEntry.amount/MemberPeriodFigures below,
+                      which stay ×100 integers per ADR-004 — two different,
+                      pre-existing conventions live on the wire today. */}
+                  TBV <span className="num">{selected.totalBusinessVolume.toFixed(2)}</span>
+                </span>
+                <Pill variant="slab">{selected.slabPct}%</Pill>
               </div>
             </div>
             <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
