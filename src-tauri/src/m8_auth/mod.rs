@@ -201,6 +201,91 @@ pub fn login(auth_path: &Path, input: CredentialInput) -> Result<crypto::MasterK
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UseRecoveryCodeInput {
+    pub code: String,
+    pub new_pin: Option<String>,
+    pub new_password: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UseRecoveryCodeResult {
+    pub recovery_codes: Vec<String>,
+}
+
+/// API-30. Every recovery code wraps the *same* master key `login` uses
+/// (`generate_recovery_codes`, US-M8.1) — so unlike `setup_first_run`, this
+/// never generates a new master key: doing that would silently strand the
+/// already-encrypted database under a key nothing could recover. Only the
+/// submitted credential type is replaced; the other, if configured, is left
+/// untouched and still opens the same (unchanged) master key. Deliberately
+/// not coupled to `login`'s lockout ladder (ADR-008/D-2 name only `login` as
+/// the ladder's gate) — leaving a prior lockout in place after a recovery
+/// is the conservative default, not an oversight.
+pub fn use_recovery_code(
+    auth_path: &Path,
+    input: UseRecoveryCodeInput,
+) -> Result<UseRecoveryCodeResult, AppError> {
+    if !auth_path.exists() {
+        return Err(AppError::NotFound {
+            message: "No console is set up on this machine yet.".into(),
+        });
+    }
+    if input.new_pin.is_none() && input.new_password.is_none() {
+        return Err(AppError::Validation {
+            field: "newPin".into(),
+            message: "Set a new PIN or password.".into(),
+        });
+    }
+    if let Some(pin) = input.new_pin.as_deref() {
+        if !validate_pin(pin) {
+            return Err(AppError::Validation {
+                field: "newPin".into(),
+                message: "PIN must be exactly 6 digits.".into(),
+            });
+        }
+    }
+    if let Some(password) = input.new_password.as_deref() {
+        if !validate_password(password) {
+            return Err(AppError::Validation {
+                field: "newPassword".into(),
+                message: "Password must be at least 8 characters with a letter and a number."
+                    .into(),
+            });
+        }
+    }
+
+    let mut store = AuthStore::load(auth_path)?;
+    let master_key = store
+        .recovery_codes
+        .iter()
+        .filter(|entry| !entry.used)
+        .find_map(|entry| crypto::unwrap_master_key(&input.code, &entry.envelope))
+        .ok_or_else(|| AppError::Validation {
+            field: "code".into(),
+            message: "Invalid or already-used recovery code.".into(),
+        })?;
+
+    if let Some(pin) = input.new_pin.as_deref() {
+        store.pin_envelope = Some(crypto::wrap_master_key(pin, &master_key)?);
+    }
+    if let Some(password) = input.new_password.as_deref() {
+        store.password_envelope = Some(crypto::wrap_master_key(password, &master_key)?);
+    }
+
+    // Every prior code — used or not — is invalidated by wholesale
+    // replacement, not by flipping `used` on the one that matched.
+    let (plaintext_codes, recovery_codes) = generate_recovery_codes(&master_key)?;
+    store.recovery_codes = recovery_codes;
+    store.save(auth_path)?;
+
+    Ok(UseRecoveryCodeResult {
+        recovery_codes: plaintext_codes,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -474,5 +559,179 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, AppError::InvalidCredential { .. }));
+    }
+
+    // --- use_recovery_code (US-M8.4, S8) ---
+
+    fn setup_with_pin(path: &std::path::Path, pin: &str) -> Vec<String> {
+        setup_first_run(
+            path,
+            SetupFirstRunInput {
+                pin: Some(pin.into()),
+                password: None,
+            },
+        )
+        .unwrap()
+        .0
+        .recovery_codes
+    }
+
+    #[test]
+    fn a_valid_code_sets_the_new_pin_and_the_old_pin_stops_working() {
+        let path = TempPath::new("recovery-valid-code");
+        let codes = setup_with_pin(&path.0, "482913");
+
+        let result = use_recovery_code(
+            &path.0,
+            UseRecoveryCodeInput {
+                code: codes[0].clone(),
+                new_pin: Some("111222".into()),
+                new_password: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(result.recovery_codes.len(), RECOVERY_CODE_COUNT);
+
+        login(&path.0, credential_pin("111222")).unwrap();
+        let err = login(&path.0, credential_pin("482913")).unwrap_err();
+        assert!(matches!(err, AppError::InvalidCredential { .. }));
+    }
+
+    #[test]
+    fn an_invalid_code_is_refused() {
+        let path = TempPath::new("recovery-invalid-code");
+        setup_with_pin(&path.0, "482913");
+
+        let err = use_recovery_code(
+            &path.0,
+            UseRecoveryCodeInput {
+                code: "AAAAA-AAAAA-AAAAA".into(),
+                new_pin: Some("111222".into()),
+                new_password: None,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn a_used_code_cannot_be_used_again() {
+        let path = TempPath::new("recovery-used-code");
+        let codes = setup_with_pin(&path.0, "482913");
+
+        use_recovery_code(
+            &path.0,
+            UseRecoveryCodeInput {
+                code: codes[0].clone(),
+                new_pin: Some("111222".into()),
+                new_password: None,
+            },
+        )
+        .unwrap();
+
+        let err = use_recovery_code(
+            &path.0,
+            UseRecoveryCodeInput {
+                code: codes[0].clone(),
+                new_pin: Some("333444".into()),
+                new_password: None,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn every_prior_code_dies_after_one_recovery_not_just_the_one_used() {
+        let path = TempPath::new("recovery-all-codes-die");
+        let codes = setup_with_pin(&path.0, "482913");
+
+        use_recovery_code(
+            &path.0,
+            UseRecoveryCodeInput {
+                code: codes[0].clone(),
+                new_pin: Some("111222".into()),
+                new_password: None,
+            },
+        )
+        .unwrap();
+
+        // codes[1] was never used, but it belongs to the invalidated batch.
+        let err = use_recovery_code(
+            &path.0,
+            UseRecoveryCodeInput {
+                code: codes[1].clone(),
+                new_pin: Some("333444".into()),
+                new_password: None,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn recovery_leaves_an_untouched_credential_type_working() {
+        let path = TempPath::new("recovery-leaves-password");
+        let (result, _) = setup_first_run(
+            &path.0,
+            SetupFirstRunInput {
+                pin: Some("482913".into()),
+                password: Some("Harvest99!".into()),
+            },
+        )
+        .unwrap();
+
+        use_recovery_code(
+            &path.0,
+            UseRecoveryCodeInput {
+                code: result.recovery_codes[0].clone(),
+                new_pin: Some("111222".into()),
+                new_password: None,
+            },
+        )
+        .unwrap();
+
+        // The password was never touched by a PIN-mode recovery, and still
+        // opens the same unchanged master key.
+        login(
+            &path.0,
+            CredentialInput {
+                pin: None,
+                password: Some("Harvest99!".into()),
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn recovery_before_any_setup_is_refused() {
+        let path = TempPath::new("recovery-no-setup-yet");
+        let err = use_recovery_code(
+            &path.0,
+            UseRecoveryCodeInput {
+                code: "AAAAA-AAAAA-AAAAA".into(),
+                new_pin: Some("111222".into()),
+                new_password: None,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::NotFound { .. }));
+    }
+
+    #[test]
+    fn recovery_requires_at_least_one_new_credential() {
+        let path = TempPath::new("recovery-needs-credential");
+        let codes = setup_with_pin(&path.0, "482913");
+
+        let err = use_recovery_code(
+            &path.0,
+            UseRecoveryCodeInput {
+                code: codes[0].clone(),
+                new_pin: None,
+                new_password: None,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
     }
 }

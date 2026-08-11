@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { Input, InputHint } from "@/components/ui/input";
@@ -48,6 +48,18 @@ export function BusinessVolumeEntry() {
   const [sessionEntries, setSessionEntries] = useState<Entry[]>([]);
   const toast = useToast();
   const bounds = currentMonthBounds();
+  const [searchParams] = useSearchParams();
+
+  // T-M4.1-5: Member Detail's "Record volume" action opens this screen
+  // pre-selected on that member (?member=<id>) rather than empty.
+  useEffect(() => {
+    const prefillId = searchParams.get("member");
+    if (!prefillId) return;
+    searchMembers(prefillId, false).then((found) => {
+      const match = found.find((r) => String(r.id) === prefillId);
+      if (match) setSelected(match);
+    });
+  }, [searchParams]);
 
   const cents = displayToCents(amountInput);
   const canSave = !!selected && cents !== null && !saving;

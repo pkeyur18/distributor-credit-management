@@ -183,6 +183,39 @@ describe("MemberModal — add mode", () => {
     expect(await screen.findByText(/Choose an introducer/)).toBeInTheDocument();
     expect(onSubmitAdd).not.toHaveBeenCalled();
   });
+
+  it("skips the introducer field and calls onSubmitAddRoot when the directory is empty", async () => {
+    const user = userEvent.setup();
+    const onSubmitAdd = vi.fn();
+    const onSubmitAddRoot = vi.fn().mockResolvedValue({ ...MEMBER, introducerMemberId: null });
+    const onSaved = vi.fn();
+    render(
+      <MemberModal
+        open
+        onOpenChange={() => {}}
+        mode="add"
+        noMembersYet
+        onSubmitAdd={onSubmitAdd}
+        onSubmitAddRoot={onSubmitAddRoot}
+        onSearchRef={async () => [REF_RESULT]}
+        onSaved={onSaved}
+      />,
+    );
+
+    expect(screen.queryByLabelText(/Introducer \*/)).not.toBeInTheDocument();
+
+    await fillRequiredFields(user);
+    await user.click(screen.getByLabelText(/consented/));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSubmitAddRoot).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Asha Patel", consentGiven: true }),
+      ),
+    );
+    expect(onSubmitAdd).not.toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalled();
+  });
 });
 
 describe("MemberModal — edit mode", () => {

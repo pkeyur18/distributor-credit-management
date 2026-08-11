@@ -10,6 +10,7 @@ pub mod error;
 pub mod m1_members;
 pub mod m2_entries;
 pub mod m3_calc;
+pub mod m4_search;
 pub mod m8_auth;
 pub mod paths;
 pub mod session;

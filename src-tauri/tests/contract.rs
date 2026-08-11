@@ -179,6 +179,9 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
         "edit_entry",
         "lock_session",
         "unlock_session",
+        "get_member_detail",
+        "get_direct_children_chart",
+        "use_recovery_code",
     ];
     for &name in ALL_COMMAND_NAMES
         .iter()
@@ -393,6 +396,57 @@ fn search_members_end_to_end_through_the_command_layer() {
     )
     .unwrap();
     assert!(results.iter().any(|r| r.id == root.id));
+}
+
+// US-M4.1/M4.2 (S8) command-layer wiring.
+
+#[test]
+fn get_member_detail_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result =
+        commands::get_member_detail(app.state::<SessionState>(), app.state::<DbState>(), 1);
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn get_direct_children_chart_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::get_direct_children_chart(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        None,
+        false,
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn get_member_detail_and_get_direct_children_chart_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876599905"),
+    )
+    .unwrap();
+
+    let detail =
+        commands::get_member_detail(app.state::<SessionState>(), app.state::<DbState>(), root.id)
+            .unwrap();
+    assert_eq!(detail.member.id, root.id);
+    assert_eq!(detail.leg_count, 0);
+
+    // `member_id: None` resolves to the (only) root member.
+    let chart = commands::get_direct_children_chart(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        None,
+        false,
+    )
+    .unwrap();
+    assert_eq!(chart.nodes[0].member_id, root.id);
+    assert_eq!(chart.slab_table.len(), 7);
 }
 
 // US-M8.1/M8.2 (S5) command-layer wiring — the business logic itself
@@ -714,4 +768,48 @@ fn unlock_session_with_the_wrong_pin_stays_locked_not_authenticated() {
         app.state::<SessionState>().is_locked(),
         "a failed unlock attempt must leave the session locked, not signed all the way out"
     );
+}
+
+// US-M8.4 (S8) command-layer wiring. `use_recovery_code`'s own business
+// logic (envelope crypto, single-use, master-key reuse) is exhaustively
+// covered by `m8_auth`'s own unit tests — this proves it's callable with no
+// session (it's in the unauthenticated seven) and that the new credential
+// it sets actually opens the database afterward.
+#[test]
+fn use_recovery_code_end_to_end_through_the_command_layer() {
+    let (app, _dir) = app_with_temp_paths("use-recovery-code");
+    let setup = commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+
+    let result = commands::use_recovery_code(
+        app.state::<AppPaths>(),
+        bvconsole_lib::m8_auth::UseRecoveryCodeInput {
+            code: setup.recovery_codes[0].clone(),
+            new_pin: Some("111222".into()),
+            new_password: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(result.recovery_codes.len(), 10);
+
+    app.state::<SessionState>().clear();
+    commands::login(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        CredentialInput {
+            pin: Some("111222".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    assert!(app.state::<SessionState>().is_authenticated());
 }

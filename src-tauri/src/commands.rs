@@ -8,6 +8,7 @@ use crate::db_state::DbState;
 use crate::error::AppError;
 use crate::m1_members;
 use crate::m2_entries;
+use crate::m4_search;
 use crate::m8_auth;
 use crate::paths::AppPaths;
 use crate::session::{require_locked, require_session, SessionState};
@@ -172,8 +173,38 @@ auth_stub!(get_period_lock_status);
 auth_stub!(preview_settings_impact);
 
 // M4 — US-M4.1/M4.2, S8; US-M4.3, S9.
-auth_stub!(get_member_detail);
-auth_stub!(get_direct_children_chart);
+
+#[tauri::command]
+pub fn get_member_detail(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    member_id: i64,
+) -> Result<m4_search::MemberDetail, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m4_search::get_member_detail(conn, member_id)
+}
+
+/// API-11. `full_tree: true` is US-M4.3's parameter, implemented here
+/// because Home's slab-distribution charts (US-M4.4, same sprint) are the
+/// first caller that needs it — see `m4_search`'s own doc comment.
+#[tauri::command]
+pub fn get_direct_children_chart(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    member_id: Option<i64>,
+    full_tree: bool,
+) -> Result<m4_search::DirectChildrenChartResult, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m4_search::get_direct_children_chart(conn, member_id, full_tree)
+}
 
 // M5 — US-M5.1..M5.5, S11-S13.
 auth_stub!(get_outstanding_periods);
@@ -294,7 +325,17 @@ pub fn login(
     Ok(())
 }
 
-open_stub!(use_recovery_code); // US-M8.4, S8
+/// API-30 — unauthenticated (the credential store isn't readable without
+/// it), same as `login`/`setup_first_run`. Deliberately doesn't touch
+/// `session`/`db` — it only resets the credential; the operator signs in
+/// normally afterward through the ordinary `login` path.
+#[tauri::command]
+pub fn use_recovery_code(
+    paths: tauri::State<'_, AppPaths>,
+    input: m8_auth::UseRecoveryCodeInput,
+) -> Result<m8_auth::UseRecoveryCodeResult, AppError> {
+    m8_auth::use_recovery_code(&paths.auth_path, input)
+}
 
 /// API-34 — minimal slice pulled forward from US-M8.6 (S14): whether the
 /// sidecar credential file exists is exactly "has this machine been set up
@@ -327,8 +368,6 @@ pub fn call_stub_by_name(
     match name {
         "get_period_lock_status" => get_period_lock_status(session),
         "preview_settings_impact" => preview_settings_impact(session),
-        "get_member_detail" => get_member_detail(session),
-        "get_direct_children_chart" => get_direct_children_chart(session),
         "get_outstanding_periods" => get_outstanding_periods(session),
         "begin_close" => begin_close(session),
         "confirm_backup_and_close" => confirm_backup_and_close(session),
@@ -348,7 +387,6 @@ pub fn call_stub_by_name(
         "get_outstanding_alert" => get_outstanding_alert(session),
         "run_console_backup_now" => run_console_backup_now(session),
         "get_audit_log" => get_audit_log(session),
-        "use_recovery_code" => use_recovery_code(),
         "list_restore_points" => list_restore_points(),
         "restore_from_backup" => restore_from_backup(),
         "restore_from_backup_file" => restore_from_backup_file(),
@@ -376,13 +414,16 @@ mod tests {
             "check_data_readable",
             "lock_session",
             "unlock_session",
+            "get_member_detail",
+            "get_direct_children_chart",
+            "use_recovery_code",
         ];
         let stub_names: Vec<&str> = ALL_COMMAND_NAMES
             .iter()
             .copied()
             .filter(|n| !HAS_REAL_LOGIC.contains(n))
             .collect();
-        assert_eq!(stub_names.len(), 27);
+        assert_eq!(stub_names.len(), 24);
         // Exercised properly (with real State fixtures) in tests/contract.rs;
         // this just proves the dispatcher doesn't panic on any known name.
     }

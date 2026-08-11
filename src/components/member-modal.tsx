@@ -8,11 +8,13 @@ import { Pill } from "@/components/ui/pill";
 import { SearchResultsList } from "@/components/search-results-list";
 import {
   addMember,
+  createRootMember,
   editMember,
   reactivateMember,
   searchMembers,
   type AddMemberInput,
   type AddMemberOutcome,
+  type CreateRootMemberInput,
   type EditMemberInput,
 } from "@/lib/ipc/m1-members";
 import type { Member, SearchResult } from "@/lib/ipc/entities";
@@ -42,7 +44,13 @@ interface MemberModalProps {
   mode: "add" | "edit";
   /** Required when `mode` is "edit". */
   member?: EditableMember;
+  /** `mode: "add"` when the directory is genuinely empty — `create_root_member`
+   *  (API-01) is callable exactly once and takes no introducer (AC-7). There
+   *  is no other route to onboard the first member: `add_member` always
+   *  requires one. */
+  noMembersYet?: boolean;
   onSubmitAdd?: (input: AddMemberInput) => Promise<AddMemberOutcome>;
+  onSubmitAddRoot?: (input: CreateRootMemberInput) => Promise<Member>;
   onSubmitEdit?: (input: EditMemberInput) => Promise<Member>;
   onSubmitReactivate?: (id: number) => Promise<void>;
   onSearchRef?: (query: string) => Promise<SearchResult[]>;
@@ -62,7 +70,9 @@ function MemberModal({
   onOpenChange,
   mode,
   member,
+  noMembersYet = false,
   onSubmitAdd = addMember,
+  onSubmitAddRoot = createRootMember,
   onSubmitEdit = editMember,
   onSubmitReactivate = reactivateMember,
   onSearchRef = (q) => searchMembers(q, true),
@@ -168,6 +178,19 @@ function MemberModal({
           address: form.address,
         });
         onSaved?.(updated);
+        handleOpenChange(false);
+        return;
+      }
+
+      if (noMembersYet) {
+        const root = await onSubmitAddRoot({
+          name: form.name,
+          phone: form.phone,
+          email: form.email.trim() || undefined,
+          address: form.address,
+          consentGiven: form.consentGiven,
+        });
+        onSaved?.(root);
         handleOpenChange(false);
         return;
       }
@@ -295,6 +318,11 @@ function MemberModal({
                 {member?.introducerMemberId ? `#${member.introducerMemberId}` : "None (root member)"}
               </p>
               <InputHint>Fixed at creation — never changes (Rule-37).</InputHint>
+            </div>
+          ) : noMembersYet ? (
+            <div>
+              <span className="text-label mb-1 block">Introducer</span>
+              <p className="text-body text-muted-text">None — this is the first member.</p>
             </div>
           ) : !isReactivating ? (
             <div>
