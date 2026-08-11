@@ -11,6 +11,7 @@
 //! into D's 1,250". Modelling D (and its five siblings) as leaves with
 //! `own_bv` equal to that TBV is behaviourally identical for A's rollup.
 
+#[derive(Clone, Copy)]
 pub struct MemberFixture {
     // Read by S6's engine test (T-M3.1-8) once it exists; unused by this
     // sprint's structural self-checks, which only need the BV numbers.
