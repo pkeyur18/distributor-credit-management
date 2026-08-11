@@ -1,14 +1,35 @@
-import { NavLink } from "react-router";
+import { NavLink, useNavigate } from "react-router";
 import { Moon, Sun, Monitor, Lock, LogOut } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav";
 import { useTheme } from "@/lib/use-theme";
+import { useAuth } from "@/lib/auth-context";
+import { lockSession } from "@/lib/ipc/m8-auth";
 
 const THEME_CYCLE = { light: "dark", dark: "system", system: "light" } as const;
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor } as const;
 
+// US-M8.3 (S7): both buttons call the same `lock_session` command — there
+// is no separate "log out" primitive in the backend, only locked vs.
+// authenticated (`session.rs`). They differ only in which screen the
+// frontend routes to afterwards: Lock offers the PIN/password "resume"
+// screen, Sign out goes straight back to a full Login.
 export function Sidebar() {
   const [theme, setTheme] = useTheme();
   const ThemeIcon = THEME_ICON[theme];
+  const { markLocked, markSignedOut } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleLock() {
+    await lockSession();
+    markLocked();
+    navigate("/auth/locked", { replace: true });
+  }
+
+  async function handleSignOut() {
+    await lockSession();
+    markSignedOut();
+    navigate("/auth/login", { replace: true });
+  }
 
   return (
     <aside className="flex h-full w-[236px] flex-col border-r border-border bg-surface">
@@ -50,6 +71,7 @@ export function Sidebar() {
         </button>
         <button
           type="button"
+          onClick={handleLock}
           className="flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] text-ink hover:bg-bg"
         >
           <Lock className="h-4 w-4 opacity-75" />
@@ -57,6 +79,7 @@ export function Sidebar() {
         </button>
         <button
           type="button"
+          onClick={handleSignOut}
           className="flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] text-ink hover:bg-bg"
         >
           <LogOut className="h-4 w-4 opacity-75" />

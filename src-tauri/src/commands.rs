@@ -7,9 +7,10 @@
 use crate::db_state::DbState;
 use crate::error::AppError;
 use crate::m1_members;
+use crate::m2_entries;
 use crate::m8_auth;
 use crate::paths::AppPaths;
-use crate::session::{require_session, SessionState};
+use crate::session::{require_locked, require_session, SessionState};
 
 // An authenticated session implies an open database connection: nothing in
 // S4 ever gets past `require_session` without one, since nothing sets the
@@ -135,8 +136,36 @@ pub fn search_members(
 }
 
 // M2 — US-M2.1/M2.2, S7; US-M2.3/M2.4, S12.
-auth_stub!(record_entry);
-auth_stub!(edit_entry);
+
+#[tauri::command]
+pub fn record_entry(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    input: m2_entries::RecordEntryInput,
+) -> Result<m2_entries::BusinessVolumeEntry, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m2_entries::record_entry(conn, input)
+}
+
+#[tauri::command]
+pub fn edit_entry(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    paths: tauri::State<'_, AppPaths>,
+    input: m2_entries::EditEntryInput,
+) -> Result<m2_entries::BusinessVolumeEntry, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m2_entries::edit_entry(conn, &paths.db_path, &paths.backups_dir, input)
+}
+
 auth_stub!(get_period_lock_status);
 
 // M3 — US-M3.1/M3.2, S6.
@@ -169,8 +198,46 @@ auth_stub!(get_console_backup_settings);
 auth_stub!(update_console_backup_settings);
 
 // M8 remainder — US-M8.2/M8.3, S5/S7; US-M8.5, S14.
-auth_stub!(lock_session);
-auth_stub!(unlock_session);
+
+/// API-28. ⚠️ T-M8.3-1: the encryption key must be genuinely dropped, not
+/// merely hidden behind an overlay — dropping the open `Connection` here
+/// does that, since SQLCipher's derived key lives inside it. Idempotent
+/// (calling it twice just drops an already-empty slot) and not audited,
+/// matching the API table.
+#[tauri::command]
+pub fn lock_session(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<(), AppError> {
+    require_session(&session)?;
+    *locked_conn(&db) = None;
+    session.mark_locked();
+    Ok(())
+}
+
+/// API-29: "Same as `login`" for verification, but gated on
+/// `require_locked` rather than `require_session` — see `session.rs`'s doc
+/// comment for why `require_session` would be a deadlock here. Re-derives
+/// the master key and reopens the connection exactly like `login`, since
+/// `lock_session` genuinely closed the previous one.
+#[tauri::command]
+pub fn unlock_session(
+    paths: tauri::State<'_, AppPaths>,
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    input: m8_auth::CredentialInput,
+) -> Result<(), AppError> {
+    require_locked(&session)?;
+    let master_key = m8_auth::login(&paths.auth_path, input)?;
+    let conn = crate::db::open_encrypted(
+        &paths.db_path,
+        &m8_auth::crypto::sqlcipher_raw_key_pragma(&master_key),
+    )?;
+    *locked_conn(&db) = Some(conn);
+    session.mark_authenticated();
+    Ok(())
+}
+
 auth_stub!(get_outstanding_alert);
 auth_stub!(run_console_backup_now);
 
@@ -246,19 +313,18 @@ open_stub!(restore_from_backup_file); // US-M8.6, S14
 pub use crate::command_names::{ALL_COMMAND_NAMES, UNAUTHENTICATED_COMMAND_NAMES};
 
 /// QA.2's contract test needs to exercise the remaining stub commands
-/// generically by name — `create_root_member`/`add_member` (M1.1) and
-/// `setup_first_run`/`login`/`check_data_readable` (M8.1/M8.2, S5) all have
-/// real logic now and their own dedicated tests instead (see
-/// `tests/contract.rs`). Rust has no runtime reflection to call a function
-/// by string, so this is the one place that enumerates the match by hand;
-/// `ALL_COMMAND_NAMES` is what keeps it honest against gaps.
+/// generically by name — `create_root_member`/`add_member` (M1.1),
+/// `setup_first_run`/`login`/`check_data_readable` (M8.1/M8.2, S5), and
+/// `record_entry`/`edit_entry`/`lock_session`/`unlock_session` (M2.1/M2.2/
+/// M8.3, S7) all have real logic now and their own dedicated tests instead
+/// (see `tests/contract.rs`). Rust has no runtime reflection to call a
+/// function by string, so this is the one place that enumerates the match
+/// by hand; `ALL_COMMAND_NAMES` is what keeps it honest against gaps.
 pub fn call_stub_by_name(
     name: &str,
     session: tauri::State<'_, SessionState>,
 ) -> Result<serde_json::Value, AppError> {
     match name {
-        "record_entry" => record_entry(session),
-        "edit_entry" => edit_entry(session),
         "get_period_lock_status" => get_period_lock_status(session),
         "preview_settings_impact" => preview_settings_impact(session),
         "get_member_detail" => get_member_detail(session),
@@ -279,8 +345,6 @@ pub fn call_stub_by_name(
         "update_slab_row" => update_slab_row(session),
         "get_console_backup_settings" => get_console_backup_settings(session),
         "update_console_backup_settings" => update_console_backup_settings(session),
-        "lock_session" => lock_session(session),
-        "unlock_session" => unlock_session(session),
         "get_outstanding_alert" => get_outstanding_alert(session),
         "run_console_backup_now" => run_console_backup_now(session),
         "get_audit_log" => get_audit_log(session),
@@ -305,16 +369,20 @@ mod tests {
             "deactivate_member",
             "reactivate_member",
             "search_members",
+            "record_entry",
+            "edit_entry",
             "setup_first_run",
             "login",
             "check_data_readable",
+            "lock_session",
+            "unlock_session",
         ];
         let stub_names: Vec<&str> = ALL_COMMAND_NAMES
             .iter()
             .copied()
             .filter(|n| !HAS_REAL_LOGIC.contains(n))
             .collect();
-        assert_eq!(stub_names.len(), 31);
+        assert_eq!(stub_names.len(), 27);
         // Exercised properly (with real State fixtures) in tests/contract.rs;
         // this just proves the dispatcher doesn't panic on any known name.
     }

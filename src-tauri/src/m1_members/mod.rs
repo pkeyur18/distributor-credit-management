@@ -586,11 +586,9 @@ pub struct SearchResult {
     pub id: i64,
     pub name: String,
     pub phone: String,
-    // M3 (S6) and M2 (S7) don't exist yet, so `member_period_totals` is
-    // always empty today — every result reads 0 until then. The query
-    // reads whatever's there rather than special-casing "no engine yet", so
-    // real figures appear automatically once those sprints land, with no
-    // change needed here.
+    // `member_period_totals` is populated as of S6/S7 (M3/M2) — the query
+    // always read whatever's there rather than special-casing "no engine
+    // yet", so real figures started appearing with no change needed here.
     pub total_business_volume: f64,
     pub slab_pct: f64,
     pub is_active: bool,
@@ -662,8 +660,15 @@ pub fn search_members(
             id: member.id,
             name: member.name,
             phone: member.phone,
+            // ADR-004's ×100 convention applies to money figures — TBV is
+            // one, so it converts here. `slab_pct` is a plain percentage
+            // (m3_calc::engine's own scale: 4 means "4%", never ×100) and
+            // must not be divided again; doing so silently misdisplayed
+            // every slab this sprint, invisible until now because
+            // `member_period_totals` was always empty before M3/M2 (S6/S7)
+            // existed to populate it.
             total_business_volume: tbv as f64 / 100.0,
-            slab_pct: slab_pct as f64 / 100.0,
+            slab_pct: slab_pct as f64,
             is_active: member.is_active,
             email: member.email,
             address: member.address,
@@ -1351,6 +1356,37 @@ mod tests {
         let results = search_members(&conn, "top mem", false).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "Top Member");
+    }
+
+    #[test]
+    fn search_result_converts_tbv_from_fixed_point_but_leaves_slab_pct_as_a_plain_percentage() {
+        // Regression: `total_business_volume` is ADR-004's ×100 money
+        // figure and must be divided by 100 for display; `slab_pct` is
+        // already a plain percentage (m3_calc::engine's own scale — 4
+        // means "4%") and must not be divided again. Both were divided
+        // identically until this test, invisible until S6/S7 (M3/M2)
+        // existed to populate `member_period_totals` at all.
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        conn.execute(
+            "INSERT INTO periods (period_month, status) VALUES ('2026-08', 'open')",
+            [],
+        )
+        .unwrap();
+        let period_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO member_period_totals
+                (member_id, period_id, business_volume, total_business_volume, slab_pct,
+                 differential, royalty, own_reward, rewards)
+             VALUES (?1, ?2, 123456, 123456, 8, 0, 0, 0, 0)",
+            rusqlite::params![root.id, period_id],
+        )
+        .unwrap();
+
+        let results = search_members(&conn, "Top Member", false).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].total_business_volume, 1234.56);
+        assert_eq!(results[0].slab_pct, 8.0);
     }
 
     #[test]

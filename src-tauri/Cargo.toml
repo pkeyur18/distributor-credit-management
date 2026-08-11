@@ -33,6 +33,10 @@ chrono = { version = "0.4.42", default-features = false, features = ["clock"] }
 # credential-derived SQLCipher key directly, is required.
 argon2 = "0.5.3"
 aes-gcm = "0.10.3"
+# US-M2.2 (S7): checksums the internal-retained backup copy written on a
+# closed-month correction (`backup::write_backup_copy`) — S11/S14 reuse the
+# same helper for the close backup and console backup respectively.
+sha2 = "0.10.9"
 
 [dev-dependencies]
 proptest = "1.8.0"

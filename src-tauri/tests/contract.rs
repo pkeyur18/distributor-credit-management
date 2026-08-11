@@ -11,18 +11,33 @@ use bvconsole_lib::db;
 use bvconsole_lib::db_state::DbState;
 use bvconsole_lib::error::AppError;
 use bvconsole_lib::m1_members::{AddMemberInput, AddMemberOutcome, CreateRootMemberInput};
+use bvconsole_lib::m2_entries::{EditEntryInput, RecordEntryInput};
 use bvconsole_lib::m8_auth::{CredentialInput, SetupFirstRunInput};
 use bvconsole_lib::paths::AppPaths;
 use bvconsole_lib::session::SessionState;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
+/// `edit_entry` always takes an `AppPaths` parameter (its closed-period
+/// path copies a real file), so every caller needs one managed even when a
+/// given test only ever exercises the open-period branch. The directory is
+/// leaked rather than threaded through every existing caller's return type
+/// — harmless for a test-only temp dir, and the OS reclaims it eventually.
 fn app_with_seeded_db() -> tauri::App<tauri::test::MockRuntime> {
     let app = tauri::test::mock_app();
     app.manage(SessionState::new());
     app.manage(DbState::with_connection(
         db::open_seeded_in_memory().unwrap(),
     ));
+    let dir = TempAppDir::new("seeded-db");
+    let backups_dir = dir.0.join("backups");
+    std::fs::create_dir_all(&backups_dir).unwrap();
+    app.manage(AppPaths {
+        db_path: dir.0.join("console.db"),
+        auth_path: dir.0.join("auth.json"),
+        backups_dir,
+    });
+    std::mem::forget(dir);
     app
 }
 
@@ -34,11 +49,15 @@ fn app_with_seeded_db() -> tauri::App<tauri::test::MockRuntime> {
 struct TempAppDir(std::path::PathBuf);
 impl TempAppDir {
     fn new(label: &str) -> Self {
+        // Nanos alone can collide between parallel test threads; a
+        // process-wide counter alongside it makes every dir unique.
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let unique = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("bvconsole-contract-{label}-{nanos}"));
+        let dir = std::env::temp_dir().join(format!("bvconsole-contract-{label}-{nanos}-{unique}"));
         std::fs::create_dir_all(&dir).unwrap();
         Self(dir)
     }
@@ -54,9 +73,12 @@ fn app_with_temp_paths(label: &str) -> (tauri::App<tauri::test::MockRuntime>, Te
     let app = tauri::test::mock_app();
     app.manage(SessionState::new());
     app.manage(DbState::new());
+    let backups_dir = dir.0.join("backups");
+    std::fs::create_dir_all(&backups_dir).unwrap();
     app.manage(AppPaths {
         db_path: dir.0.join("console.db"),
         auth_path: dir.0.join("auth.json"),
+        backups_dir,
     });
     (app, dir)
 }
@@ -138,10 +160,11 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
     let session = app.state::<SessionState>();
 
     // create_root_member/add_member (M1.1), edit_member/deactivate_member/
-    // reactivate_member/search_members (M1.2/M1.3/M1.4, S5) and
-    // setup_first_run/login/check_data_readable (M8.1/M8.2, S5) have real
-    // logic and their own dedicated tests below — this loop covers the
-    // remaining 31 stub commands via `call_stub_by_name`.
+    // reactivate_member/search_members (M1.2/M1.3/M1.4, S5),
+    // setup_first_run/login/check_data_readable (M8.1/M8.2, S5) and
+    // record_entry/edit_entry/lock_session/unlock_session (M2.1/M2.2/M8.3,
+    // S7) have real logic and their own dedicated tests below — this loop
+    // covers the remaining stub commands via `call_stub_by_name`.
     const HAS_REAL_LOGIC: &[&str] = &[
         "create_root_member",
         "add_member",
@@ -152,6 +175,10 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
         "setup_first_run",
         "login",
         "check_data_readable",
+        "record_entry",
+        "edit_entry",
+        "lock_session",
+        "unlock_session",
     ];
     for &name in ALL_COMMAND_NAMES
         .iter()
@@ -497,4 +524,194 @@ fn login_with_the_wrong_pin_never_authenticates() {
     .unwrap_err();
     assert!(matches!(err, AppError::InvalidCredential { .. }));
     assert!(!app.state::<SessionState>().is_authenticated());
+}
+
+// US-M2.1/M2.2 (S7) command-layer wiring — business logic is covered
+// exhaustively in m2_entries::tests; this proves the session gate applies
+// and that the command layer reaches the real module correctly.
+
+#[test]
+fn record_entry_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::record_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        RecordEntryInput {
+            member_id: 1,
+            amount: 1_000,
+            entry_date: "2026-08-15".into(),
+        },
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn edit_entry_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::edit_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        app.state::<AppPaths>(),
+        EditEntryInput {
+            id: 1,
+            amount: 1_000,
+            entry_date: "2026-08-15".into(),
+        },
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn record_entry_and_edit_entry_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876511111"),
+    )
+    .unwrap();
+
+    let entry = commands::record_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        RecordEntryInput {
+            member_id: root.id,
+            amount: 100_000,
+            entry_date: "2026-08-15".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(entry.period_month, "2026-08");
+
+    let updated = commands::edit_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        app.state::<AppPaths>(),
+        EditEntryInput {
+            id: entry.id,
+            amount: 250_000,
+            entry_date: "2026-08-15".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(updated.amount, 250_000);
+}
+
+// US-M8.3 (S7) — proves the deadlock `session.rs`'s doc comment describes
+// cannot happen: `unlock_session` must stay reachable after `lock_session`
+// clears the normal `Auth` gate, and every other authenticated command must
+// refuse while locked.
+
+#[test]
+fn lock_session_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::lock_session(app.state::<SessionState>(), app.state::<DbState>());
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn unlock_session_is_unreachable_before_anything_has_ever_locked() {
+    let (app, _dir) = app_with_temp_paths("unlock-fresh");
+    let result = commands::unlock_session(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        CredentialInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn lock_then_unlock_round_trips_back_to_an_authenticated_session_with_a_usable_database() {
+    let (app, _dir) = app_with_temp_paths("lock-unlock");
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876522222"),
+    )
+    .unwrap();
+
+    commands::lock_session(app.state::<SessionState>(), app.state::<DbState>()).unwrap();
+    assert!(!app.state::<SessionState>().is_authenticated());
+    assert!(
+        app.state::<DbState>().0.lock().unwrap().is_none(),
+        "lock_session must genuinely drop the open connection, not just the session flag"
+    );
+
+    // Every other authenticated command refuses while locked.
+    let blocked = commands::search_members(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        "any".into(),
+        None,
+    );
+    assert!(matches!(blocked, Err(AppError::AuthRequired)));
+
+    commands::unlock_session(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        CredentialInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    assert!(app.state::<SessionState>().is_authenticated());
+
+    // Same database — the root created before locking is still there.
+    let second_root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876533333"),
+    );
+    assert!(matches!(second_root, Err(AppError::Conflict { .. })));
+    let _ = root;
+}
+
+#[test]
+fn unlock_session_with_the_wrong_pin_stays_locked_not_authenticated() {
+    let (app, _dir) = app_with_temp_paths("unlock-wrong-pin");
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    commands::lock_session(app.state::<SessionState>(), app.state::<DbState>()).unwrap();
+
+    let err = commands::unlock_session(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        CredentialInput {
+            pin: Some("000000".into()),
+            password: None,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(err, AppError::InvalidCredential { .. }));
+    assert!(!app.state::<SessionState>().is_authenticated());
+    assert!(
+        app.state::<SessionState>().is_locked(),
+        "a failed unlock attempt must leave the session locked, not signed all the way out"
+    );
 }

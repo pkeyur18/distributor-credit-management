@@ -34,3 +34,7 @@ src-tauri/gen
 *.db
 *.db-shm
 *.db-wal
+
+# T-QA.3-4: per-run E2E failure screenshots, not committed
+e2e/screenshots/*
+!e2e/screenshots/.gitkeep
