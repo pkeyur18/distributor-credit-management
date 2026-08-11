@@ -421,8 +421,15 @@ fn write_field_audit(
     Ok(())
 }
 
+// V1.8: "any attempt to change an introducer → refuse outright." `deny_
+// unknown_fields` is what makes that literally true against a raw IPC call
+// bypassing the TS wrapper (e.g. a hand-crafted `invoke("edit_member", {
+// introducerMemberId: ... })`) — without it, serde's default behaviour is
+// to silently ignore a field this struct doesn't declare, which is "has no
+// effect," not "refuses." With it, the field has nowhere to land *and*
+// the attempt itself is rejected before this function ever runs.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditMemberInput {
     pub id: i64,
     pub name: Option<String>,
@@ -431,8 +438,6 @@ pub struct EditMemberInput {
     // `null` -> Some(None) (clear it); a string -> Some(Some(..)) (set it).
     pub email: Option<Option<String>>,
     pub address: Option<String>,
-    // Deliberately no `introducer_member_id` field at all (Rule-37) — the
-    // introducer isn't merely ignored if sent, it has nowhere to land.
 }
 
 /// API-03. `input.email`'s tri-state and the complete absence of an
@@ -1065,6 +1070,20 @@ mod tests {
 
         let reloaded = find_member(&conn, child.id).unwrap();
         assert_eq!(reloaded.introducer_member_id, Some(root.id));
+    }
+
+    #[test]
+    fn a_raw_edit_payload_naming_an_introducer_is_refused_outright() {
+        // V1.8: "any attempt to change an introducer → refuse outright" —
+        // exercised at the deserialization boundary, since that's where a
+        // hand-crafted IPC call (bypassing the TS wrapper, which has no
+        // field for this either) would try to sneak the value in.
+        let raw = r#"{"id":1,"name":"X","introducerMemberId":999999}"#;
+        let result: Result<EditMemberInput, _> = serde_json::from_str(raw);
+        assert!(
+            result.is_err(),
+            "an unknown introducerMemberId field must be refused, not ignored"
+        );
     }
 
     #[test]
