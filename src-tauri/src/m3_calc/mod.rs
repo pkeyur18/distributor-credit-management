@@ -145,17 +145,48 @@ fn upsert_totals(
     Ok(())
 }
 
+fn walk_chain(
+    conn: &Connection,
+    chain: &[i64],
+    period_month: &str,
+    period_id: i64,
+    slabs: &[(i64, i64)],
+    royalty_min_children: i64,
+    royalty_rate_percent: i64,
+) -> Result<(), AppError> {
+    for &id in chain {
+        let business_volume = business_volume_of(conn, id, period_month)?;
+        let children = direct_children_figures(conn, id, period_id)?;
+        let figures = compute_node(
+            business_volume,
+            &children,
+            slabs,
+            royalty_min_children,
+            royalty_rate_percent,
+        );
+        upsert_totals(conn, id, period_id, business_volume, &figures)?;
+    }
+    Ok(())
+}
+
 /// ADR-005: on a Business Volume write against `member_id` within
 /// `period_id`, recompute only the chain from that member to the root —
 /// never the full tree (T-M3.2-1). Each node is written before its parent
 /// is computed, so the parent's read of that one changed child is already
 /// fresh; every other child is read as its already-correct cached figure
 /// from a prior write (T-M3.2-2 — still re-scanned in full at each
-/// ancestor, since the ancestor's own slab may have moved). The whole walk
-/// runs inside one transaction (T-M3.2-3): a crash partway through leaves
-/// every row untouched, never half-updated. Confined to `period_id`
-/// throughout (T-M3.2-4) — a member can hold rows for more than one
-/// not-yet-closed period, and this never reads or writes any other one.
+/// ancestor, since the ancestor's own slab may have moved). Confined to
+/// `period_id` throughout (T-M3.2-4) — a member can hold rows for more
+/// than one not-yet-closed period, and this never reads or writes any
+/// other one.
+///
+/// The whole walk is atomic (T-M3.2-3). API-08 requires "insert entry +
+/// recalc" to be *one* transaction, which means the future caller (M2's
+/// `record_entry`/`edit_entry`, S7; M5's correction path, S12) opens that
+/// transaction and calls this from inside it — so this must never nest a
+/// second `BEGIN` of its own (SQLite refuses that outright). Called
+/// standalone, with no transaction already open, it owns one itself so
+/// the walk is still atomic on its own.
 pub fn recalculate_chain(
     conn: &Connection,
     member_id: i64,
@@ -167,20 +198,29 @@ pub fn recalculate_chain(
     let royalty_min_children = setting_i64(conn, "royalty_qualifying_count")?;
     let royalty_rate_percent = setting_i64(conn, "royalty_rate_percent")?;
 
-    let tx = conn.unchecked_transaction()?;
-    for id in chain {
-        let business_volume = business_volume_of(&tx, id, &period_month)?;
-        let children = direct_children_figures(&tx, id, period_id)?;
-        let figures = compute_node(
-            business_volume,
-            &children,
+    if conn.is_autocommit() {
+        let tx = conn.unchecked_transaction()?;
+        walk_chain(
+            &tx,
+            &chain,
+            &period_month,
+            period_id,
             &slabs,
             royalty_min_children,
             royalty_rate_percent,
-        );
-        upsert_totals(&tx, id, period_id, business_volume, &figures)?;
+        )?;
+        tx.commit()?;
+    } else {
+        walk_chain(
+            conn,
+            &chain,
+            &period_month,
+            period_id,
+            &slabs,
+            royalty_min_children,
+            royalty_rate_percent,
+        )?;
     }
-    tx.commit()?;
     Ok(())
 }
 
@@ -377,5 +417,40 @@ mod tests {
         let period = insert_period(&conn, "2026-08");
         let err = recalculate_chain(&conn, 999_999, period).unwrap_err();
         assert!(matches!(err, AppError::NotFound { .. }));
+    }
+
+    #[test]
+    fn composes_inside_a_callers_already_open_transaction() {
+        // API-08: "insert entry + recalc" must be one transaction — the
+        // future caller (record_entry, S7) opens it and calls this from
+        // inside it. Must not try to nest a second BEGIN (SQLite refuses
+        // that), and rolling back the caller's transaction must discard
+        // this function's writes too.
+        let mut conn = seeded();
+        let period = insert_period(&conn, "2026-08");
+        let root = insert_member(&conn, None);
+
+        let tx = conn.transaction().unwrap();
+        tx.execute(
+            "INSERT INTO business_volume_entries
+                (member_id, amount, entry_date, period_month, created_at)
+             VALUES (?1, 10000, '2026-08-15', '2026-08', '2026-08-15')",
+            [root],
+        )
+        .unwrap();
+        recalculate_chain(&tx, root, period).unwrap();
+        tx.rollback().unwrap();
+
+        let row_exists: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM member_period_totals WHERE member_id = ?1)",
+                [root],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            !row_exists,
+            "rolling back the caller's outer transaction must discard the recalculation too"
+        );
     }
 }
