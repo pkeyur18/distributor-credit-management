@@ -22,7 +22,7 @@ export interface RecordEntryInput {
 // API-08 — refused when the entry's own period is closed, or when it's the
 // current month while an earlier period is awaiting_close (Rule-36/V2.7).
 export function recordEntry(input: RecordEntryInput): Promise<BusinessVolumeEntry> {
-  return invokeCommand("record_entry", { ...input });
+  return invokeCommand("record_entry", { input });
 }
 
 export interface EditEntryInput {
@@ -34,5 +34,5 @@ export interface EditEntryInput {
 // API-09 — an open-period edit or a closed-month correction; closed months
 // write a new snapshot version, version 1 is never touched (Rule-39).
 export function editEntry(input: EditEntryInput): Promise<BusinessVolumeEntry> {
-  return invokeCommand("edit_entry", { ...input });
+  return invokeCommand("edit_entry", { input });
 }

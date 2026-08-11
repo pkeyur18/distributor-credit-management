@@ -11,7 +11,7 @@ export interface CreateRootMemberInput {
 
 // API-01
 export function createRootMember(input: CreateRootMemberInput): Promise<Member> {
-  return invokeCommand("create_root_member", { ...input });
+  return invokeCommand("create_root_member", { input });
 }
 
 export interface AddMemberInput extends CreateRootMemberInput {
@@ -28,7 +28,7 @@ export type AddMemberOutcome =
   | { status: "reactivation_offer"; existingMember: Member };
 
 export function addMember(input: AddMemberInput): Promise<AddMemberOutcome> {
-  return invokeCommand("add_member", { ...input });
+  return invokeCommand("add_member", { input });
 }
 
 export interface EditMemberInput {
@@ -41,7 +41,7 @@ export interface EditMemberInput {
 
 // API-03 — introducerMemberId is deliberately not an accepted field (Rule-37).
 export function editMember(input: EditMemberInput): Promise<Member> {
-  return invokeCommand("edit_member", { ...input });
+  return invokeCommand("edit_member", { input });
 }
 
 // API-04 — triggers no recalculation; is_active has zero computational effect.
