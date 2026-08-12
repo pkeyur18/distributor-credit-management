@@ -37,6 +37,8 @@ aes-gcm = "0.10.3"
 # closed-month correction (`backup::write_backup_copy`) — S11/S14 reuse the
 # same helper for the close backup and console backup respectively.
 sha2 = "0.10.9"
+# T-M7.4-5: the native file picker behind Settings' "Restore from a file…".
+tauri-plugin-dialog = "2.7.2"
 
 [dev-dependencies]
 proptest = "1.8.0"

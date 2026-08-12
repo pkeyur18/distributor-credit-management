@@ -224,6 +224,75 @@ pub fn recalculate_chain(
     Ok(())
 }
 
+fn current_open_period_id(conn: &Connection) -> Result<Option<i64>, AppError> {
+    let period_month = chrono::Local::now().format("%Y-%m").to_string();
+    Ok(conn
+        .query_row(
+            "SELECT id FROM periods WHERE period_month = ?1 AND status = 'open'",
+            [period_month],
+            |r| r.get(0),
+        )
+        .optional()?)
+}
+
+fn open_period_member_ids(conn: &Connection, period_id: i64) -> Result<Vec<i64>, AppError> {
+    let mut stmt =
+        conn.prepare("SELECT member_id FROM member_period_totals WHERE period_id = ?1")?;
+    let rows = stmt
+        .query_map([period_id], |r| r.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+fn recompute_open_period_rows(conn: &Connection, period_id: i64) -> Result<(), AppError> {
+    let period_month = period_month_of(conn, period_id)?;
+    let slabs = slab_table(conn)?;
+    let royalty_min_children = setting_i64(conn, "royalty_qualifying_count")?;
+    let royalty_rate_percent = setting_i64(conn, "royalty_rate_percent")?;
+
+    for id in open_period_member_ids(conn, period_id)? {
+        let business_volume = business_volume_of(conn, id, &period_month)?;
+        let children = direct_children_figures(conn, id, period_id)?;
+        let figures = compute_node(
+            business_volume,
+            &children,
+            &slabs,
+            royalty_min_children,
+            royalty_rate_percent,
+        );
+        upsert_totals(conn, id, period_id, business_volume, &figures)?;
+    }
+    Ok(())
+}
+
+/// T-M7.1-1/T-M7.2-2: a slab-table or royalty-setting change affects every
+/// member's slab-driven figures, not one ancestor chain, so
+/// `recalculate_chain` doesn't fit — this recomputes every row already
+/// present in the currently open calendar-month period. Order doesn't
+/// matter here the way it does for `recalculate_chain`: Rule-6's TBV
+/// formula never depends on the slab table or royalty settings, only on
+/// each member's own Business Volume (re-summed from entries, untouched by
+/// a settings edit) and its children's already-stored TBV — so every row
+/// can be recomputed independently from what's already on disk. If no
+/// period is currently open (nothing entered yet this calendar month),
+/// there is nothing to recompute — a no-op, not an error. Composes inside
+/// a caller-owned transaction exactly like `recalculate_chain`, since
+/// API-22 requires "write setting(s) + recalculate" as one transaction.
+pub fn recalculate_open_period(conn: &Connection) -> Result<(), AppError> {
+    let Some(period_id) = current_open_period_id(conn)? else {
+        return Ok(());
+    };
+
+    if conn.is_autocommit() {
+        let tx = conn.unchecked_transaction()?;
+        recompute_open_period_rows(&tx, period_id)?;
+        tx.commit()?;
+    } else {
+        recompute_open_period_rows(conn, period_id)?;
+    }
+    Ok(())
+}
+
 fn is_active_of(conn: &Connection, member_id: i64) -> Result<bool, AppError> {
     conn.query_row(
         "SELECT is_active FROM members WHERE id = ?1",
@@ -629,6 +698,135 @@ mod tests {
         assert!(
             !row_exists,
             "rolling back the caller's outer transaction must discard the recalculation too"
+        );
+    }
+
+    // --- recalculate_open_period (US-M7.1/M7.2, S10) ---
+
+    fn this_month() -> String {
+        chrono::Local::now().format("%Y-%m").to_string()
+    }
+
+    #[test]
+    fn no_open_period_is_a_silent_no_op() {
+        let conn = seeded();
+        recalculate_open_period(&conn).unwrap();
+    }
+
+    #[test]
+    fn a_slab_table_edit_is_reflected_on_the_next_recalculation() {
+        let conn = seeded();
+        let month = this_month();
+        let period = insert_period(&conn, &month);
+        let root = insert_member(&conn, None);
+        insert_entry(&conn, root, &month, 100_000); // ×100: 1,000.00
+        recalculate_chain(&conn, root, period).unwrap();
+        let (_, slab_before, _) = totals(&conn, root, period);
+        assert_eq!(slab_before, 4); // 40,000 <= 100,000 < 120,000
+
+        // Simulate T-M7.1-1's update_slab_row: move the 4% row's threshold
+        // above the member's TBV, same as the client's own worked example
+        // (moving 6% to 1,000 / 2% to 200).
+        conn.execute(
+            "UPDATE slab_table SET threshold = 200_000 WHERE percentage = 4",
+            [],
+        )
+        .unwrap();
+
+        recalculate_open_period(&conn).unwrap();
+
+        let (_, slab_after, _) = totals(&conn, root, period);
+        assert_eq!(
+            slab_after, 2,
+            "the member's slab must move with the edited table"
+        );
+    }
+
+    #[test]
+    fn a_royalty_setting_change_is_reflected_without_a_new_entry() {
+        let conn = seeded();
+        let month = this_month();
+        let period = insert_period(&conn, &month);
+        let parent = insert_member(&conn, None);
+        for _ in 0..3 {
+            let child = insert_member(&conn, Some(parent));
+            insert_entry(&conn, child, &month, 1_000_000); // ×100: 10,000.00 — top slab
+            recalculate_chain(&conn, child, period).unwrap();
+        }
+        let (_, _, rewards_before) = totals(&conn, parent, period);
+        assert!(
+            rewards_before > 0,
+            "3 qualifying children must already earn royalty"
+        );
+
+        conn.execute(
+            "UPDATE settings SET value = '10' WHERE key = 'royalty_qualifying_count'",
+            [],
+        )
+        .unwrap();
+
+        recalculate_open_period(&conn).unwrap();
+
+        let (_, _, rewards_after) = totals(&conn, parent, period);
+        assert_eq!(
+            rewards_after, 0,
+            "raising the qualifying count above 3 must drop royalty on the next recalculation"
+        );
+    }
+
+    #[test]
+    fn only_the_open_periods_rows_are_touched() {
+        let conn = seeded();
+        let closed_month = "2026-01";
+        let open_month = this_month();
+        let closed_period = insert_period(&conn, closed_month);
+        conn.execute(
+            "UPDATE periods SET status = 'closed' WHERE id = ?1",
+            [closed_period],
+        )
+        .unwrap();
+        let open_period = insert_period(&conn, &open_month);
+        let root = insert_member(&conn, None);
+        insert_entry(&conn, root, closed_month, 50_000);
+        recalculate_chain(&conn, root, closed_period).unwrap();
+        let before = totals(&conn, root, closed_period);
+
+        insert_entry(&conn, root, &open_month, 900_000);
+        recalculate_chain(&conn, root, open_period).unwrap();
+        conn.execute("UPDATE slab_table SET threshold = threshold + 1", [])
+            .unwrap();
+
+        recalculate_open_period(&conn).unwrap();
+
+        let after = totals(&conn, root, closed_period);
+        assert_eq!(
+            before, after,
+            "recalculating the open period must never touch a closed period's row"
+        );
+    }
+
+    #[test]
+    fn recalculate_open_period_composes_inside_a_callers_already_open_transaction() {
+        let mut conn = seeded();
+        let month = this_month();
+        let period = insert_period(&conn, &month);
+        let root = insert_member(&conn, None);
+        insert_entry(&conn, root, &month, 100_000);
+        recalculate_chain(&conn, root, period).unwrap();
+
+        let tx = conn.transaction().unwrap();
+        tx.execute(
+            "UPDATE slab_table SET threshold = 1 WHERE percentage = 14",
+            [],
+        )
+        .unwrap();
+        recalculate_open_period(&tx).unwrap();
+        tx.rollback().unwrap();
+
+        let (_, slab_after_rollback, _) = totals(&conn, root, period);
+        assert_eq!(
+            slab_after_rollback, 4,
+            "rolling back the caller's transaction must discard the recalculation too"
         );
     }
 

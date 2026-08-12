@@ -45,6 +45,7 @@
     "allow-check-data-readable",
     "allow-list-restore-points",
     "allow-restore-from-backup",
-    "allow-restore-from-backup-file"
+    "allow-restore-from-backup-file",
+    "dialog:allow-open"
   ]
 }

@@ -11,6 +11,7 @@ pub mod m1_members;
 pub mod m2_entries;
 pub mod m3_calc;
 pub mod m4_search;
+pub mod m7_settings;
 pub mod m8_auth;
 pub mod paths;
 pub mod session;
@@ -23,6 +24,9 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // T-M7.4-5: the native file picker behind Settings' "Restore from a
+        // file…" — an official Tauri plugin rather than hand-rolling one.
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             app.manage(AppPaths::resolve(app.handle())?);
             Ok(())
