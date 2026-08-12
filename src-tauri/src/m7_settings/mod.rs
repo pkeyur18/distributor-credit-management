@@ -416,6 +416,14 @@ pub fn update_settings(conn: &Connection, patch: SettingsPatch) -> Result<Settin
 
 const VALID_SCHEDULES: &[&str] = &["off", "daily", "weekly", "monthly"];
 
+// ponytail: `folder` round-trips through `settings` (row 16) but nothing
+// reads it back — `paths::AppPaths::resolve` writes to a hardcoded
+// `backups_dir`, resolved once at startup, never re-derived from this
+// value. Editing it here would silently do nothing, which is worse than
+// not offering the control at all — the Settings screen deliberately
+// doesn't expose an input for it (matching the approved prototype, which
+// has none either). Upgrade path: make `AppPaths` read this setting at
+// resolve time (or re-resolve per command) before wiring up an editor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConsoleBackupSettings {

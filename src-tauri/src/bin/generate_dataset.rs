@@ -83,6 +83,7 @@ struct Args {
     out: PathBuf,
     seed: u64,
     branching: usize,
+    max_depth: Option<usize>,
 }
 
 fn parse_args() -> Args {
@@ -90,6 +91,7 @@ fn parse_args() -> Args {
     let mut out: Option<PathBuf> = None;
     let mut seed = 42u64;
     let mut branching = 8usize;
+    let mut max_depth = None;
 
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -104,6 +106,14 @@ fn parse_args() -> Args {
                     .parse()
                     .unwrap()
             }
+            "--max-depth" => {
+                max_depth = Some(
+                    it.next()
+                        .expect("--max-depth needs a value")
+                        .parse()
+                        .unwrap(),
+                )
+            }
             other => panic!("unknown flag: {other}"),
         }
     }
@@ -113,6 +123,7 @@ fn parse_args() -> Args {
         out: out.expect("--out <path> is required"),
         seed,
         branching,
+        max_depth,
     }
 }
 
@@ -128,14 +139,44 @@ fn entries_per_month(member_count: usize) -> usize {
     }
 }
 
+fn add_child(
+    conn: &rusqlite::Connection,
+    rng: &mut StdRng,
+    next_phone: &mut impl FnMut() -> String,
+    introducer_id: i64,
+) -> i64 {
+    let outcome = m1_members::add_member(
+        conn,
+        AddMemberInput {
+            name: synthetic_name(rng),
+            phone: next_phone(),
+            address: synthetic_address(rng),
+            email: None,
+            consent_given: true,
+            introducer_member_id: introducer_id,
+        },
+    )
+    .expect("add_member");
+    let AddMemberOutcome::Created { member, .. } = outcome else {
+        panic!("a freshly generated phone number must never collide");
+    };
+    member.id
+}
+
+/// T-QA.5-1: configurable depth *and* branching. `max_depth` (1 = root
+/// only) caps how deep the tree grows — once reached, remaining members
+/// become extra children of the deepest-reached nodes instead (wider, not
+/// deeper), so `target_count` is still always met. `None` leaves depth
+/// unconstrained, growing only as deep as `branching` naturally requires.
 fn build_hierarchy(
     conn: &rusqlite::Connection,
     rng: &mut StdRng,
     target_count: usize,
     branching: usize,
+    max_depth: Option<usize>,
 ) -> Vec<i64> {
     let mut phone_counter: u64 = 0;
-    let mut next_phone = || {
+    let mut next_phone = move || {
         phone_counter += 1;
         synthetic_phone(phone_counter)
     };
@@ -153,33 +194,49 @@ fn build_hierarchy(
     .expect("create_root_member");
 
     let mut all_ids = vec![root.id];
-    let mut frontier = std::collections::VecDeque::from([root.id]);
+    let mut frontier = std::collections::VecDeque::from([(root.id, 1usize)]);
+    // Nodes one level *above* the cap — every child added to one of these
+    // lands exactly at `max_depth`, never deeper. The fallback below grows
+    // this level wider, never the tree taller.
+    let mut leaf_parents: Vec<i64> = Vec::new();
 
     while all_ids.len() < target_count {
-        let Some(introducer_id) = frontier.pop_front() else {
+        let Some((introducer_id, depth)) = frontier.pop_front() else {
             break;
         };
+        if max_depth.is_some_and(|cap| depth >= cap) {
+            continue; // terminal — this node never gets children, at any point
+        }
+        let child_depth = depth + 1;
+        let mut added_any_child = false;
         for _ in 0..branching {
             if all_ids.len() >= target_count {
                 break;
             }
-            let outcome = m1_members::add_member(
-                conn,
-                AddMemberInput {
-                    name: synthetic_name(rng),
-                    phone: next_phone(),
-                    address: synthetic_address(rng),
-                    email: None,
-                    consent_given: true,
-                    introducer_member_id: introducer_id,
-                },
-            )
-            .expect("add_member");
-            let AddMemberOutcome::Created { member, .. } = outcome else {
-                panic!("a freshly generated phone number must never collide");
-            };
-            all_ids.push(member.id);
-            frontier.push_back(member.id);
+            let child_id = add_child(conn, rng, &mut next_phone, introducer_id);
+            all_ids.push(child_id);
+            frontier.push_back((child_id, child_depth));
+            added_any_child = true;
+        }
+        if added_any_child && max_depth == Some(child_depth) {
+            leaf_parents.push(introducer_id);
+        }
+    }
+
+    // The depth cap stopped generation short of `target_count` — attach the
+    // rest as more children of the parents one level above the cap, so
+    // every new member still lands at exactly `max_depth`, never deeper.
+    if all_ids.len() < target_count {
+        assert!(
+            !leaf_parents.is_empty(),
+            "max_depth must allow at least one level below the root to reach target_count > 1"
+        );
+        let mut cursor = 0;
+        while all_ids.len() < target_count {
+            let introducer_id = leaf_parents[cursor % leaf_parents.len()];
+            let child_id = add_child(conn, rng, &mut next_phone, introducer_id);
+            all_ids.push(child_id);
+            cursor += 1;
         }
     }
 
@@ -234,7 +291,7 @@ fn main() {
         .expect("open_encrypted (fresh file, migrated and seeded)");
     let mut rng = StdRng::seed_from_u64(args.seed);
 
-    let member_ids = build_hierarchy(&conn, &mut rng, args.scale, args.branching);
+    let member_ids = build_hierarchy(&conn, &mut rng, args.scale, args.branching, args.max_depth);
     generate_entries(&conn, &mut rng, &member_ids);
 
     println!(
@@ -259,7 +316,7 @@ mod tests {
     fn generate(seed: u64, target_count: usize, branching: usize) -> rusqlite::Connection {
         let conn = db::open_seeded_in_memory().unwrap();
         let mut rng = StdRng::seed_from_u64(seed);
-        let ids = build_hierarchy(&conn, &mut rng, target_count, branching);
+        let ids = build_hierarchy(&conn, &mut rng, target_count, branching, None);
         generate_entries(&conn, &mut rng, &ids);
         conn
     }
@@ -305,6 +362,24 @@ mod tests {
         let b = generate(2, 20, 3);
 
         assert_ne!(sorted_member_names(&a), sorted_member_names(&b));
+    }
+
+    #[test]
+    fn max_depth_caps_the_tree_but_still_reaches_the_target_count() {
+        let conn = db::open_seeded_in_memory().unwrap();
+        let mut rng = StdRng::seed_from_u64(11);
+        // branching 2, depth 3 alone could reach at most 1+2+4 = 7 members —
+        // the remainder must land as extra breadth at the deepest level.
+        let ids = build_hierarchy(&conn, &mut rng, 30, 2, Some(3));
+
+        assert_eq!(ids.len(), 30);
+        let max_level: i64 = conn
+            .query_row("SELECT MAX(level) FROM members", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            max_level, 3,
+            "no member may sit deeper than the configured max depth"
+        );
     }
 
     #[test]
