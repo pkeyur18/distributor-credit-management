@@ -19,6 +19,7 @@ import {
 } from "@/lib/ipc/m5-close";
 import type { Period } from "@/lib/ipc/entities";
 import { monthLabel } from "@/lib/utils";
+import { useOutstandingAlert } from "@/lib/outstanding-alert-context";
 
 function errorMessage(raw: unknown): string {
   return toErrorPresentation(raw).message;
@@ -233,6 +234,7 @@ function CloseWizard({
 
 export function MonthlyClose() {
   const toast = useToast();
+  const { refresh: refreshAlert } = useOutstandingAlert();
   const [outstanding, setOutstanding] = useState<Period[] | null>(null);
   const [wizard, setWizard] = useState<{ period: Period; begun: BeginCloseResult } | null>(null);
   const [backingUp, setBackingUp] = useState(false);
@@ -243,6 +245,7 @@ export function MonthlyClose() {
     } catch (raw) {
       toast.add({ title: errorMessage(raw), type: "danger" });
     }
+    refreshAlert();
   }
 
   useEffect(() => {
