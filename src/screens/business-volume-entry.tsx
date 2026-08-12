@@ -5,15 +5,16 @@ import { Link, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Input, InputHint } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { AlertNote } from "@/components/ui/alert-note";
 import { SearchResultsList } from "@/components/search-results-list";
 import { useMemberSearch } from "@/lib/use-member-search";
 import { searchMembers } from "@/lib/ipc/m1-members";
-import { recordEntry } from "@/lib/ipc/m2-entries";
+import { recordEntry, getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
 import type { BusinessVolumeEntry as Entry } from "@/lib/ipc/entities";
 import type { SearchResult } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { useToast } from "@/components/ui/toast";
-import { centsToDisplay, displayToCents } from "@/lib/utils";
+import { centsToDisplay, displayToCents, monthLabel } from "@/lib/utils";
 
 function isoDate(d: Date) {
   const y = d.getFullYear();
@@ -22,13 +23,20 @@ function isoDate(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
-// T-M2.1-4: bounded to the recording month, defaulting to today. US-M2.3's
-// outstanding-month recording (S12) doesn't exist yet, so "the recording
-// month" is always the current calendar month for now.
-function currentMonthBounds() {
+function currentYm(): string {
   const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { min: isoDate(first), max: isoDate(now) };
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// T-M2.1-4/T-M2.3-4: bounded to the recording month. The current month
+// caps at today (can't record ahead of itself); an outstanding earlier
+// month is bounded by its own last calendar day.
+function monthBounds(ym: string) {
+  const [year, month] = ym.split("-").map(Number);
+  const first = new Date(year, month - 1, 1);
+  const last = new Date(year, month, 0);
+  const isCurrent = ym === currentYm();
+  return { min: isoDate(first), max: isoDate(isCurrent ? new Date() : last) };
 }
 
 // US-M2.1 (§5.4). T-M2.1-6's "this period's entries" list has no backing
@@ -41,13 +49,16 @@ export function BusinessVolumeEntry() {
   const [query, setQuery] = useState("");
   const { results } = useMemberSearch(query);
   const [selected, setSelected] = useState<SearchResult | null>(null);
-  const [date, setDate] = useState(() => currentMonthBounds().max);
+  const [lockStatus, setLockStatus] = useState<PeriodLockStatus | null>(null);
+  const recordingMonth = lockStatus?.recordablePeriodMonths[0] ?? currentYm();
+  const [date, setDate] = useState(() => monthBounds(recordingMonth).max);
   const [amountInput, setAmountInput] = useState("");
   const [amountError, setAmountError] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [sessionEntries, setSessionEntries] = useState<Entry[]>([]);
   const toast = useToast();
-  const bounds = currentMonthBounds();
+  const bounds = monthBounds(recordingMonth);
   const [searchParams] = useSearchParams();
 
   // T-M4.1-5: Member Detail's "Record volume" action opens this screen
@@ -61,6 +72,16 @@ export function BusinessVolumeEntry() {
     });
   }, [searchParams]);
 
+  // T-M2.3-2/T-M2.3-4: the recording month is whichever month is oldest
+  // recordable — an outstanding month while one exists, otherwise the
+  // current month — and the date field re-bounds to it.
+  useEffect(() => {
+    getPeriodLockStatus().then((status) => {
+      setLockStatus(status);
+      setDate(monthBounds(status.recordablePeriodMonths[0]).max);
+    });
+  }, []);
+
   const cents = displayToCents(amountInput);
   const canSave = !!selected && cents !== null && !saving;
 
@@ -68,6 +89,7 @@ export function BusinessVolumeEntry() {
     if (!selected || cents === null) return;
     setSaving(true);
     setAmountError(null);
+    setDateError(null);
     try {
       const entry = await recordEntry({ memberId: selected.id, amount: cents, entryDate: date });
       setSessionEntries((prev) => [entry, ...prev]);
@@ -86,7 +108,18 @@ export function BusinessVolumeEntry() {
       if (match) setSelected(match);
     } catch (raw) {
       const presented = toErrorPresentation(raw);
-      setAmountError(presented.message);
+      // T-M2.4-2: a period-eligibility refusal is about the date, not the
+      // amount — only that field is rejected, the rest of the form stays
+      // available.
+      if (
+        presented.kind === "period_not_accepting_entries" ||
+        presented.kind === "period_closed" ||
+        presented.field === "entryDate"
+      ) {
+        setDateError(presented.message);
+      } else {
+        setAmountError(presented.message);
+      }
     } finally {
       setSaving(false);
     }
@@ -95,6 +128,17 @@ export function BusinessVolumeEntry() {
   return (
     <>
       <h1 className="text-headline">Business Volume Entry</h1>
+
+      {lockStatus && (
+        <AlertNote variant="warn" className="mt-3.5 max-w-md">
+          Recording into <strong>{monthLabel(recordingMonth)}</strong>.{" "}
+          {lockStatus.blockingMonth
+            ? `${monthLabel(currentYm())} entries can be recorded once ${monthLabel(
+                lockStatus.blockingMonth,
+              )} is closed.`
+            : "Dates are limited to this month."}
+        </AlertNote>
+      )}
 
       <div className="mt-5 max-w-md rounded-lg border border-border bg-surface p-4.5">
         {selected ? (
@@ -158,8 +202,13 @@ export function BusinessVolumeEntry() {
             max={bounds.max}
             value={date}
             disabled={!selected}
-            onChange={(e) => setDate(e.target.value)}
+            aria-invalid={!!dateError}
+            onChange={(e) => {
+              setDate(e.target.value);
+              setDateError(null);
+            }}
           />
+          {dateError && <InputHint error>{dateError}</InputHint>}
         </div>
 
         <div className="mt-3.5">

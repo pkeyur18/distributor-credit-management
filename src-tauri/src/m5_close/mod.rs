@@ -115,8 +115,10 @@ pub struct ConfirmBackupAndCloseInput {
 /// only those with activity this period — a member with no row yet in
 /// `member_period_totals` (nothing entered under them this period) still
 /// gets a zero-figure snapshot, same `COALESCE` shape `direct_children_figures`
-/// already uses for the same reason.
-fn write_period_close_snapshots(
+/// already uses for the same reason. `pub`, not `pub(crate)`: `generate_dataset`
+/// (T-QA.5-3) is its own binary crate and reuses this rather than
+/// re-deriving the same snapshot shape a second way.
+pub fn write_period_close_snapshots(
     conn: &Connection,
     period_id: i64,
     created_at: &str,
@@ -173,6 +175,21 @@ fn write_period_close_snapshots(
     Ok(())
 }
 
+/// Rule-38: zeroes everything a snapshot has already captured — Business
+/// Volume, TBV, Rewards, royalty. `pub`, not `pub(crate)`: `generate_dataset`
+/// reuses this too, so a closed synthetic month ends in exactly the same
+/// zeroed-live-figures state a real close leaves.
+pub fn zero_period_totals(conn: &Connection, period_id: i64) -> Result<(), AppError> {
+    conn.execute(
+        "UPDATE member_period_totals SET
+            business_volume = 0, total_business_volume = 0, slab_pct = 0,
+            differential = 0, royalty = 0, own_reward = 0, rewards = 0
+         WHERE period_id = ?1",
+        [period_id],
+    )?;
+    Ok(())
+}
+
 /// Rule-18/38's strict order, all inside one transaction: write+verify
 /// backup → write snapshots v1 → zero live figures → mark closed. The
 /// backup runs **first**, before this transaction's own writes touch the
@@ -210,13 +227,7 @@ fn write_period_close_backup_and_snapshots(
     }
 
     write_period_close_snapshots(conn, period_id, today)?;
-    conn.execute(
-        "UPDATE member_period_totals SET
-            business_volume = 0, total_business_volume = 0, slab_pct = 0,
-            differential = 0, royalty = 0, own_reward = 0, rewards = 0
-         WHERE period_id = ?1",
-        [period_id],
-    )?;
+    zero_period_totals(conn, period_id)?;
     conn.execute(
         "UPDATE periods SET status = 'closed', closed_at = ?2 WHERE id = ?1",
         rusqlite::params![period_id, today],
@@ -325,6 +336,186 @@ pub fn manual_backup_current_period(
     backup::get_backup_record(conn, id)
 }
 
+fn current_calendar_month() -> String {
+    chrono::Local::now().format("%Y-%m").to_string()
+}
+
+fn next_month(period_month: &str) -> String {
+    let first = chrono::NaiveDate::parse_from_str(&format!("{period_month}-01"), "%Y-%m-%d")
+        .expect("period_month is always a valid YYYY-MM value");
+    first
+        .checked_add_months(chrono::Months::new(1))
+        .expect("chrono month arithmetic never overflows in practice")
+        .format("%Y-%m")
+        .to_string()
+}
+
+fn last_day_of_month(period_month: &str) -> String {
+    let first = chrono::NaiveDate::parse_from_str(&format!("{period_month}-01"), "%Y-%m-%d")
+        .expect("period_month is always a valid YYYY-MM value");
+    first
+        .checked_add_months(chrono::Months::new(1))
+        .and_then(|next| next.pred_opt())
+        .expect("every month has a last day")
+        .to_string()
+}
+
+/// Rule-20's queue, as bare month strings — `get_outstanding_periods`
+/// already owns the query; this just projects `period_month` out of it
+/// rather than re-deriving the same `WHERE status = 'awaiting_close'`.
+fn outstanding_period_months(conn: &Connection) -> Result<Vec<String>, AppError> {
+    Ok(get_outstanding_periods(conn)?
+        .into_iter()
+        .map(|p| p.period_month)
+        .collect())
+}
+
+/// US-M5.5 (D-9/D-10) — run once at successful login/setup, before the UI
+/// takes over (T-M5.5-4). Two idempotent phases:
+///   1. Backfill a row for every calendar month with none yet, up to and
+///      including the current one, all inserted `open`.
+///   2. Elapse every `open` row whose month has passed to `awaiting_close`,
+///      `ended_at` set to that month's own last calendar day (not the run
+///      date — the current month can't unlock while an earlier one stays
+///      outstanding, so "when this period ended" must mean the calendar
+///      boundary itself, not whenever the admin next happened to open the
+///      console).
+pub fn run_period_catchup(conn: &Connection) -> Result<(), AppError> {
+    let current_month = current_calendar_month();
+
+    let latest_existing: Option<String> =
+        conn.query_row("SELECT MAX(period_month) FROM periods", [], |r| r.get(0))?;
+
+    let mut month = match &latest_existing {
+        Some(latest) if latest >= &current_month => None,
+        Some(latest) => Some(next_month(latest)),
+        None => Some(current_month.clone()),
+    };
+    while let Some(m) = month {
+        conn.execute(
+            "INSERT INTO periods (period_month, status) VALUES (?1, 'open')",
+            [&m],
+        )?;
+        if m == current_month {
+            break;
+        }
+        month = Some(next_month(&m));
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT id, period_month FROM periods WHERE status = 'open' AND period_month < ?1",
+    )?;
+    let elapsed: Vec<(i64, String)> = stmt
+        .query_map([&current_month], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    drop(stmt);
+    for (id, period_month) in elapsed {
+        let ended_at = last_day_of_month(&period_month);
+        conn.execute(
+            "UPDATE periods SET status = 'awaiting_close', ended_at = ?2 WHERE id = ?1",
+            rusqlite::params![id, ended_at],
+        )?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeriodLockStatus {
+    /// Oldest-first. Never a plain boolean (CR-2) — the entry screen needs
+    /// to know *which* months it may record into, not just whether it can.
+    pub recordable_period_months: Vec<String>,
+    /// The month that must close before the current month unlocks — set
+    /// only when the current month itself is not recordable.
+    pub blocking_month: Option<String>,
+}
+
+/// API-07 (US-M2.3/M5.3) — Rule-36 as amended by CR-2.
+pub fn get_period_lock_status(conn: &Connection) -> Result<PeriodLockStatus, AppError> {
+    let outstanding = outstanding_period_months(conn)?;
+    if outstanding.is_empty() {
+        Ok(PeriodLockStatus {
+            recordable_period_months: vec![current_calendar_month()],
+            blocking_month: None,
+        })
+    } else {
+        let blocking_month = outstanding[0].clone();
+        Ok(PeriodLockStatus {
+            recordable_period_months: outstanding,
+            blocking_month: Some(blocking_month),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutstandingAlert {
+    pub outstanding_months: Vec<String>,
+    pub current_month: String,
+}
+
+/// API-31 (US-M5.2) — Rule-20's banner/notification-list data source.
+pub fn get_outstanding_alert(conn: &Connection) -> Result<OutstandingAlert, AppError> {
+    Ok(OutstandingAlert {
+        outstanding_months: outstanding_period_months(conn)?,
+        current_month: current_calendar_month(),
+    })
+}
+
+/// US-M2.3/US-M2.4 (Rule-36 as amended by CR-2) — resolves `entry_date` to
+/// the period it must be recorded against, or refuses it. Replaces
+/// `m2_entries::get_or_create_open_period`, which was a narrow stand-in for
+/// exactly this routine (see that module's own header comment).
+pub fn resolve_recording_period(conn: &Connection, entry_date: &str) -> Result<i64, AppError> {
+    let target_month = crate::m2_entries::period_month_of_date(entry_date)?;
+    let current_month = current_calendar_month();
+
+    if target_month > current_month {
+        return Err(AppError::Validation {
+            field: "entryDate".into(),
+            message: "Entries cannot be dated in the future.".into(),
+        });
+    }
+
+    let existing: Option<(i64, String)> = conn
+        .query_row(
+            "SELECT id, status FROM periods WHERE period_month = ?1",
+            [&target_month],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+
+    let (period_id, status) = match existing {
+        Some(row) => row,
+        None if target_month == current_month => {
+            conn.execute(
+                "INSERT INTO periods (period_month, status) VALUES (?1, 'open')",
+                [&target_month],
+            )?;
+            (conn.last_insert_rowid(), "open".to_string())
+        }
+        None => {
+            return Err(AppError::NotFound {
+                message: "That month has no recorded period.".into(),
+            });
+        }
+    };
+
+    match status.as_str() {
+        "closed" => Err(AppError::PeriodClosed {
+            month: target_month,
+        }),
+        "awaiting_close" => Ok(period_id),
+        _ => match outstanding_period_months(conn)?.into_iter().next() {
+            Some(blocking_month) => Err(AppError::PeriodNotAcceptingEntries {
+                month: target_month,
+                blocking_month,
+            }),
+            None => Ok(period_id),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,6 +575,222 @@ mod tests {
             rusqlite::params![member_id, period_id, bv, slab_pct],
         )
         .unwrap();
+    }
+
+    fn ym_offset(months: i64) -> String {
+        let today = chrono::Local::now().date_naive();
+        let shifted = if months >= 0 {
+            today.checked_add_months(chrono::Months::new(months as u32))
+        } else {
+            today.checked_sub_months(chrono::Months::new((-months) as u32))
+        };
+        shifted.unwrap().format("%Y-%m").to_string()
+    }
+
+    #[test]
+    fn run_period_catchup_creates_current_month_on_a_fresh_install() {
+        let conn = seeded();
+        run_period_catchup(&conn).unwrap();
+
+        let current = ym_offset(0);
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM periods WHERE period_month = ?1",
+                [&current],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "open");
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM periods", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn run_period_catchup_backfills_and_elapses_across_three_unopened_months() {
+        // Last login was three calendar months ago: only that month's row
+        // exists (as `open`, since it was current then). Today, three
+        // month boundaries have passed.
+        let conn = seeded();
+        insert_period(&conn, &ym_offset(-3), "open");
+
+        run_period_catchup(&conn).unwrap();
+
+        let elapsed = [ym_offset(-3), ym_offset(-2), ym_offset(-1)];
+        for month in &elapsed {
+            let (status, ended_at): (String, Option<String>) = conn
+                .query_row(
+                    "SELECT status, ended_at FROM periods WHERE period_month = ?1",
+                    [month],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(status, "awaiting_close", "{month} must have elapsed");
+            let expected_ended_at = last_day_of_month(month);
+            assert_eq!(
+                ended_at,
+                Some(expected_ended_at),
+                "{month}'s ended_at must be that month's own last calendar day, not the run date"
+            );
+        }
+
+        let current = ym_offset(0);
+        let current_status: String = conn
+            .query_row(
+                "SELECT status FROM periods WHERE period_month = ?1",
+                [&current],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(current_status, "open");
+
+        let outstanding = get_outstanding_periods(&conn).unwrap();
+        assert_eq!(
+            outstanding
+                .iter()
+                .map(|p| p.period_month.clone())
+                .collect::<Vec<_>>(),
+            elapsed,
+            "queued oldest-first"
+        );
+
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM periods", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(total, 4, "the three elapsed months plus the current one");
+    }
+
+    #[test]
+    fn run_period_catchup_is_idempotent_on_a_second_login() {
+        let conn = seeded();
+        insert_period(&conn, &ym_offset(-3), "open");
+        run_period_catchup(&conn).unwrap();
+        let after_first: i64 = conn
+            .query_row("SELECT COUNT(*) FROM periods", [], |r| r.get(0))
+            .unwrap();
+
+        run_period_catchup(&conn).unwrap();
+        let after_second: i64 = conn
+            .query_row("SELECT COUNT(*) FROM periods", [], |r| r.get(0))
+            .unwrap();
+
+        assert_eq!(after_first, after_second, "a second login creates nothing");
+    }
+
+    #[test]
+    fn get_period_lock_status_reports_only_the_current_month_when_nothing_outstanding() {
+        let conn = seeded();
+        let status = get_period_lock_status(&conn).unwrap();
+        assert_eq!(status.recordable_period_months, vec![ym_offset(0)]);
+        assert_eq!(status.blocking_month, None);
+    }
+
+    #[test]
+    fn get_period_lock_status_lists_outstanding_months_and_names_the_blocker() {
+        let conn = seeded();
+        insert_period(&conn, &ym_offset(-2), "awaiting_close");
+        insert_period(&conn, &ym_offset(-1), "awaiting_close");
+        insert_period(&conn, &ym_offset(0), "open");
+
+        let status = get_period_lock_status(&conn).unwrap();
+        assert_eq!(
+            status.recordable_period_months,
+            vec![ym_offset(-2), ym_offset(-1)]
+        );
+        assert_eq!(status.blocking_month, Some(ym_offset(-2)));
+    }
+
+    #[test]
+    fn get_outstanding_alert_reports_outstanding_and_current_months() {
+        let conn = seeded();
+        insert_period(&conn, &ym_offset(-1), "awaiting_close");
+        insert_period(&conn, &ym_offset(0), "open");
+
+        let alert = get_outstanding_alert(&conn).unwrap();
+        assert_eq!(alert.outstanding_months, vec![ym_offset(-1)]);
+        assert_eq!(alert.current_month, ym_offset(0));
+    }
+
+    #[test]
+    fn resolve_recording_period_accepts_an_outstanding_month() {
+        let conn = seeded();
+        let outstanding = ym_offset(-1);
+        let period_id = insert_period(&conn, &outstanding, "awaiting_close");
+        insert_period(&conn, &ym_offset(0), "open");
+
+        let resolved = resolve_recording_period(&conn, &format!("{outstanding}-15")).unwrap();
+        assert_eq!(resolved, period_id);
+    }
+
+    #[test]
+    fn resolve_recording_period_refuses_the_current_month_while_earlier_is_outstanding() {
+        let conn = seeded();
+        let outstanding = ym_offset(-1);
+        insert_period(&conn, &outstanding, "awaiting_close");
+        let current = ym_offset(0);
+        insert_period(&conn, &current, "open");
+
+        let err = resolve_recording_period(&conn, &format!("{current}-05")).unwrap_err();
+        match err {
+            AppError::PeriodNotAcceptingEntries {
+                month,
+                blocking_month,
+            } => {
+                assert_eq!(month, current);
+                assert_eq!(blocking_month, outstanding);
+            }
+            other => panic!("expected PeriodNotAcceptingEntries, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_recording_period_directs_a_closed_month_to_correction() {
+        let conn = seeded();
+        let closed = ym_offset(-2);
+        insert_period(&conn, &closed, "closed");
+
+        let err = resolve_recording_period(&conn, &format!("{closed}-10")).unwrap_err();
+        match err {
+            AppError::PeriodClosed { month } => assert_eq!(month, closed),
+            other => panic!("expected PeriodClosed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_recording_period_refuses_a_future_date() {
+        let conn = seeded();
+        let future = ym_offset(1);
+        let err = resolve_recording_period(&conn, &format!("{future}-01")).unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn resolve_recording_period_accepts_the_current_month_when_nothing_outstanding() {
+        let conn = seeded();
+        let current = ym_offset(0);
+        let period_id = insert_period(&conn, &current, "open");
+
+        let resolved = resolve_recording_period(&conn, &format!("{current}-01")).unwrap();
+        assert_eq!(resolved, period_id);
+    }
+
+    #[test]
+    fn resolve_recording_period_auto_creates_the_current_month_row_if_missing() {
+        // Defensive fallback for direct callers that skip login/catch-up —
+        // in real operation the row always already exists.
+        let conn = seeded();
+        let current = ym_offset(0);
+        let period_id = resolve_recording_period(&conn, &format!("{current}-01")).unwrap();
+
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM periods WHERE id = ?1",
+                [period_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "open");
     }
 
     #[test]

@@ -20,3 +20,13 @@ export function displayToCents(value: string): number | null {
   const cents = Math.round(parseFloat(trimmed) * 100);
   return cents > 0 ? cents : null;
 }
+
+// "2026-06" -> "June 2026" — every screen that names a period month uses
+// this, not its own formatting (monthly-close.tsx, business-volume-entry.tsx).
+export function monthLabel(periodMonth: string): string {
+  const [year, month] = periodMonth.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}

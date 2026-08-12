@@ -45,6 +45,18 @@ pub enum AppError {
     /// screen's live countdown.
     #[error("locked — try again in {retry_after_seconds}s")]
     AccountLocked { retry_after_seconds: i64 },
+    /// Rule-36 (amended by CR-2): a current-month entry while an earlier
+    /// month is still `awaiting_close`. `blocking_month` is always the
+    /// oldest outstanding month — the one that must close first.
+    #[error("{month} isn't open for entry until {blocking_month} is closed")]
+    PeriodNotAcceptingEntries {
+        month: String,
+        blocking_month: String,
+    },
+    /// A fresh entry against an already-`closed` period — not offered via
+    /// `record_entry`, only via `edit_entry`'s correction path (Rule-39).
+    #[error("{month} is closed — use the correction panel instead")]
+    PeriodClosed { month: String },
 }
 
 // Tauri commands return errors to the WebView as JSON, never as an opaque
@@ -64,8 +76,10 @@ impl Serialize for AppError {
             AppError::NotImplemented { .. } => "not_implemented",
             AppError::InvalidCredential { .. } => "invalid_credential",
             AppError::AccountLocked { .. } => "account_locked",
+            AppError::PeriodNotAcceptingEntries { .. } => "period_not_accepting_entries",
+            AppError::PeriodClosed { .. } => "period_closed",
         };
-        let mut state = serializer.serialize_struct("AppError", 5)?;
+        let mut state = serializer.serialize_struct("AppError", 7)?;
         state.serialize_field("kind", kind)?;
         state.serialize_field("message", &self.to_string())?;
         if let AppError::Validation { field, .. } = self {
@@ -85,6 +99,18 @@ impl Serialize for AppError {
             state.serialize_field("attemptsRemaining", attempts_remaining)?;
         } else {
             state.serialize_field("attemptsRemaining", &None::<i64>)?;
+        }
+        if let AppError::PeriodNotAcceptingEntries { month, .. }
+        | AppError::PeriodClosed { month } = self
+        {
+            state.serialize_field("month", month)?;
+        } else {
+            state.serialize_field("month", &None::<String>)?;
+        }
+        if let AppError::PeriodNotAcceptingEntries { blocking_month, .. } = self {
+            state.serialize_field("blockingMonth", blocking_month)?;
+        } else {
+            state.serialize_field("blockingMonth", &None::<String>)?;
         }
         state.end()
     }

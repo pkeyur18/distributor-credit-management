@@ -1,9 +1,22 @@
 // US-QA.5 — synthetic dataset generator (NFR-1/NFR-2/C7). Builds a
 // hierarchy and a year of Business Volume entries at one of three scales
 // by calling the real engine (`m1_members`/`m2_entries`) against a real
-// encrypted database file — never hand-written SQL — so generated data can
-// never drift from the actual validation/calculation rules (Rule-16a
-// positivity, consent, phone uniqueness all come free this way).
+// encrypted database file, so generated data can never drift from the
+// actual validation/calculation rules (Rule-16a positivity, consent, phone
+// uniqueness all come free this way).
+//
+// The current month goes through `m2_entries::record_entry` exactly as the
+// live UI would. The 11 months before it cannot (Rule-36, S12): a real
+// system never holds live entries anywhere but the current month — every
+// earlier month is closed, its figures already moved to `monthly_snapshots`
+// (Rule-38). Those months are seeded with a direct `business_volume_entries`
+// insert (there is no command that back-dates a *closed* month's entries —
+// by design, per Rule-39, only `edit_entry` ever touches one, and only an
+// entry that already exists), then rolled up with the real
+// `m3_calc::recalculate_chain` and snapshotted with the real
+// `m5_close::write_period_close_snapshots`/`zero_period_totals` — the same
+// functions the actual close flow calls, just without the backup-file
+// ceremony, which has nothing to verify for throwaway performance-test data.
 //
 // Usage: cargo run --release --bin generate_dataset -- --scale 500 --out
 // /path/to/console.db [--seed 42] [--branching 8]
@@ -12,6 +25,7 @@ use std::path::PathBuf;
 use bvconsole_lib::db;
 use bvconsole_lib::m1_members::{self, AddMemberInput, AddMemberOutcome, CreateRootMemberInput};
 use bvconsole_lib::m2_entries::{self, RecordEntryInput};
+use bvconsole_lib::{m3_calc, m5_close};
 use chrono::Datelike;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -243,39 +257,108 @@ fn build_hierarchy(
     all_ids
 }
 
+// Rule-36 (S12): the real system never holds live entries in more than the
+// current month at once — everything earlier is closed, its figures living
+// in `monthly_snapshots`, not `member_period_totals`. `record_entry` refuses
+// a month it can't write to, exactly as it must. So the 11 past months here
+// are generated, chain-recalculated (the real engine, `m3_calc::recalculate_chain`),
+// snapshotted (`m5_close::write_period_close_snapshots`) and zeroed
+// (`m5_close::zero_period_totals`) to end in exactly the state a real close
+// would leave them — everything but the backup-file ceremony, which has
+// nothing to verify for throwaway performance-test data. Only the current
+// month is recorded through the real `record_entry` path.
 fn generate_entries(conn: &rusqlite::Connection, rng: &mut StdRng, member_ids: &[i64]) {
     let today = chrono::Local::now().date_naive();
     let per_month = entries_per_month(member_ids.len());
 
-    for months_ago in 0..12 {
-        let month_start = (today.checked_sub_months(chrono::Months::new(months_ago)))
-            .expect("month arithmetic in range")
-            .with_day(1)
-            .expect("day 1 always valid");
-        let days_in_month = month_start
-            .checked_add_months(chrono::Months::new(1))
-            .and_then(|next| next.pred_opt())
-            .expect("last day of month")
-            .day();
+    for months_ago in (1..12).rev() {
+        generate_closed_month(conn, rng, member_ids, today, months_ago, per_month);
+    }
+    generate_current_month(conn, rng, member_ids, today, per_month);
+}
 
-        for _ in 0..per_month {
-            let member_id = member_ids[rng.random_range(0..member_ids.len())];
-            let day = rng.random_range(1..=days_in_month);
-            let entry_date = month_start.with_day(day).expect("valid day in month");
-            // Rule-16a: strictly > 0. Two decimal places, ×100 fixed-point
-            // (ADR-004) — a plain random cents value already satisfies both.
-            let amount = rng.random_range(100..=500_000i64);
+fn generate_closed_month(
+    conn: &rusqlite::Connection,
+    rng: &mut StdRng,
+    member_ids: &[i64],
+    today: chrono::NaiveDate,
+    months_ago: u32,
+    per_month: usize,
+) {
+    let month_start = today
+        .checked_sub_months(chrono::Months::new(months_ago))
+        .expect("month arithmetic in range")
+        .with_day(1)
+        .expect("day 1 always valid");
+    let period_month = month_start.format("%Y-%m").to_string();
+    let last_day = month_start
+        .checked_add_months(chrono::Months::new(1))
+        .and_then(|next| next.pred_opt())
+        .expect("last day of month");
 
-            m2_entries::record_entry(
-                conn,
-                RecordEntryInput {
-                    member_id,
-                    amount,
-                    entry_date: entry_date.format("%Y-%m-%d").to_string(),
-                },
-            )
-            .expect("record_entry");
-        }
+    conn.execute(
+        "INSERT INTO periods (period_month, status, ended_at, closed_at) VALUES (?1, 'closed', ?2, ?2)",
+        rusqlite::params![period_month, last_day.to_string()],
+    )
+    .expect("insert historical period row");
+    let period_id = conn.last_insert_rowid();
+
+    for _ in 0..per_month {
+        let member_id = member_ids[rng.random_range(0..member_ids.len())];
+        let day = rng.random_range(1..=last_day.day());
+        let entry_date = month_start.with_day(day).expect("valid day in month");
+        // Rule-16a: strictly > 0. Two decimal places, ×100 fixed-point
+        // (ADR-004) — a plain random cents value already satisfies both.
+        let amount = rng.random_range(100..=500_000i64);
+
+        conn.execute(
+            "INSERT INTO business_volume_entries (member_id, amount, entry_date, period_month, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?4)",
+            rusqlite::params![
+                member_id,
+                amount,
+                entry_date.format("%Y-%m-%d").to_string(),
+                period_month,
+            ],
+        )
+        .expect("insert historical entry");
+        m3_calc::recalculate_chain(conn, member_id, period_id).expect("recalculate_chain");
+    }
+
+    m5_close::write_period_close_snapshots(conn, period_id, &last_day.to_string())
+        .expect("write historical snapshots");
+    m5_close::zero_period_totals(conn, period_id).expect("zero historical totals");
+}
+
+fn generate_current_month(
+    conn: &rusqlite::Connection,
+    rng: &mut StdRng,
+    member_ids: &[i64],
+    today: chrono::NaiveDate,
+    per_month: usize,
+) {
+    let month_start = today.with_day(1).expect("day 1 always valid");
+    conn.execute(
+        "INSERT INTO periods (period_month, status) VALUES (?1, 'open')",
+        [month_start.format("%Y-%m").to_string()],
+    )
+    .expect("insert current period row");
+
+    for _ in 0..per_month {
+        let member_id = member_ids[rng.random_range(0..member_ids.len())];
+        let day = rng.random_range(1..=today.day());
+        let entry_date = month_start.with_day(day).expect("valid day in month");
+        let amount = rng.random_range(100..=500_000i64);
+
+        m2_entries::record_entry(
+            conn,
+            RecordEntryInput {
+                member_id,
+                amount,
+                entry_date: entry_date.format("%Y-%m-%d").to_string(),
+            },
+        )
+        .expect("record_entry");
     }
 }
 

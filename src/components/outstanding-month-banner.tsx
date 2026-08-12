@@ -16,6 +16,11 @@ export function OutstandingMonthBanner({ alert }: OutstandingMonthBannerProps) {
   if (!alert || alert.outstandingMonths.length === 0) return null;
 
   const oldest = alert.outstandingMonths[0];
+  const moreCount = alert.outstandingMonths.length - 1;
+  const moreClause =
+    moreCount > 0
+      ? ` ${moreCount} more month${moreCount > 1 ? "s are" : " is"} outstanding after that.`
+      : "";
 
   return (
     <div
@@ -31,9 +36,9 @@ export function OutstandingMonthBanner({ alert }: OutstandingMonthBannerProps) {
         style={{ color: "var(--warning-text)" }}
       />
       <p style={{ color: "var(--warning-text)" }}>
-        <span className="font-semibold">{oldest} has ended and is awaiting close.</span> You can
-        still record entries dated in {oldest}. {alert.currentMonth} entries unlock once {oldest} is
-        closed.
+        <span className="font-semibold">{oldest} has ended and is awaiting close.</span>
+        {moreClause} You can still record entries dated in {oldest}. {alert.currentMonth} entries
+        unlock once {oldest} is closed.
       </p>
       <Link
         to="/close"

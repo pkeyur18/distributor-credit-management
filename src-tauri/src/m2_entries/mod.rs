@@ -1,14 +1,14 @@
 // M2 — Business Volume Entry (04-technical-architecture.md §3.1, §6 API-08/
-// API-09; 02-business-rules.md Rule-15/16/16a/39). US-M2.1/M2.2, S7.
+// API-09; 02-business-rules.md Rule-15/16/16a/36/39). US-M2.1/M2.2, S7;
+// US-M2.3/M2.4, S12.
 //
-// US-M2.3/M2.4 (Feature "M2.2" in the backlog — entry eligibility by
-// period, S12) are **not** built yet: nothing here refuses a current-month
-// entry while an earlier one is outstanding, or refuses a closed-month
-// write via this path (that stays `edit_entry`'s job, Rule-39). Until
-// US-M5.5 lands (S12) no code transitions a period between states either —
-// `get_or_create_open_period` below is a narrow stand-in scoped to what
-// `record_entry`/`edit_entry` need (a period row to write against), not a
-// preview of M5.5's catch-up state machine.
+// `record_entry` refuses a current-month entry while an earlier month is
+// still `awaiting_close`, and refuses a closed-month write outright (that
+// stays `edit_entry`'s job via Rule-39's correction path) — via
+// `m5_close::resolve_recording_period`, which owns period-state resolution
+// end to end. Period *transitions* (`open` → `awaiting_close` → `closed`)
+// are US-M5.5's `run_period_catchup`, run at login — nothing in this module
+// ever changes a period's status.
 use std::path::Path;
 
 use chrono::NaiveDate;
@@ -26,7 +26,7 @@ fn today_iso() -> String {
 /// Rule-16/Rule-16a's own derivation source: `entry_date`, never "the
 /// period being closed" (T-M2.1-1). Also used by `edit_entry` to re-derive
 /// what an edited date's period *would* be, to enforce T-M2.2-3.
-fn period_month_of_date(date: &str) -> Result<String, AppError> {
+pub(crate) fn period_month_of_date(date: &str) -> Result<String, AppError> {
     NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .map(|d| d.format("%Y-%m").to_string())
         .map_err(|_| AppError::Validation {
@@ -52,29 +52,6 @@ fn member_exists(conn: &Connection, member_id: i64) -> Result<bool, AppError> {
         })
         .optional()?
         .unwrap_or(false))
-}
-
-/// Rule-21: one period row per calendar month — safe under
-/// `periods.period_month`'s own UNIQUE constraint. Creates as `open`
-/// (04-technical-architecture.md §7.1: "a period row for the current month
-/// is created as open as soon as the calendar month begins") and never
-/// transitions an existing row — that stays US-M5.5's job entirely.
-fn get_or_create_open_period(conn: &Connection, period_month: &str) -> Result<i64, AppError> {
-    if let Some(id) = conn
-        .query_row(
-            "SELECT id FROM periods WHERE period_month = ?1",
-            [period_month],
-            |r| r.get(0),
-        )
-        .optional()?
-    {
-        return Ok(id);
-    }
-    conn.execute(
-        "INSERT INTO periods (period_month, status) VALUES (?1, 'open')",
-        [period_month],
-    )?;
-    Ok(conn.last_insert_rowid())
 }
 
 fn period_status(conn: &Connection, period_id: i64) -> Result<String, AppError> {
@@ -181,13 +158,13 @@ pub fn record_entry(
     // holds via `locked_conn` — the same choice `m3_calc::recalculate_chain`
     // makes, for the same reason.
     let tx = conn.unchecked_transaction()?;
+    let period_id = crate::m5_close::resolve_recording_period(&tx, &input.entry_date)?;
     tx.execute(
         "INSERT INTO business_volume_entries (member_id, amount, entry_date, period_month, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         rusqlite::params![input.member_id, input.amount, input.entry_date, period_month, created_at],
     )?;
     let entry_id = tx.last_insert_rowid();
-    let period_id = get_or_create_open_period(&tx, &period_month)?;
     m3_calc::recalculate_chain(&tx, input.member_id, period_id)?;
     write_audit(&tx, entry_id, None, input.amount, "entry")?;
     tx.commit()?;
@@ -339,6 +316,180 @@ mod tests {
         )
         .optional()
         .unwrap()
+    }
+
+    fn ym_offset(months: i64) -> String {
+        let today = chrono::Local::now().date_naive();
+        let shifted = if months >= 0 {
+            today.checked_add_months(chrono::Months::new(months as u32))
+        } else {
+            today.checked_sub_months(chrono::Months::new((-months) as u32))
+        };
+        shifted.unwrap().format("%Y-%m").to_string()
+    }
+
+    fn insert_period(conn: &Connection, month: &str, status: &str) -> i64 {
+        conn.execute(
+            "INSERT INTO periods (period_month, status) VALUES (?1, ?2)",
+            [month, status],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    // TEST-R36 — the exit-gate matrix (T-M2.4-5): with an earlier month
+    // `awaiting_close` and today as "current", every branch of Rule-36
+    // (as amended by CR-2) behaves.
+    #[test]
+    fn test_r36_outstanding_month_entry_is_accepted() {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        let outstanding = ym_offset(-1);
+        insert_period(&db.conn, &outstanding, "awaiting_close");
+        insert_period(&db.conn, &ym_offset(0), "open");
+
+        let entry = record_entry(
+            &db.conn,
+            RecordEntryInput {
+                member_id: root,
+                amount: 1_000,
+                entry_date: format!("{outstanding}-20"),
+            },
+        )
+        .unwrap();
+        assert_eq!(entry.period_month, outstanding);
+    }
+
+    #[test]
+    fn test_r36_current_month_entry_is_refused_naming_the_blocker() {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        let outstanding = ym_offset(-1);
+        insert_period(&db.conn, &outstanding, "awaiting_close");
+        let current = ym_offset(0);
+        insert_period(&db.conn, &current, "open");
+
+        let err = record_entry(
+            &db.conn,
+            RecordEntryInput {
+                member_id: root,
+                amount: 1_000,
+                entry_date: format!("{current}-05"),
+            },
+        )
+        .unwrap_err();
+        match err {
+            AppError::PeriodNotAcceptingEntries {
+                month,
+                blocking_month,
+            } => {
+                assert_eq!(month, current);
+                assert_eq!(blocking_month, outstanding);
+            }
+            other => panic!("expected PeriodNotAcceptingEntries, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_r36_closed_month_entry_is_refused() {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        let closed = ym_offset(-2);
+        insert_period(&db.conn, &closed, "closed");
+
+        let err = record_entry(
+            &db.conn,
+            RecordEntryInput {
+                member_id: root,
+                amount: 1_000,
+                entry_date: format!("{closed}-10"),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::PeriodClosed { .. }));
+    }
+
+    #[test]
+    fn test_r36_future_dated_entry_is_refused() {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        let future = ym_offset(1);
+
+        let err = record_entry(
+            &db.conn,
+            RecordEntryInput {
+                member_id: root,
+                amount: 1_000,
+                entry_date: format!("{future}-01"),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn test_r36_current_month_entry_saves_once_the_blocker_closes() {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        let now_closed = ym_offset(-1);
+        insert_period(&db.conn, &now_closed, "closed");
+        let current = ym_offset(0);
+        insert_period(&db.conn, &current, "open");
+
+        let entry = record_entry(
+            &db.conn,
+            RecordEntryInput {
+                member_id: root,
+                amount: 1_000,
+                entry_date: format!("{current}-05"),
+            },
+        )
+        .unwrap();
+        assert_eq!(entry.period_month, current);
+    }
+
+    #[test]
+    fn recording_into_the_outstanding_month_leaves_the_current_periods_totals_untouched() {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        let outstanding = ym_offset(-1);
+        let outstanding_id = insert_period(&db.conn, &outstanding, "awaiting_close");
+        let current = ym_offset(0);
+        let current_id = insert_period(&db.conn, &current, "open");
+        // A figure already sitting in the current period from before the
+        // earlier month went outstanding — `record_entry` itself correctly
+        // refuses a *new* current-month write while `outstanding` is still
+        // open (that's TEST-R36), so this seeds the pre-existing row
+        // directly rather than going through the now-refused path.
+        db.conn
+            .execute(
+                "INSERT INTO member_period_totals
+                    (member_id, period_id, business_volume, total_business_volume, slab_pct,
+                     differential, royalty, own_reward, rewards)
+                 VALUES (?1, ?2, 50000, 50000, 0, 0, 0, 0, 50000)",
+                rusqlite::params![root, current_id],
+            )
+            .unwrap();
+
+        record_entry(
+            &db.conn,
+            RecordEntryInput {
+                member_id: root,
+                amount: 100_000,
+                entry_date: format!("{outstanding}-15"),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            member_period_total(&db.conn, root, outstanding_id),
+            Some(100_000)
+        );
+        assert_eq!(
+            member_period_total(&db.conn, root, current_id),
+            Some(50_000),
+            "the current period's own row must be byte-identical to before"
+        );
     }
 
     #[test]

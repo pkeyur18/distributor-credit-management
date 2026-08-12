@@ -218,6 +218,9 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
         "begin_close",
         "confirm_backup_and_close",
         "manual_backup_current_period",
+        // US-M5.2/M5.3/M2.3/M2.4, S12.
+        "get_period_lock_status",
+        "get_outstanding_alert",
     ];
     for &name in ALL_COMMAND_NAMES
         .iter()
@@ -1116,6 +1119,19 @@ fn get_outstanding_periods_and_begin_close_require_a_session() {
     ));
     assert!(matches!(
         commands::begin_close(app.state::<SessionState>(), app.state::<DbState>()),
+        Err(AppError::AuthRequired)
+    ));
+}
+
+#[test]
+fn get_period_lock_status_and_get_outstanding_alert_require_a_session() {
+    let app = app_with_seeded_db();
+    assert!(matches!(
+        commands::get_period_lock_status(app.state::<SessionState>(), app.state::<DbState>()),
+        Err(AppError::AuthRequired)
+    ));
+    assert!(matches!(
+        commands::get_outstanding_alert(app.state::<SessionState>(), app.state::<DbState>()),
         Err(AppError::AuthRequired)
     ));
 }
