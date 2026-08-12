@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,15 +68,28 @@ export function Home() {
 
       {nodes && slabTable && <StatRow nodes={nodes} slabTable={slabTable} />}
 
-      <div className="mt-4 max-w-md">
-        <Input
-          id="home-search"
-          placeholder="Search by name, 6-digit member number or phone"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <div className="mt-1.5">
-          <SearchResultsList results={results} query={query} onSelect={(r) => navigate(`/member/${r.id}`)} />
+      <div className="mt-4 rounded-lg border border-border bg-surface p-4.5">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.75 top-1/2 size-3.75 -translate-y-1/2 text-muted-text" />
+          <Input
+            id="home-search"
+            placeholder="Search by name, 6-digit member number or phone"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+        <div className="mt-3">
+          {query.trim() ? (
+            <SearchResultsList results={results} query={query} onSelect={(r) => navigate(`/member/${r.id}`)} />
+          ) : (
+            <EmptyState
+              icon={<Search className="size-8" />}
+              title="Search for a member to see their details"
+              description="Type a name, 6-digit member number or phone number above — nothing is shown until you search."
+              descriptionClassName="text-[11px]"
+            />
+          )}
         </div>
       </div>
 
