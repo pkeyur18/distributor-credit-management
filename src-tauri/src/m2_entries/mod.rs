@@ -26,7 +26,7 @@ fn today_iso() -> String {
 /// Rule-16/Rule-16a's own derivation source: `entry_date`, never "the
 /// period being closed" (T-M2.1-1). Also used by `edit_entry` to re-derive
 /// what an edited date's period *would* be, to enforce T-M2.2-3.
-fn period_month_of_date(date: &str) -> Result<String, AppError> {
+pub(crate) fn period_month_of_date(date: &str) -> Result<String, AppError> {
     NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .map(|d| d.format("%Y-%m").to_string())
         .map_err(|_| AppError::Validation {
