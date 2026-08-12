@@ -9,6 +9,7 @@ import { AlertNote } from "@/components/ui/alert-note";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { RestoreOptionList } from "@/components/restore-option-list";
 import { ChecklistConfirmDialog } from "@/components/checklist-confirm-dialog";
+import { RecalcWarningDialog } from "@/components/recalc-warning-dialog";
 import { useToast } from "@/components/ui/toast";
 import { centsToDisplay, displayToCents } from "@/lib/utils";
 import { getDirectChildrenChart } from "@/lib/ipc/m4-search";
@@ -22,6 +23,7 @@ import {
   updateSlabRow,
   type ConsoleBackupSettings,
 } from "@/lib/ipc/m7-settings";
+import { previewSettingsImpact, type CandidateSettings, type SettingsImpactPreview } from "@/lib/ipc/m3-calc";
 import { runConsoleBackupNow } from "@/lib/ipc/m8-auth";
 import { listRestorePoints, restoreFromBackup, restoreFromBackupFile } from "@/lib/ipc/preflight";
 import type { BackupRecord, Settings as SettingsData, SlabRow } from "@/lib/ipc/entities";
@@ -83,7 +85,75 @@ function errorMessage(raw: unknown): string {
   return toErrorPresentation(raw).message;
 }
 
+// --- Mid-period recalculation warning (RQ-18/V7.6, US-M7.3) ---
+// Fires only on a Slab table or Royalty save (T-M7.3-4) — every other
+// settings section keeps saving silently. `request` previews the candidate
+// values, opens the warning, and only runs `action` (the real save) once
+// the operator confirms; Cancel is a true no-op (T-M7.3-5).
+function useRecalcWarning() {
+  const toast = useToast();
+  const [pending, setPending] = useState<{
+    kind: "slab" | "royalty";
+    preview: SettingsImpactPreview | null;
+    action: () => Promise<void>;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function request(
+    kind: "slab" | "royalty",
+    candidate: CandidateSettings,
+    action: () => Promise<void>,
+  ) {
+    setPending({ kind, preview: null, action });
+    try {
+      const preview = await previewSettingsImpact(candidate);
+      setPending((prev) => (prev ? { ...prev, preview } : prev));
+    } catch (raw) {
+      toast.add({ title: errorMessage(raw), type: "danger" });
+      setPending(null);
+    }
+  }
+
+  async function confirm() {
+    if (!pending) return;
+    setBusy(true);
+    try {
+      await pending.action();
+      setPending(null);
+    } catch (raw) {
+      toast.add({ title: errorMessage(raw), type: "danger" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const monthName = new Date().toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+  const dialog = pending && (
+    <RecalcWarningDialog
+      open
+      onOpenChange={(next) => {
+        if (!next) setPending(null);
+      }}
+      kind={pending.kind}
+      monthName={monthName}
+      preview={pending.preview}
+      busy={busy}
+      onConfirm={confirm}
+    />
+  );
+
+  return { request, dialog };
+}
+
 // --- Slab table (US-M7.1) ---
+
+function candidateFromSlabRows(pairs: { threshold: number; percentage: number }[]): CandidateSettings {
+  return {
+    slabThresholds: pairs.map((p) => p.threshold),
+    slabPercentages: pairs.map((p) => p.percentage),
+  };
+}
 
 function SlabTableCard({
   rows,
@@ -93,6 +163,7 @@ function SlabTableCard({
   onRowsChange: (rows: SlabRow[]) => void;
 }) {
   const toast = useToast();
+  const recalcWarning = useRecalcWarning();
   const [drafts, setDrafts] = useState<Record<number, { threshold: string; percentage: string }>>(
     {},
   );
@@ -115,34 +186,40 @@ function SlabTableCard({
       toast.add({ title: "Enter a valid threshold and percentage", type: "danger" });
       return;
     }
-    setSaving(row.id);
-    try {
-      const updated = await updateSlabRow(row.id, { threshold, percentage });
-      onRowsChange(rows.map((r) => (r.id === row.id ? updated : r)));
-      setDrafts((prev) => {
-        const next = { ...prev };
-        delete next[row.id];
-        return next;
-      });
-      toast.add({ title: "Slab row saved", type: "success" });
-    } catch (raw) {
-      toast.add({ title: errorMessage(raw), type: "danger" });
-    } finally {
-      setSaving(null);
-    }
+    const candidate = candidateFromSlabRows(
+      rows.map((r) => (r.id === row.id ? { threshold, percentage } : { threshold: r.threshold, percentage: r.percentage })),
+    );
+    await recalcWarning.request("slab", candidate, async () => {
+      setSaving(row.id);
+      try {
+        const updated = await updateSlabRow(row.id, { threshold, percentage });
+        onRowsChange(rows.map((r) => (r.id === row.id ? updated : r)));
+        setDrafts((prev) => {
+          const next = { ...prev };
+          delete next[row.id];
+          return next;
+        });
+        toast.add({ title: "Slab row saved", type: "success" });
+      } finally {
+        setSaving(null);
+      }
+    });
   }
 
   async function removeRow(row: SlabRow) {
-    setSaving(row.id);
-    try {
-      await removeSlabRow(row.id);
-      onRowsChange(rows.filter((r) => r.id !== row.id));
-      toast.add({ title: "Slab row removed", type: "success" });
-    } catch (raw) {
-      toast.add({ title: errorMessage(raw), type: "danger" });
-    } finally {
-      setSaving(null);
-    }
+    const candidate = candidateFromSlabRows(
+      rows.filter((r) => r.id !== row.id).map((r) => ({ threshold: r.threshold, percentage: r.percentage })),
+    );
+    await recalcWarning.request("slab", candidate, async () => {
+      setSaving(row.id);
+      try {
+        await removeSlabRow(row.id);
+        onRowsChange(rows.filter((r) => r.id !== row.id));
+        toast.add({ title: "Slab row removed", type: "success" });
+      } finally {
+        setSaving(null);
+      }
+    });
   }
 
   async function addRow() {
@@ -152,17 +229,21 @@ function SlabTableCard({
       toast.add({ title: "Enter a valid threshold and percentage", type: "danger" });
       return;
     }
-    setSaving("new");
-    try {
-      const created = await addSlabRow({ threshold, percentage });
-      onRowsChange([...rows, created]);
-      setNewRow({ threshold: "", percentage: "" });
-      toast.add({ title: "Slab row added", type: "success" });
-    } catch (raw) {
-      toast.add({ title: errorMessage(raw), type: "danger" });
-    } finally {
-      setSaving(null);
-    }
+    const candidate = candidateFromSlabRows([
+      ...rows.map((r) => ({ threshold: r.threshold, percentage: r.percentage })),
+      { threshold, percentage },
+    ]);
+    await recalcWarning.request("slab", candidate, async () => {
+      setSaving("new");
+      try {
+        const created = await addSlabRow({ threshold, percentage });
+        onRowsChange([...rows, created]);
+        setNewRow({ threshold: "", percentage: "" });
+        toast.add({ title: "Slab row added", type: "success" });
+      } finally {
+        setSaving(null);
+      }
+    });
   }
 
   const onlyRow = rows.length <= 1;
@@ -270,6 +351,7 @@ function SlabTableCard({
           member&apos;s slab.
         </InputHint>
       )}
+      {recalcWarning.dialog}
     </SectionCard>
   );
 }
@@ -284,6 +366,7 @@ function RoyaltyCard({
   onSettingsChange: (next: SettingsData) => void;
 }) {
   const toast = useToast();
+  const recalcWarning = useRecalcWarning();
   const [minChildren, setMinChildren] = useState(String(settings.royaltyQualifyingCount));
   const [rate, setRate] = useState(String(settings.royaltyRatePercent));
   const [saving, setSaving] = useState(false);
@@ -295,16 +378,20 @@ function RoyaltyCard({
       toast.add({ title: "Enter valid numbers", type: "danger" });
       return;
     }
-    setSaving(true);
-    try {
-      const updated = await updateSettings({ royaltyQualifyingCount, royaltyRatePercent });
-      onSettingsChange(updated);
-      toast.add({ title: "Royalty settings saved", type: "success" });
-    } catch (raw) {
-      toast.add({ title: errorMessage(raw), type: "danger" });
-    } finally {
-      setSaving(false);
-    }
+    await recalcWarning.request(
+      "royalty",
+      { royaltyQualifyingCount, royaltyRatePercent },
+      async () => {
+        setSaving(true);
+        try {
+          const updated = await updateSettings({ royaltyQualifyingCount, royaltyRatePercent });
+          onSettingsChange(updated);
+          toast.add({ title: "Royalty settings saved", type: "success" });
+        } finally {
+          setSaving(false);
+        }
+      },
+    );
   }
 
   return (
@@ -339,6 +426,7 @@ function RoyaltyCard({
       <Button className="mt-3.5" disabled={saving} onClick={save}>
         Save royalty settings
       </Button>
+      {recalcWarning.dialog}
     </SectionCard>
   );
 }

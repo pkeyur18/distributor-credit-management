@@ -12,6 +12,7 @@
 pub mod engine;
 
 use rusqlite::{Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 use engine::{compute_node, ChildFigures, NodeFigures};
@@ -224,7 +225,9 @@ pub fn recalculate_chain(
     Ok(())
 }
 
-fn current_open_period_id(conn: &Connection) -> Result<Option<i64>, AppError> {
+/// `pub(crate)`: `m5_close::manual_backup_current_period` (API-15) reuses
+/// this rather than re-deriving "the in-progress month" a second way.
+pub(crate) fn current_open_period_id(conn: &Connection) -> Result<Option<i64>, AppError> {
     let period_month = chrono::Local::now().format("%Y-%m").to_string();
     Ok(conn
         .query_row(
@@ -291,6 +294,178 @@ pub fn recalculate_open_period(conn: &Connection) -> Result<(), AppError> {
         recompute_open_period_rows(conn, period_id)?;
     }
     Ok(())
+}
+
+// --- preview_settings_impact (API-33, US-M7.3) ---
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CandidateSettings {
+    pub slab_thresholds: Option<Vec<i64>>,
+    pub slab_percentages: Option<Vec<i64>>,
+    pub royalty_qualifying_count: Option<i64>,
+    pub royalty_rate_percent: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberImpact {
+    pub member_id: i64,
+    pub member_name: String,
+    pub rewards_before: i64,
+    pub rewards_after: i64,
+    pub slab_pct_before: i64,
+    pub slab_pct_after: i64,
+    pub royalty_before: i64,
+    pub royalty_after: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsImpactPreview {
+    pub rewards_before: i64,
+    pub rewards_after: i64,
+    pub affected_members: Vec<MemberImpact>,
+}
+
+/// Merges `candidate`'s slab table with the live one — both fields are
+/// required together (a threshold needs its matching percentage) or both
+/// absent (keep the live table unchanged).
+fn resolve_candidate_slabs(
+    conn: &Connection,
+    candidate: &CandidateSettings,
+) -> Result<Vec<(i64, i64)>, AppError> {
+    match (&candidate.slab_thresholds, &candidate.slab_percentages) {
+        (Some(thresholds), Some(percentages)) => {
+            if thresholds.len() != percentages.len() {
+                return Err(AppError::Validation {
+                    field: "slabPercentages".into(),
+                    message: "Slab thresholds and percentages must have the same length.".into(),
+                });
+            }
+            Ok(thresholds
+                .iter()
+                .zip(percentages.iter())
+                .map(|(&t, &p)| (t, p))
+                .collect())
+        }
+        (None, None) => slab_table(conn),
+        _ => Err(AppError::Validation {
+            field: "slabThresholds".into(),
+            message: "Slab thresholds and percentages must be provided together.".into(),
+        }),
+    }
+}
+
+struct LiveFigures {
+    member_id: i64,
+    member_name: String,
+    slab_pct: i64,
+    royalty: i64,
+    rewards: i64,
+}
+
+fn live_figures_for_open_period(
+    conn: &Connection,
+    period_id: i64,
+) -> Result<Vec<LiveFigures>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT m.id, m.name, t.slab_pct, t.royalty, t.rewards
+         FROM member_period_totals t
+         JOIN members m ON m.id = t.member_id
+         WHERE t.period_id = ?1",
+    )?;
+    let rows = stmt
+        .query_map([period_id], |r| {
+            Ok(LiveFigures {
+                member_id: r.get(0)?,
+                member_name: r.get(1)?,
+                slab_pct: r.get(2)?,
+                royalty: r.get(3)?,
+                rewards: r.get(4)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// API-33: what the open period's figures would become under candidate
+/// slab/royalty settings — **no I/O beyond reads**, matching M3's pure
+/// nature (§3.2). Rather than the architecture doc's literal "write
+/// candidate settings, recompute, restore in a `finally`" description, this
+/// calls the same pure `compute_node` the real save path uses, fed the
+/// candidate values directly — nothing is ever written, so a panic can't
+/// leave anything uncommitted to restore. Both paths sharing `compute_node`
+/// is also what guarantees the preview equals what actually lands
+/// (T-M7.3-6): given the same live Business Volume and children figures
+/// (Rule-6 — TBV never depends on slab/royalty settings) and the same
+/// candidate values, the two calls are identical function applications.
+pub fn preview_settings_impact(
+    conn: &Connection,
+    candidate: CandidateSettings,
+) -> Result<SettingsImpactPreview, AppError> {
+    let Some(period_id) = current_open_period_id(conn)? else {
+        return Ok(SettingsImpactPreview {
+            rewards_before: 0,
+            rewards_after: 0,
+            affected_members: Vec::new(),
+        });
+    };
+    let period_month = period_month_of(conn, period_id)?;
+    let slabs = resolve_candidate_slabs(conn, &candidate)?;
+    let royalty_min_children = candidate
+        .royalty_qualifying_count
+        .map(Ok)
+        .unwrap_or_else(|| setting_i64(conn, "royalty_qualifying_count"))?;
+    let royalty_rate_percent = candidate
+        .royalty_rate_percent
+        .map(Ok)
+        .unwrap_or_else(|| setting_i64(conn, "royalty_rate_percent"))?;
+
+    let mut rewards_before_total = 0;
+    let mut rewards_after_total = 0;
+    let mut affected = Vec::new();
+    for live in live_figures_for_open_period(conn, period_id)? {
+        let business_volume = business_volume_of(conn, live.member_id, &period_month)?;
+        let children = direct_children_figures(conn, live.member_id, period_id)?;
+        let after = compute_node(
+            business_volume,
+            &children,
+            &slabs,
+            royalty_min_children,
+            royalty_rate_percent,
+        );
+
+        rewards_before_total += live.rewards;
+        rewards_after_total += after.rewards;
+
+        if live.rewards != after.rewards
+            || live.slab_pct != after.slab_pct
+            || (live.royalty > 0) != (after.royalty > 0)
+        {
+            affected.push(MemberImpact {
+                member_id: live.member_id,
+                member_name: live.member_name,
+                rewards_before: live.rewards,
+                rewards_after: after.rewards,
+                slab_pct_before: live.slab_pct,
+                slab_pct_after: after.slab_pct,
+                royalty_before: live.royalty,
+                royalty_after: after.royalty,
+            });
+        }
+    }
+    affected.sort_by(|a, b| {
+        let da = (a.rewards_after - a.rewards_before).abs();
+        let db = (b.rewards_after - b.rewards_before).abs();
+        db.cmp(&da).then_with(|| a.member_name.cmp(&b.member_name))
+    });
+
+    Ok(SettingsImpactPreview {
+        rewards_before: rewards_before_total,
+        rewards_after: rewards_after_total,
+        affected_members: affected,
+    })
 }
 
 fn is_active_of(conn: &Connection, member_id: i64) -> Result<bool, AppError> {
@@ -957,6 +1132,107 @@ mod tests {
             max_snapshot_version(&conn, root, period),
             1,
             "rolling back the caller's outer transaction must discard the correction too"
+        );
+    }
+
+    // --- preview_settings_impact (API-33, US-M7.3, S11) ---
+
+    #[test]
+    fn no_open_period_previews_as_an_empty_no_op() {
+        let conn = seeded();
+        let preview = preview_settings_impact(&conn, CandidateSettings::default()).unwrap();
+        assert_eq!(preview.rewards_before, 0);
+        assert_eq!(preview.rewards_after, 0);
+        assert!(preview.affected_members.is_empty());
+    }
+
+    #[test]
+    fn an_empty_candidate_leaves_every_member_unaffected() {
+        let conn = seeded();
+        let month = this_month();
+        let period = insert_period(&conn, &month);
+        let root = insert_member(&conn, None);
+        insert_entry(&conn, root, &month, 100_000);
+        recalculate_chain(&conn, root, period).unwrap();
+
+        let preview = preview_settings_impact(&conn, CandidateSettings::default()).unwrap();
+
+        assert!(preview.affected_members.is_empty());
+        assert_eq!(preview.rewards_before, preview.rewards_after);
+    }
+
+    #[test]
+    fn a_candidate_slab_table_moves_the_affected_members_slab_and_nothing_else() {
+        let conn = seeded();
+        let month = this_month();
+        let period = insert_period(&conn, &month);
+        let root = insert_member(&conn, None);
+        insert_entry(&conn, root, &month, 100_000); // ×100: 1,000.00
+        recalculate_chain(&conn, root, period).unwrap();
+        let (_, slab_before, _) = totals(&conn, root, period);
+        assert_eq!(slab_before, 4);
+
+        // Same worked move as `a_slab_table_edit_is_reflected_on_the_next_recalculation`:
+        // the default 7-row table (seed.rs's DEFAULT_SLABS) with the 4% row's
+        // threshold moved from 40,000 above the member's own TBV.
+        let candidate = CandidateSettings {
+            slab_thresholds: Some(vec![
+                10_000, 200_000, 120_000, 300_000, 500_000, 700_000, 1_000_000,
+            ]),
+            slab_percentages: Some(vec![2, 4, 6, 8, 10, 12, 14]),
+            ..Default::default()
+        };
+        let preview = preview_settings_impact(&conn, candidate).unwrap();
+
+        assert_eq!(preview.affected_members.len(), 1);
+        let m = &preview.affected_members[0];
+        assert_eq!(m.member_id, root);
+        assert_eq!(m.slab_pct_before, 4);
+        assert_eq!(m.slab_pct_after, 2);
+
+        // Nothing actually written — the live row is untouched.
+        let (_, slab_still, _) = totals(&conn, root, period);
+        assert_eq!(
+            slab_still, 4,
+            "a preview must never write to member_period_totals"
+        );
+    }
+
+    #[test]
+    fn preview_matches_exactly_what_a_real_save_produces() {
+        let conn = seeded();
+        let month = this_month();
+        let period = insert_period(&conn, &month);
+        let parent = insert_member(&conn, None);
+        for _ in 0..3 {
+            let child = insert_member(&conn, Some(parent));
+            insert_entry(&conn, child, &month, 1_000_000); // top slab
+            recalculate_chain(&conn, child, period).unwrap();
+        }
+
+        let candidate = CandidateSettings {
+            royalty_qualifying_count: Some(10),
+            ..Default::default()
+        };
+        let preview = preview_settings_impact(&conn, candidate).unwrap();
+        let predicted_parent = preview
+            .affected_members
+            .iter()
+            .find(|m| m.member_id == parent)
+            .expect("raising the qualifying count above 3 must stop the parent's royalty");
+        assert_eq!(predicted_parent.royalty_after, 0);
+
+        conn.execute(
+            "UPDATE settings SET value = '10' WHERE key = 'royalty_qualifying_count'",
+            [],
+        )
+        .unwrap();
+        recalculate_open_period(&conn).unwrap();
+        let (_, _, settled_rewards) = totals(&conn, parent, period);
+
+        assert_eq!(
+            settled_rewards, predicted_parent.rewards_after,
+            "T-M7.3-6: the preview must equal what the real save actually settles at"
         );
     }
 }
