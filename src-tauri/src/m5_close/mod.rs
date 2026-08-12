@@ -115,8 +115,10 @@ pub struct ConfirmBackupAndCloseInput {
 /// only those with activity this period — a member with no row yet in
 /// `member_period_totals` (nothing entered under them this period) still
 /// gets a zero-figure snapshot, same `COALESCE` shape `direct_children_figures`
-/// already uses for the same reason.
-fn write_period_close_snapshots(
+/// already uses for the same reason. `pub`, not `pub(crate)`: `generate_dataset`
+/// (T-QA.5-3) is its own binary crate and reuses this rather than
+/// re-deriving the same snapshot shape a second way.
+pub fn write_period_close_snapshots(
     conn: &Connection,
     period_id: i64,
     created_at: &str,
@@ -173,6 +175,21 @@ fn write_period_close_snapshots(
     Ok(())
 }
 
+/// Rule-38: zeroes everything a snapshot has already captured — Business
+/// Volume, TBV, Rewards, royalty. `pub`, not `pub(crate)`: `generate_dataset`
+/// reuses this too, so a closed synthetic month ends in exactly the same
+/// zeroed-live-figures state a real close leaves.
+pub fn zero_period_totals(conn: &Connection, period_id: i64) -> Result<(), AppError> {
+    conn.execute(
+        "UPDATE member_period_totals SET
+            business_volume = 0, total_business_volume = 0, slab_pct = 0,
+            differential = 0, royalty = 0, own_reward = 0, rewards = 0
+         WHERE period_id = ?1",
+        [period_id],
+    )?;
+    Ok(())
+}
+
 /// Rule-18/38's strict order, all inside one transaction: write+verify
 /// backup → write snapshots v1 → zero live figures → mark closed. The
 /// backup runs **first**, before this transaction's own writes touch the
@@ -210,13 +227,7 @@ fn write_period_close_backup_and_snapshots(
     }
 
     write_period_close_snapshots(conn, period_id, today)?;
-    conn.execute(
-        "UPDATE member_period_totals SET
-            business_volume = 0, total_business_volume = 0, slab_pct = 0,
-            differential = 0, royalty = 0, own_reward = 0, rewards = 0
-         WHERE period_id = ?1",
-        [period_id],
-    )?;
+    zero_period_totals(conn, period_id)?;
     conn.execute(
         "UPDATE periods SET status = 'closed', closed_at = ?2 WHERE id = ?1",
         rusqlite::params![period_id, today],
