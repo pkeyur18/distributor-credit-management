@@ -22,7 +22,7 @@ export async function navigateTo(navLabel) {
 // helper can't just guess the ID a save produced. Search by the phone
 // number the caller chose (deterministic, under the caller's control),
 // click through to Member Detail, and read the ID back off the URL.
-async function idOfPhone(phone) {
+export async function idOfPhone(phone) {
   await navigateTo("Home");
   await $("#home-search").setValue(phone);
   const row = $(`button*=${phone}`);

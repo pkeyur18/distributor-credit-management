@@ -10,6 +10,7 @@ import { MonthlyClose } from "@/screens/monthly-close";
 import { Settings } from "@/screens/settings";
 import { Reports } from "@/screens/reports";
 import { Audit } from "@/screens/audit";
+import { FullHierarchy } from "@/windows/full-hierarchy";
 import { Setup } from "@/screens/auth/setup";
 import { Login } from "@/screens/auth/login";
 import { Locked } from "@/screens/auth/locked";
@@ -60,6 +61,10 @@ const router = createBrowserRouter([
   { path: "/auth/locked", element: <Locked /> },
   { path: "/auth/recovery", element: <Recovery /> },
   { path: "/auth/data-recovery", element: <DataRecovery /> },
+  // US-M4.3 (§5.3a). Own top-level route, deliberately outside RequireAuth
+  // and AppShell — opened only in a separate `full-hierarchy-*` Tauri
+  // window (see structure.tsx), never navigated to inside the main window.
+  { path: "/full-hierarchy", element: <FullHierarchy /> },
   // Sprint 3 (US-UI.3/US-UI.4) DoD item 13 verification aid — never linked
   // from the sidebar, stripped from production builds.
   ...(import.meta.env.DEV

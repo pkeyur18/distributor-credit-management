@@ -1,12 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChevronRight } from "lucide-react";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingState } from "@/components/loading-state";
 import { SearchResultsList } from "@/components/search-results-list";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import {
   StructureTreeNode,
   TreeConnectorLayer,
@@ -17,6 +20,7 @@ import { getDirectChildrenChart } from "@/lib/ipc/m4-search";
 import type { ChartNode } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { centsToDisplay } from "@/lib/utils";
+import { FULL_TREE_GATE } from "@/windows/full-hierarchy-layout";
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 1.5;
@@ -40,6 +44,13 @@ export function Structure() {
   const [zoom, setZoom] = useState(1);
   const [query, setQuery] = useState("");
   const { results } = useMemberSearch(query);
+  const toast = useToast();
+
+  // US-M4.3 (§5.3a/Rule-45). The gate's count and the eventual draw are two
+  // separate reads of the same cheap query (04-technical-architecture.md
+  // §API-11) — this one just resolves the top member's descendant count.
+  const [fullHierarchyBusy, setFullHierarchyBusy] = useState(false);
+  const [gateCount, setGateCount] = useState<number | null>(null);
 
   // True only before the very first fetch resolves — re-navigating to a
   // different member updates in place rather than flashing back to loading.
@@ -149,6 +160,38 @@ export function Structure() {
     setZoom(Math.round(next * 100) / 100);
   }
 
+  // T-M4.3-3: always the top member, regardless of what this screen is
+  // currently rooted at — `memberId` omitted resolves server-side to the
+  // one true root (get_direct_children_chart contract).
+  function openFullHierarchyWindow() {
+    new WebviewWindow(`full-hierarchy-${Date.now()}`, {
+      url: "/full-hierarchy",
+      title: "Full hierarchy",
+      width: 1280,
+      height: 800,
+      minWidth: 1024,
+      minHeight: 720,
+      resizable: true,
+    });
+  }
+
+  async function viewFullHierarchy() {
+    setFullHierarchyBusy(true);
+    try {
+      const result = await getDirectChildrenChart({ fullTree: true });
+      const descendantCount = result.nodes.length - 1;
+      if (descendantCount > FULL_TREE_GATE) {
+        setGateCount(descendantCount);
+      } else {
+        openFullHierarchyWindow();
+      }
+    } catch (raw) {
+      toast.add({ title: toErrorPresentation(raw).message, type: "danger" });
+    } finally {
+      setFullHierarchyBusy(false);
+    }
+  }
+
   if (loading) return <LoadingState />;
   if (error || !rootNode) {
     return (
@@ -211,7 +254,7 @@ export function Structure() {
         <Button variant="secondary" size="sm" disabled={openPath.length === 0} onClick={() => setOpenPath([])}>
           Collapse all
         </Button>
-        <Button variant="secondary" size="sm" disabled title="Opens in S9's Full Hierarchy Window">
+        <Button variant="secondary" size="sm" disabled={fullHierarchyBusy} onClick={viewFullHierarchy}>
           View full hierarchy
         </Button>
       </div>
@@ -283,6 +326,29 @@ export function Structure() {
         Click a member to open the legs beneath them <ChevronRight className="size-3" /> opening one
         closes the branch already open at that level.
       </p>
+
+      <ConfirmDialog
+        open={gateCount !== null}
+        onOpenChange={(open) => !open && setGateCount(null)}
+        title="Open the full hierarchy?"
+        body={
+          <>
+            <p>
+              This will draw {gateCount?.toLocaleString()} members in a new window. It may take a
+              moment.
+            </p>
+            <p className="text-caption mt-2">
+              The console stays usable while it draws. The new window is a picture of this moment
+              and does not update.
+            </p>
+          </>
+        }
+        confirmLabel="Open"
+        onConfirm={() => {
+          setGateCount(null);
+          openFullHierarchyWindow();
+        }}
+      />
     </>
   );
 }
