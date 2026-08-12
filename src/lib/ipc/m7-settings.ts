@@ -48,3 +48,8 @@ export function updateConsoleBackupSettings(
 ): Promise<ConsoleBackupSettings> {
   return invokeCommand("update_console_backup_settings", { ...input });
 }
+
+// API-39 (T-M7.4-4's "Back up now") already lives in `m8-auth.ts` — module
+// M8 owns it per the architecture doc's command table, and it was
+// pre-scaffolded there ahead of this sprint. Re-exported from `m8-auth`,
+// not duplicated here.
