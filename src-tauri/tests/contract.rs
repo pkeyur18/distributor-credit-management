@@ -212,6 +212,12 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
         "list_restore_points",
         "restore_from_backup",
         "restore_from_backup_file",
+        // US-M7.3/US-M5.1, S11.
+        "preview_settings_impact",
+        "get_outstanding_periods",
+        "begin_close",
+        "confirm_backup_and_close",
+        "manual_backup_current_period",
     ];
     for &name in ALL_COMMAND_NAMES
         .iter()
@@ -1020,4 +1026,212 @@ fn restore_from_backup_file_end_to_end_through_the_command_layer() {
     .unwrap();
 
     assert!(!app.state::<SessionState>().is_authenticated());
+}
+
+// --- preview_settings_impact (API-33, US-M7.3) ---
+
+#[test]
+fn preview_settings_impact_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::preview_settings_impact(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        bvconsole_lib::m3_calc::CandidateSettings::default(),
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn preview_settings_impact_writes_nothing_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9990000001"),
+    )
+    .unwrap();
+    commands::record_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        RecordEntryInput {
+            member_id: root.id,
+            amount: 100_000,
+            entry_date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        },
+    )
+    .unwrap();
+    let before =
+        commands::get_settings(app.state::<SessionState>(), app.state::<DbState>()).unwrap();
+
+    let preview = commands::preview_settings_impact(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        bvconsole_lib::m3_calc::CandidateSettings {
+            royalty_qualifying_count: Some(before.royalty_qualifying_count + 5),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(preview.rewards_before, preview.rewards_after);
+
+    let after =
+        commands::get_settings(app.state::<SessionState>(), app.state::<DbState>()).unwrap();
+    assert_eq!(
+        after.royalty_qualifying_count, before.royalty_qualifying_count,
+        "a preview must never write the candidate settings back"
+    );
+}
+
+// --- M5 close flow (API-12/13/14/15, US-M5.1) ---
+
+fn mark_current_month_awaiting_close(app: &tauri::App<tauri::test::MockRuntime>) -> i64 {
+    // No command transitions a period to `awaiting_close` yet (US-M5.5,
+    // S12's catch-up) — direct SQL is the only way to reach this state
+    // ahead of that story, same as any other pre-S12 test exercising the
+    // close flow.
+    let db = app.state::<DbState>();
+    let guard = db.0.lock().unwrap();
+    let conn = guard.as_ref().unwrap();
+    let month = chrono::Local::now().format("%Y-%m").to_string();
+    conn.execute(
+        "UPDATE periods SET status = 'awaiting_close', ended_at = ?1 WHERE period_month = ?1",
+        [&month],
+    )
+    .unwrap();
+    conn.query_row(
+        "SELECT id FROM periods WHERE period_month = ?1",
+        [&month],
+        |r| r.get(0),
+    )
+    .unwrap()
+}
+
+#[test]
+fn get_outstanding_periods_and_begin_close_require_a_session() {
+    let app = app_with_seeded_db();
+    assert!(matches!(
+        commands::get_outstanding_periods(app.state::<SessionState>(), app.state::<DbState>()),
+        Err(AppError::AuthRequired)
+    ));
+    assert!(matches!(
+        commands::begin_close(app.state::<SessionState>(), app.state::<DbState>()),
+        Err(AppError::AuthRequired)
+    ));
+}
+
+#[test]
+fn confirm_backup_and_close_and_manual_backup_require_a_session() {
+    let (app, _dir) = app_with_seeded_db_on_disk("m5-close-session-gate");
+    assert!(matches!(
+        commands::confirm_backup_and_close(
+            app.state::<SessionState>(),
+            app.state::<DbState>(),
+            app.state::<AppPaths>(),
+            bvconsole_lib::m5_close::ConfirmBackupAndCloseInput {
+                period_id: 1,
+                external_medium_path: None,
+            },
+        ),
+        Err(AppError::AuthRequired)
+    ));
+    assert!(matches!(
+        commands::manual_backup_current_period(
+            app.state::<SessionState>(),
+            app.state::<DbState>(),
+            app.state::<AppPaths>(),
+        ),
+        Err(AppError::AuthRequired)
+    ));
+}
+
+#[test]
+fn the_full_close_flow_writes_a_permanent_record_and_zeroes_live_figures() {
+    let (app, _dir) = app_with_seeded_db_on_disk("m5-close-end-to-end");
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9990000002"),
+    )
+    .unwrap();
+    commands::record_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        RecordEntryInput {
+            member_id: root.id,
+            amount: 100_000,
+            entry_date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        },
+    )
+    .unwrap();
+    let period_id = mark_current_month_awaiting_close(&app);
+
+    let outstanding =
+        commands::get_outstanding_periods(app.state::<SessionState>(), app.state::<DbState>())
+            .unwrap();
+    assert_eq!(outstanding.len(), 1);
+    assert_eq!(outstanding[0].id, period_id);
+
+    let begun = commands::begin_close(app.state::<SessionState>(), app.state::<DbState>()).unwrap();
+    assert_eq!(begun.period_id, period_id);
+    assert_eq!(begun.with_entry_count, 1);
+
+    commands::confirm_backup_and_close(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        app.state::<AppPaths>(),
+        bvconsole_lib::m5_close::ConfirmBackupAndCloseInput {
+            period_id,
+            external_medium_path: None,
+        },
+    )
+    .unwrap();
+
+    let still_outstanding =
+        commands::get_outstanding_periods(app.state::<SessionState>(), app.state::<DbState>())
+            .unwrap();
+    assert!(
+        still_outstanding.is_empty(),
+        "the closed month must drop off the outstanding list"
+    );
+
+    let points = commands::list_restore_points(app.state::<DbState>()).unwrap();
+    assert!(
+        points.iter().any(|p| p.kind == "period_close"),
+        "the close must have written a period_close backup"
+    );
+}
+
+#[test]
+fn manual_backup_current_period_end_to_end_through_the_command_layer() {
+    let (app, _dir) = app_with_seeded_db_on_disk("manual-backup-current-period");
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9990000003"),
+    )
+    .unwrap();
+    commands::record_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        RecordEntryInput {
+            member_id: root.id,
+            amount: 50_000,
+            entry_date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        },
+    )
+    .unwrap();
+
+    let record = commands::manual_backup_current_period(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        app.state::<AppPaths>(),
+    )
+    .unwrap();
+
+    assert_eq!(record.kind, "manual");
+    let points = commands::list_restore_points(app.state::<DbState>()).unwrap();
+    assert_eq!(points[0].id, record.id);
 }

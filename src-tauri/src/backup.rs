@@ -228,7 +228,9 @@ pub fn list_restore_points(conn: &Connection) -> Result<Vec<BackupRecord>, AppEr
     Ok(rows)
 }
 
-fn console_backup_retention_count(conn: &Connection) -> Result<i64, AppError> {
+/// `pub(crate)`: `m5_close::manual_backup_current_period` (API-15) prunes
+/// against the same retention setting rather than re-deriving it.
+pub(crate) fn console_backup_retention_count(conn: &Connection) -> Result<i64, AppError> {
     let value: String = conn.query_row(
         "SELECT value FROM settings WHERE key = 'console_backup_retention_count'",
         [],

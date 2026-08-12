@@ -9,7 +9,9 @@ use crate::db_state::DbState;
 use crate::error::AppError;
 use crate::m1_members;
 use crate::m2_entries;
+use crate::m3_calc;
 use crate::m4_search;
+use crate::m5_close;
 use crate::m7_settings;
 use crate::m8_auth;
 use crate::paths::AppPaths;
@@ -160,8 +162,23 @@ pub fn edit_entry(
 
 auth_stub!(get_period_lock_status);
 
-// M3 — US-M3.1/M3.2, S6.
-auth_stub!(preview_settings_impact);
+// M3 — US-M3.1/M3.2, S6; US-M7.3's `preview_settings_impact`, S11.
+
+/// API-33. Writes nothing (`m3_calc::preview_settings_impact`'s own doc
+/// comment) — safe to call freely from the Settings pre-save warning.
+#[tauri::command]
+pub fn preview_settings_impact(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    candidate: m3_calc::CandidateSettings,
+) -> Result<m3_calc::SettingsImpactPreview, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m3_calc::preview_settings_impact(conn, candidate)
+}
 
 // M4 — US-M4.1/M4.2, S8; US-M4.3, S9.
 
@@ -197,11 +214,66 @@ pub fn get_direct_children_chart(
     m4_search::get_direct_children_chart(conn, member_id, full_tree)
 }
 
-// M5 — US-M5.1..M5.5, S11-S13.
-auth_stub!(get_outstanding_periods);
-auth_stub!(begin_close);
-auth_stub!(confirm_backup_and_close);
-auth_stub!(manual_backup_current_period);
+// M5 — US-M5.1, S11 (US-M5.2..M5.5 are S12-S13 and stay stubs).
+
+/// API-12.
+#[tauri::command]
+pub fn get_outstanding_periods(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<Vec<m5_close::Period>, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m5_close::get_outstanding_periods(conn)
+}
+
+/// API-13.
+#[tauri::command]
+pub fn begin_close(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<m5_close::BeginCloseResult, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m5_close::begin_close(conn)
+}
+
+/// API-14.
+#[tauri::command]
+pub fn confirm_backup_and_close(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    paths: tauri::State<'_, AppPaths>,
+    input: m5_close::ConfirmBackupAndCloseInput,
+) -> Result<m5_close::CloseOutcome, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m5_close::confirm_backup_and_close(conn, &paths.db_path, &paths.app_data_dir, input)
+}
+
+/// API-15.
+#[tauri::command]
+pub fn manual_backup_current_period(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    paths: tauri::State<'_, AppPaths>,
+) -> Result<backup::BackupRecord, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m5_close::manual_backup_current_period(conn, &paths.db_path, &paths.app_data_dir)
+}
 
 // M6 — US-M6.1..M6.5, S13.
 auth_stub!(export_monthly);
@@ -571,11 +643,6 @@ pub fn call_stub_by_name(
 ) -> Result<serde_json::Value, AppError> {
     match name {
         "get_period_lock_status" => get_period_lock_status(session),
-        "preview_settings_impact" => preview_settings_impact(session),
-        "get_outstanding_periods" => get_outstanding_periods(session),
-        "begin_close" => begin_close(session),
-        "confirm_backup_and_close" => confirm_backup_and_close(session),
-        "manual_backup_current_period" => manual_backup_current_period(session),
         "export_monthly" => export_monthly(session),
         "export_yearly_average" => export_yearly_average(session),
         "export_low_contribution" => export_low_contribution(session),
@@ -623,13 +690,20 @@ mod tests {
             "list_restore_points",
             "restore_from_backup",
             "restore_from_backup_file",
+            // US-M7.3, S11.
+            "preview_settings_impact",
+            // US-M5.1, S11.
+            "get_outstanding_periods",
+            "begin_close",
+            "confirm_backup_and_close",
+            "manual_backup_current_period",
         ];
         let stub_names: Vec<&str> = ALL_COMMAND_NAMES
             .iter()
             .copied()
             .filter(|n| !HAS_REAL_LOGIC.contains(n))
             .collect();
-        assert_eq!(stub_names.len(), 13);
+        assert_eq!(stub_names.len(), 8);
         // Exercised properly (with real State fixtures) in tests/contract.rs;
         // this just proves the dispatcher doesn't panic on any known name.
     }
