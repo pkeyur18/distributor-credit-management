@@ -83,6 +83,29 @@ fn app_with_temp_paths(label: &str) -> (tauri::App<tauri::test::MockRuntime>, Te
     (app, dir)
 }
 
+/// US-M7.4's pulled-forward commands (`run_console_backup_now`,
+/// `restore_from_backup`, `restore_from_backup_file`) do real file I/O
+/// against `AppPaths.db_path` (`std::fs::copy`, unconditionally) —
+/// `app_with_seeded_db`'s in-memory connection has no such file on disk.
+/// This fixture opens a real encrypted file at the managed `db_path`
+/// instead, exactly like `setup_first_run`/`login` do.
+fn app_with_seeded_db_on_disk(label: &str) -> (tauri::App<tauri::test::MockRuntime>, TempAppDir) {
+    let dir = TempAppDir::new(label);
+    let app = tauri::test::mock_app();
+    app.manage(SessionState::new());
+    let backups_dir = dir.0.join("backups");
+    std::fs::create_dir_all(&backups_dir).unwrap();
+    let db_path = dir.0.join("console.db");
+    let conn = db::open_encrypted(&db_path, "test-key").unwrap();
+    app.manage(DbState::with_connection(conn));
+    app.manage(AppPaths {
+        db_path,
+        auth_path: dir.0.join("auth.json"),
+        backups_dir,
+    });
+    (app, dir)
+}
+
 fn root_input(phone: &str) -> CreateRootMemberInput {
     CreateRootMemberInput {
         name: "Top Member".into(),
@@ -182,6 +205,19 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
         "get_member_detail",
         "get_direct_children_chart",
         "use_recovery_code",
+        // US-M7.1/M7.2/M7.4, S10 (US-M8.5/M8.6's own commands pulled
+        // forward — see `commands.rs`'s "M8 remainder" comment).
+        "get_settings",
+        "update_settings",
+        "add_slab_row",
+        "remove_slab_row",
+        "update_slab_row",
+        "get_console_backup_settings",
+        "update_console_backup_settings",
+        "run_console_backup_now",
+        "list_restore_points",
+        "restore_from_backup",
+        "restore_from_backup_file",
     ];
     for &name in ALL_COMMAND_NAMES
         .iter()
@@ -812,4 +848,182 @@ fn use_recovery_code_end_to_end_through_the_command_layer() {
     )
     .unwrap();
     assert!(app.state::<SessionState>().is_authenticated());
+}
+
+// US-M7.1/M7.2/M7.4 (S10) command-layer wiring — US-M8.5/M8.6's own
+// commands (`run_console_backup_now`, `list_restore_points`,
+// `restore_from_backup`, `restore_from_backup_file`) pulled forward, per
+// `commands.rs`'s "M8 remainder" comment.
+
+#[test]
+fn get_settings_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::get_settings(app.state::<SessionState>(), app.state::<DbState>());
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn get_and_update_settings_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+
+    let settings =
+        commands::get_settings(app.state::<SessionState>(), app.state::<DbState>()).unwrap();
+    assert_eq!(settings.session_timeout_minutes, 15);
+
+    let updated = commands::update_settings(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        bvconsole_lib::m7_settings::SettingsPatch {
+            session_timeout_minutes: Some(30),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(updated.session_timeout_minutes, 30);
+}
+
+#[test]
+fn slab_row_commands_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+
+    let added = commands::add_slab_row(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        2_000_000,
+        16,
+    )
+    .unwrap();
+    assert_eq!(added.percentage, 16);
+
+    let updated = commands::update_slab_row(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        added.id,
+        2_000_000,
+        18,
+    )
+    .unwrap();
+    assert_eq!(updated.percentage, 18);
+
+    commands::remove_slab_row(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        added.id,
+    )
+    .unwrap();
+    let settings =
+        commands::get_settings(app.state::<SessionState>(), app.state::<DbState>()).unwrap();
+    assert_eq!(
+        settings.slab_thresholds.len(),
+        7,
+        "back to the seeded seven rows"
+    );
+}
+
+#[test]
+fn console_backup_settings_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+
+    let before =
+        commands::get_console_backup_settings(app.state::<SessionState>(), app.state::<DbState>())
+            .unwrap();
+    assert_eq!(before.schedule, "off");
+
+    let after = commands::update_console_backup_settings(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        "weekly".into(),
+        5,
+        "backups".into(),
+    )
+    .unwrap();
+    assert_eq!(after.schedule, "weekly");
+    assert_eq!(after.retention_count, 5);
+}
+
+#[test]
+fn run_console_backup_now_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::run_console_backup_now(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn run_console_backup_now_end_to_end_produces_a_manual_backup() {
+    let (app, _dir) = app_with_seeded_db_on_disk("run-console-backup-now");
+    app.state::<SessionState>().mark_authenticated();
+
+    let record = commands::run_console_backup_now(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+    )
+    .unwrap();
+
+    assert_eq!(record.kind, "manual");
+    let points = commands::list_restore_points(app.state::<DbState>()).unwrap();
+    assert_eq!(
+        points[0].id, record.id,
+        "T-M7.4-4: the new manual backup must lead the Restore card's list"
+    );
+}
+
+#[test]
+fn list_restore_points_refuses_cleanly_with_no_database_open() {
+    let app = app_with_seeded_db();
+    // `app_with_seeded_db` manages an in-memory connection directly, so
+    // clear it to simulate the genuine "nothing open yet" state.
+    *app.state::<DbState>().0.lock().unwrap() = None;
+    let result = commands::list_restore_points(app.state::<DbState>());
+    assert!(matches!(result, Err(AppError::NotFound { .. })));
+}
+
+#[test]
+fn restore_from_backup_end_to_end_drops_the_session() {
+    let (app, _dir) = app_with_seeded_db_on_disk("restore-from-backup");
+    app.state::<SessionState>().mark_authenticated();
+    let record = commands::run_console_backup_now(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+    )
+    .unwrap();
+
+    commands::restore_from_backup(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        record.id,
+    )
+    .unwrap();
+
+    assert!(
+        !app.state::<SessionState>().is_authenticated(),
+        "a restored file may hold a different credential — the session must not survive it"
+    );
+}
+
+#[test]
+fn restore_from_backup_file_end_to_end_through_the_command_layer() {
+    let (app, dir) = app_with_seeded_db_on_disk("restore-from-backup-file");
+    app.state::<SessionState>().mark_authenticated();
+    let source_path = dir.0.join("brought-from-another-machine.db");
+    std::fs::copy(app.state::<AppPaths>().db_path.clone(), &source_path).unwrap();
+
+    commands::restore_from_backup_file(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        source_path.to_string_lossy().into_owned(),
+    )
+    .unwrap();
+
+    assert!(!app.state::<SessionState>().is_authenticated());
 }

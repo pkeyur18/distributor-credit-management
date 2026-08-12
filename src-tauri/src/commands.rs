@@ -4,11 +4,13 @@
 // real from this sprint onward. Only API-01/API-02 (US-M1.1) have logic;
 // every other command is a typed, correctly-gated stub until its own story
 // ships — see `AppError::NotImplemented`.
+use crate::backup;
 use crate::db_state::DbState;
 use crate::error::AppError;
 use crate::m1_members;
 use crate::m2_entries;
 use crate::m4_search;
+use crate::m7_settings;
 use crate::m8_auth;
 use crate::paths::AppPaths;
 use crate::session::{require_locked, require_session, SessionState};
@@ -56,17 +58,6 @@ macro_rules! auth_stub {
             session: tauri::State<'_, SessionState>,
         ) -> Result<serde_json::Value, AppError> {
             require_session(&session)?;
-            Err(AppError::NotImplemented {
-                command: stringify!($name),
-            })
-        }
-    };
-}
-
-macro_rules! open_stub {
-    ($name:ident) => {
-        #[tauri::command]
-        pub fn $name() -> Result<serde_json::Value, AppError> {
             Err(AppError::NotImplemented {
                 command: stringify!($name),
             })
@@ -219,16 +210,148 @@ auth_stub!(export_low_contribution);
 auth_stub!(list_backups);
 auth_stub!(redownload_backup);
 
-// M7 — US-M7.1/M7.2/M7.4, S10; US-M7.3, S11.
-auth_stub!(get_settings);
-auth_stub!(update_settings);
-auth_stub!(add_slab_row);
-auth_stub!(remove_slab_row);
-auth_stub!(update_slab_row);
-auth_stub!(get_console_backup_settings);
-auth_stub!(update_console_backup_settings);
+// M7 — US-M7.1/M7.2/M7.4, S10 (the mid-period recalculation warning,
+// US-M7.3/API-33's `preview_settings_impact`, stays a stub — S11).
 
-// M8 remainder — US-M8.2/M8.3, S5/S7; US-M8.5, S14.
+/// API-21.
+#[tauri::command]
+pub fn get_settings(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<m7_settings::Settings, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m7_settings::get_settings(conn)
+}
+
+/// API-22. §5.7: structure guidance/reporting/reference-value sections save
+/// silently; only a royalty qualifying-count or rate change recalculates
+/// the open period — see `m7_settings::update_settings`'s own doc comment.
+/// The pre-save warning this API doc otherwise requires is US-M7.3, S11.
+#[tauri::command]
+pub fn update_settings(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    patch: m7_settings::SettingsPatch,
+) -> Result<m7_settings::Settings, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m7_settings::update_settings(conn, patch)
+}
+
+/// API-23.
+#[tauri::command]
+pub fn add_slab_row(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    threshold: i64,
+    percentage: i64,
+) -> Result<m7_settings::SlabRow, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m7_settings::add_slab_row(
+        conn,
+        m7_settings::SlabRowInput {
+            threshold,
+            percentage,
+        },
+    )
+}
+
+/// API-24.
+#[tauri::command]
+pub fn remove_slab_row(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    id: i64,
+) -> Result<(), AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m7_settings::remove_slab_row(conn, id)
+}
+
+/// API-25.
+#[tauri::command]
+pub fn update_slab_row(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    id: i64,
+    threshold: i64,
+    percentage: i64,
+) -> Result<m7_settings::SlabRow, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m7_settings::update_slab_row(
+        conn,
+        id,
+        m7_settings::SlabRowInput {
+            threshold,
+            percentage,
+        },
+    )
+}
+
+/// API-37.
+#[tauri::command]
+pub fn get_console_backup_settings(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<m7_settings::ConsoleBackupSettings, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m7_settings::get_console_backup_settings(conn)
+}
+
+/// API-38. T-M7.4-2: the segmented control and retention field save
+/// immediately, no separate Save step — this command is the whole of that
+/// save, called straight from the control's `onValueChange`.
+#[tauri::command]
+pub fn update_console_backup_settings(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    schedule: String,
+    retention_count: i64,
+    folder: String,
+) -> Result<m7_settings::ConsoleBackupSettings, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m7_settings::update_console_backup_settings(
+        conn,
+        m7_settings::ConsoleBackupSettings {
+            schedule,
+            retention_count,
+            folder,
+        },
+    )
+}
+
+// M8 remainder — US-M8.2/M8.3, S5/S7. `run_console_backup_now`,
+// `list_restore_points`, `restore_from_backup`, `restore_from_backup_file`
+// below are US-M8.5/US-M8.6's own commands, pulled forward into this sprint
+// because US-M7.4's Settings screen (S10) genuinely needs them working —
+// see PI/01-backlog.md's T-M7.4-3/4/5/6. Only the login-triggered schedule
+// check (T-M8.5-2) is still S14.
 
 /// API-28. ⚠️ T-M8.3-1: the encryption key must be genuinely dropped, not
 /// merely hidden behind an overlay — dropping the open `Connection` here
@@ -270,7 +393,24 @@ pub fn unlock_session(
 }
 
 auth_stub!(get_outstanding_alert);
-auth_stub!(run_console_backup_now);
+
+/// API-39. `kind = "manual"` — T-M7.4-4's "Back up now" action. The
+/// login-triggered `kind = "scheduled"` catch-up call site (T-M8.5-2) is
+/// still S14; `backup::run_console_backup_now` itself is agnostic to which
+/// kind called it.
+#[tauri::command]
+pub fn run_console_backup_now(
+    paths: tauri::State<'_, AppPaths>,
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<backup::BackupRecord, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    backup::run_console_backup_now(conn, &paths.db_path, &paths.backups_dir, "manual", None)
+}
 
 // M9 — US-M9.1, S14 (a completeness check; audit writes land per-command from S4,
 // but the read command itself has no consumer until then).
@@ -347,9 +487,73 @@ pub fn check_data_readable(paths: tauri::State<'_, AppPaths>) -> Result<bool, Ap
     Ok(paths.auth_path.exists())
 }
 
-open_stub!(list_restore_points); // US-M8.6, S14
-open_stub!(restore_from_backup); // US-M8.6, S14
-open_stub!(restore_from_backup_file); // US-M8.6, S14
+/// API-35 — unauthenticated per the closed set of seven (Rule-29). S10
+/// only reaches this from the authenticated Settings screen (T-M7.4-5),
+/// where `db`'s connection is already open; a genuinely pre-login read (no
+/// connection, no key) is the "corrupted-database detection" work
+/// `check_data_readable`'s own doc comment already defers to S14 — this
+/// refuses cleanly rather than attempting it.
+#[tauri::command]
+pub fn list_restore_points(
+    db: tauri::State<'_, DbState>,
+) -> Result<Vec<backup::BackupRecord>, AppError> {
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().ok_or_else(|| AppError::NotFound {
+        message: "No database is currently open.".into(),
+    })?;
+    backup::list_restore_points(conn)
+}
+
+/// API-36 — same authenticated-only scope as `list_restore_points` this
+/// sprint. Drops the session on success: the restored file may hold a
+/// different credential (§9.5), so the next access must go through `login`
+/// again rather than trust the now-stale in-memory connection.
+#[tauri::command]
+pub fn restore_from_backup(
+    paths: tauri::State<'_, AppPaths>,
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    backup_id: i64,
+) -> Result<(), AppError> {
+    {
+        let guard = locked_conn(&db);
+        let conn = guard.as_ref().ok_or_else(|| AppError::NotFound {
+            message: "No database is currently open.".into(),
+        })?;
+        backup::restore_from_backup(conn, &paths.db_path, &paths.backups_dir, backup_id)?;
+    }
+    *locked_conn(&db) = None;
+    session.mark_locked();
+    Ok(())
+}
+
+/// API-40 — same authenticated-only scope and post-restore session drop as
+/// `restore_from_backup`. Backs Settings' "Restore from a file…"
+/// (T-M7.4-5), fed by the native file picker (`tauri-plugin-dialog`) on
+/// the frontend.
+#[tauri::command]
+pub fn restore_from_backup_file(
+    paths: tauri::State<'_, AppPaths>,
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    file_path: String,
+) -> Result<(), AppError> {
+    {
+        let guard = locked_conn(&db);
+        let conn = guard.as_ref().ok_or_else(|| AppError::NotFound {
+            message: "No database is currently open.".into(),
+        })?;
+        backup::restore_from_backup_file(
+            conn,
+            &paths.db_path,
+            &paths.backups_dir,
+            std::path::Path::new(&file_path),
+        )?;
+    }
+    *locked_conn(&db) = None;
+    session.mark_locked();
+    Ok(())
+}
 
 pub use crate::command_names::{ALL_COMMAND_NAMES, UNAUTHENTICATED_COMMAND_NAMES};
 
@@ -377,19 +581,8 @@ pub fn call_stub_by_name(
         "export_low_contribution" => export_low_contribution(session),
         "list_backups" => list_backups(session),
         "redownload_backup" => redownload_backup(session),
-        "get_settings" => get_settings(session),
-        "update_settings" => update_settings(session),
-        "add_slab_row" => add_slab_row(session),
-        "remove_slab_row" => remove_slab_row(session),
-        "update_slab_row" => update_slab_row(session),
-        "get_console_backup_settings" => get_console_backup_settings(session),
-        "update_console_backup_settings" => update_console_backup_settings(session),
         "get_outstanding_alert" => get_outstanding_alert(session),
-        "run_console_backup_now" => run_console_backup_now(session),
         "get_audit_log" => get_audit_log(session),
-        "list_restore_points" => list_restore_points(),
-        "restore_from_backup" => restore_from_backup(),
-        "restore_from_backup_file" => restore_from_backup_file(),
         other => panic!("unknown command in ALL_COMMAND_NAMES: {other}"),
     }
 }
@@ -417,13 +610,26 @@ mod tests {
             "get_member_detail",
             "get_direct_children_chart",
             "use_recovery_code",
+            // US-M7.1/M7.2/M7.4, S10 (US-M8.5/M8.6's own commands pulled
+            // forward — see the "M8 remainder" comment above).
+            "get_settings",
+            "update_settings",
+            "add_slab_row",
+            "remove_slab_row",
+            "update_slab_row",
+            "get_console_backup_settings",
+            "update_console_backup_settings",
+            "run_console_backup_now",
+            "list_restore_points",
+            "restore_from_backup",
+            "restore_from_backup_file",
         ];
         let stub_names: Vec<&str> = ALL_COMMAND_NAMES
             .iter()
             .copied()
             .filter(|n| !HAS_REAL_LOGIC.contains(n))
             .collect();
-        assert_eq!(stub_names.len(), 24);
+        assert_eq!(stub_names.len(), 13);
         // Exercised properly (with real State fixtures) in tests/contract.rs;
         // this just proves the dispatcher doesn't panic on any known name.
     }
