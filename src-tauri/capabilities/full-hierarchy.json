@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "full-hierarchy",
+  "description": "Capability for the Full Hierarchy window (FR-10/Rule-45) — read-only, its own window label",
+  "windows": ["full-hierarchy-*"],
+  "permissions": ["core:default", "allow-get-direct-children-chart"]
+}
