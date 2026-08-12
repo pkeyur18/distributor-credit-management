@@ -50,12 +50,10 @@ fn invoke_setup_first_run(body: InvokeBody) -> Result<serde_json::Value, serde_j
     let dir = TempAppDir::new();
     app.manage(SessionState::new());
     app.manage(DbState::new());
-    let backups_dir = dir.0.join("backups");
-    std::fs::create_dir_all(&backups_dir).unwrap();
     app.manage(AppPaths {
         db_path: dir.0.join("console.db"),
         auth_path: dir.0.join("auth.json"),
-        backups_dir,
+        app_data_dir: dir.0.clone(),
     });
 
     let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
