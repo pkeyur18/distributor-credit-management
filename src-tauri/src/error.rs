@@ -100,8 +100,8 @@ impl Serialize for AppError {
         } else {
             state.serialize_field("attemptsRemaining", &None::<i64>)?;
         }
-        if let AppError::PeriodNotAcceptingEntries { month, .. } | AppError::PeriodClosed { month } =
-            self
+        if let AppError::PeriodNotAcceptingEntries { month, .. }
+        | AppError::PeriodClosed { month } = self
         {
             state.serialize_field("month", month)?;
         } else {

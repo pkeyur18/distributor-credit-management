@@ -502,7 +502,9 @@ pub fn resolve_recording_period(conn: &Connection, entry_date: &str) -> Result<i
     };
 
     match status.as_str() {
-        "closed" => Err(AppError::PeriodClosed { month: target_month }),
+        "closed" => Err(AppError::PeriodClosed {
+            month: target_month,
+        }),
         "awaiting_close" => Ok(period_id),
         _ => match outstanding_period_months(conn)?.into_iter().next() {
             Some(blocking_month) => Err(AppError::PeriodNotAcceptingEntries {

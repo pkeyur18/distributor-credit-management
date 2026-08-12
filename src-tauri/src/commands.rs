@@ -160,7 +160,19 @@ pub fn edit_entry(
     m2_entries::edit_entry(conn, &paths.db_path, &paths.app_data_dir, input)
 }
 
-auth_stub!(get_period_lock_status);
+/// API-07 (US-M2.3/M5.3, S12).
+#[tauri::command]
+pub fn get_period_lock_status(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<m5_close::PeriodLockStatus, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m5_close::get_period_lock_status(conn)
+}
 
 // M3 — US-M3.1/M3.2, S6; US-M7.3's `preview_settings_impact`, S11.
 
@@ -214,7 +226,7 @@ pub fn get_direct_children_chart(
     m4_search::get_direct_children_chart(conn, member_id, full_tree)
 }
 
-// M5 — US-M5.1, S11 (US-M5.2..M5.5 are S12-S13 and stay stubs).
+// M5 — US-M5.1, S11; US-M5.2/M5.3/M5.5, S12 (US-M5.4 is S13 and stays a stub).
 
 /// API-12.
 #[tauri::command]
@@ -464,7 +476,19 @@ pub fn unlock_session(
     Ok(())
 }
 
-auth_stub!(get_outstanding_alert);
+/// API-31 (US-M5.2, S12).
+#[tauri::command]
+pub fn get_outstanding_alert(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<m5_close::OutstandingAlert, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m5_close::get_outstanding_alert(conn)
+}
 
 /// API-39. `kind = "manual"` — T-M7.4-4's "Back up now" action. The
 /// login-triggered `kind = "scheduled"` catch-up call site (T-M8.5-2) is
@@ -511,6 +535,7 @@ pub fn setup_first_run(
         &paths.db_path,
         &m8_auth::crypto::sqlcipher_raw_key_pragma(&master_key),
     )?;
+    m5_close::run_period_catchup(&conn)?;
     *db.0.lock().expect("db mutex poisoned") = Some(conn);
     session.mark_authenticated();
     Ok(result)
@@ -532,6 +557,7 @@ pub fn login(
         &paths.db_path,
         &m8_auth::crypto::sqlcipher_raw_key_pragma(&master_key),
     )?;
+    m5_close::run_period_catchup(&conn)?;
     *db.0.lock().expect("db mutex poisoned") = Some(conn);
     session.mark_authenticated();
     Ok(())
@@ -631,24 +657,24 @@ pub use crate::command_names::{ALL_COMMAND_NAMES, UNAUTHENTICATED_COMMAND_NAMES}
 
 /// QA.2's contract test needs to exercise the remaining stub commands
 /// generically by name — `create_root_member`/`add_member` (M1.1),
-/// `setup_first_run`/`login`/`check_data_readable` (M8.1/M8.2, S5), and
+/// `setup_first_run`/`login`/`check_data_readable` (M8.1/M8.2, S5),
 /// `record_entry`/`edit_entry`/`lock_session`/`unlock_session` (M2.1/M2.2/
-/// M8.3, S7) all have real logic now and their own dedicated tests instead
-/// (see `tests/contract.rs`). Rust has no runtime reflection to call a
-/// function by string, so this is the one place that enumerates the match
-/// by hand; `ALL_COMMAND_NAMES` is what keeps it honest against gaps.
+/// M8.3, S7), and `get_period_lock_status`/`get_outstanding_alert`
+/// (M5.2/M5.3/M2.3/M2.4, S12) all have real logic now and their own
+/// dedicated tests instead (see `tests/contract.rs`). Rust has no runtime
+/// reflection to call a function by string, so this is the one place that
+/// enumerates the match by hand; `ALL_COMMAND_NAMES` is what keeps it
+/// honest against gaps.
 pub fn call_stub_by_name(
     name: &str,
     session: tauri::State<'_, SessionState>,
 ) -> Result<serde_json::Value, AppError> {
     match name {
-        "get_period_lock_status" => get_period_lock_status(session),
         "export_monthly" => export_monthly(session),
         "export_yearly_average" => export_yearly_average(session),
         "export_low_contribution" => export_low_contribution(session),
         "list_backups" => list_backups(session),
         "redownload_backup" => redownload_backup(session),
-        "get_outstanding_alert" => get_outstanding_alert(session),
         "get_audit_log" => get_audit_log(session),
         other => panic!("unknown command in ALL_COMMAND_NAMES: {other}"),
     }
@@ -697,13 +723,16 @@ mod tests {
             "begin_close",
             "confirm_backup_and_close",
             "manual_backup_current_period",
+            // US-M5.2/M5.3/M2.3/M2.4, S12.
+            "get_period_lock_status",
+            "get_outstanding_alert",
         ];
         let stub_names: Vec<&str> = ALL_COMMAND_NAMES
             .iter()
             .copied()
             .filter(|n| !HAS_REAL_LOGIC.contains(n))
             .collect();
-        assert_eq!(stub_names.len(), 8);
+        assert_eq!(stub_names.len(), 6);
         // Exercised properly (with real State fixtures) in tests/contract.rs;
         // this just proves the dispatcher doesn't panic on any known name.
     }
