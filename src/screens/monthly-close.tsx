@@ -18,17 +18,10 @@ import {
   type BeginCloseResult,
 } from "@/lib/ipc/m5-close";
 import type { Period } from "@/lib/ipc/entities";
+import { monthLabel } from "@/lib/utils";
 
 function errorMessage(raw: unknown): string {
   return toErrorPresentation(raw).message;
-}
-
-function monthLabel(periodMonth: string): string {
-  const [year, month] = periodMonth.split("-").map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
 }
 
 // --- close wizard (T-M5.1-9, US-M5.1, S11) ---
