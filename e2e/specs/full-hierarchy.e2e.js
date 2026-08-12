@@ -28,7 +28,12 @@ describe("Full Hierarchy Window", () => {
     await expect($("=No legs beneath")).not.toBeExisting();
 
     await $('input[placeholder="Find a member by name or number"]').setValue("Asha");
-    await $("=Asha Patel").waitForExist({ timeout: 3000 });
+    // The 2px indigo ring (outline-accent) lands on the matched node's
+    // wrapper, not just its existence in the DOM — Asha Patel's node is
+    // always present here regardless of search, so this confirms the
+    // highlight itself fired, not merely that the member renders.
+    const highlighted = $('//div[contains(@class,"outline-accent")]//div[text()="Asha Patel"]');
+    await highlighted.waitForExist({ timeout: 3000 });
 
     await browser.closeWindow();
     await browser.switchToWindow(before[0]);
@@ -68,7 +73,9 @@ describe("Full Hierarchy Window", () => {
     const after = await browser.getWindowHandles();
     const newHandle = after.find((h) => !before.includes(h));
     await browser.switchToWindow(newHandle);
-    await $("p*=61 members").waitForExist({ timeout: 3000 });
+    // Header shows the total node count (root + descendants); the gate
+    // above named the descendant-only count (61) — one more than this.
+    await $("p*=62 members").waitForExist({ timeout: 3000 });
 
     await browser.closeWindow();
     await browser.switchToWindow(before[0]);

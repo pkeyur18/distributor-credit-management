@@ -164,7 +164,7 @@ export function Structure() {
   // currently rooted at — `memberId` omitted resolves server-side to the
   // one true root (get_direct_children_chart contract).
   function openFullHierarchyWindow() {
-    new WebviewWindow(`full-hierarchy-${Date.now()}`, {
+    const win = new WebviewWindow(`full-hierarchy-${Date.now()}`, {
       url: "/full-hierarchy",
       title: "Full hierarchy",
       width: 1280,
@@ -172,6 +172,9 @@ export function Structure() {
       minWidth: 1024,
       minHeight: 720,
       resizable: true,
+    });
+    win.once("tauri://error", () => {
+      toast.add({ title: "Couldn't open the full hierarchy window", type: "danger" });
     });
   }
 
