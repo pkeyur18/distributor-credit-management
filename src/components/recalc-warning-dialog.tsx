@@ -56,6 +56,15 @@ function RecalcWarningDialog({
                   changed={rewardsChanged}
                 />
               </ImpactRow>
+              {kind === "royalty" && (
+                <ImpactRow label="Members earning royalty">
+                  <ImpactValue
+                    before={preview.royaltyEarnerCountBefore}
+                    after={preview.royaltyEarnerCountAfter}
+                    changed={preview.royaltyEarnerCountBefore !== preview.royaltyEarnerCountAfter}
+                  />
+                </ImpactRow>
+              )}
             </ImpactSummary>
             {movers.length > 0 ? (
               <TableWrap className="mt-3">

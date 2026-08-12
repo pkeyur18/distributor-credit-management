@@ -325,6 +325,11 @@ pub struct MemberImpact {
 pub struct SettingsImpactPreview {
     pub rewards_before: i64,
     pub rewards_after: i64,
+    /// T-M7.3-4's "Members earning royalty: before → after" row — a royalty
+    /// save can't move any member's slab, so this count is what the
+    /// summary shows in place of a slab-move total.
+    pub royalty_earner_count_before: i64,
+    pub royalty_earner_count_after: i64,
     pub affected_members: Vec<MemberImpact>,
 }
 
@@ -408,6 +413,8 @@ pub fn preview_settings_impact(
         return Ok(SettingsImpactPreview {
             rewards_before: 0,
             rewards_after: 0,
+            royalty_earner_count_before: 0,
+            royalty_earner_count_after: 0,
             affected_members: Vec::new(),
         });
     };
@@ -424,6 +431,8 @@ pub fn preview_settings_impact(
 
     let mut rewards_before_total = 0;
     let mut rewards_after_total = 0;
+    let mut royalty_earner_count_before = 0;
+    let mut royalty_earner_count_after = 0;
     let mut affected = Vec::new();
     for live in live_figures_for_open_period(conn, period_id)? {
         let business_volume = business_volume_of(conn, live.member_id, &period_month)?;
@@ -438,6 +447,12 @@ pub fn preview_settings_impact(
 
         rewards_before_total += live.rewards;
         rewards_after_total += after.rewards;
+        if live.royalty > 0 {
+            royalty_earner_count_before += 1;
+        }
+        if after.royalty > 0 {
+            royalty_earner_count_after += 1;
+        }
 
         if live.rewards != after.rewards
             || live.slab_pct != after.slab_pct
@@ -464,6 +479,8 @@ pub fn preview_settings_impact(
     Ok(SettingsImpactPreview {
         rewards_before: rewards_before_total,
         rewards_after: rewards_after_total,
+        royalty_earner_count_before,
+        royalty_earner_count_after,
         affected_members: affected,
     })
 }
@@ -1221,6 +1238,8 @@ mod tests {
             .find(|m| m.member_id == parent)
             .expect("raising the qualifying count above 3 must stop the parent's royalty");
         assert_eq!(predicted_parent.royalty_after, 0);
+        assert_eq!(preview.royalty_earner_count_before, 1);
+        assert_eq!(preview.royalty_earner_count_after, 0);
 
         conn.execute(
             "UPDATE settings SET value = '10' WHERE key = 'royalty_qualifying_count'",

@@ -21,6 +21,9 @@ export interface MemberImpact {
 export interface SettingsImpactPreview {
   rewardsBefore: number;
   rewardsAfter: number;
+  // T-M7.3-4's "Members earning royalty: before → after" row.
+  royaltyEarnerCountBefore: number;
+  royaltyEarnerCountAfter: number;
   affectedMembers: MemberImpact[];
 }
 
