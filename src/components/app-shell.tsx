@@ -2,7 +2,7 @@ import { Outlet } from "react-router";
 import { Sidebar } from "./sidebar";
 import { OutstandingMonthBanner } from "./outstanding-month-banner";
 import { NotificationList } from "./notification-list";
-import { useOutstandingAlert } from "@/lib/use-outstanding-alert";
+import { OutstandingAlertProvider, useOutstandingAlert } from "@/lib/outstanding-alert-context";
 import { useInactivityLock } from "@/lib/use-inactivity-lock";
 
 /**
@@ -11,8 +11,17 @@ import { useInactivityLock } from "@/lib/use-inactivity-lock";
  * render standalone (there is nothing to navigate to before signing in).
  */
 export function AppShell() {
-  const alert = useOutstandingAlert();
   useInactivityLock();
+
+  return (
+    <OutstandingAlertProvider>
+      <AppShellLayout />
+    </OutstandingAlertProvider>
+  );
+}
+
+function AppShellLayout() {
+  const { alert } = useOutstandingAlert();
 
   return (
     <div className="grid h-screen grid-cols-[236px_1fr]">
