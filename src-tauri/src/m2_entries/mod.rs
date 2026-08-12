@@ -212,7 +212,7 @@ pub struct EditEntryInput {
 pub fn edit_entry(
     conn: &Connection,
     db_path: &Path,
-    backups_dir: &Path,
+    app_data_dir: &Path,
     input: EditEntryInput,
 ) -> Result<BusinessVolumeEntry, AppError> {
     validate_amount(input.amount)?;
@@ -264,7 +264,7 @@ pub fn edit_entry(
         // exists *after* the correction above, and SQLite's rollback
         // journal only makes that true once the transaction has committed
         // (see backup.rs's module doc for the full reasoning).
-        backup::write_backup_copy(conn, db_path, backups_dir, period_id, "period_close")?;
+        backup::write_backup_copy(conn, db_path, app_data_dir, period_id, "period_close")?;
     }
 
     load_entry(conn, input.id)
@@ -303,10 +303,8 @@ mod tests {
         fn db_path(&self) -> std::path::PathBuf {
             self.dir.join("console.db")
         }
-        fn backups_dir(&self) -> std::path::PathBuf {
-            let dir = self.dir.join("backups");
-            std::fs::create_dir_all(&dir).unwrap();
-            dir
+        fn app_data_dir(&self) -> std::path::PathBuf {
+            self.dir.clone()
         }
     }
     impl Drop for TempDb {
@@ -463,7 +461,7 @@ mod tests {
         let updated = edit_entry(
             &db.conn,
             &db.db_path(),
-            &db.backups_dir(),
+            &db.app_data_dir(),
             EditEntryInput {
                 id: entry.id,
                 amount: 250_000,
@@ -515,7 +513,7 @@ mod tests {
         let err = edit_entry(
             &db.conn,
             &db.db_path(),
-            &db.backups_dir(),
+            &db.app_data_dir(),
             EditEntryInput {
                 id: entry.id,
                 amount: 1_000,
@@ -532,7 +530,7 @@ mod tests {
         let err = edit_entry(
             &db.conn,
             &db.db_path(),
-            &db.backups_dir(),
+            &db.app_data_dir(),
             EditEntryInput {
                 id: 999_999,
                 amount: 1_000,
@@ -604,7 +602,7 @@ mod tests {
         let updated = edit_entry(
             &db.conn,
             &db.db_path(),
-            &db.backups_dir(),
+            &db.app_data_dir(),
             EditEntryInput {
                 id: entry.id,
                 amount: 400_000,

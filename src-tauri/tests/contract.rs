@@ -30,12 +30,10 @@ fn app_with_seeded_db() -> tauri::App<tauri::test::MockRuntime> {
         db::open_seeded_in_memory().unwrap(),
     ));
     let dir = TempAppDir::new("seeded-db");
-    let backups_dir = dir.0.join("backups");
-    std::fs::create_dir_all(&backups_dir).unwrap();
     app.manage(AppPaths {
         db_path: dir.0.join("console.db"),
         auth_path: dir.0.join("auth.json"),
-        backups_dir,
+        app_data_dir: dir.0.clone(),
     });
     std::mem::forget(dir);
     app
@@ -73,12 +71,10 @@ fn app_with_temp_paths(label: &str) -> (tauri::App<tauri::test::MockRuntime>, Te
     let app = tauri::test::mock_app();
     app.manage(SessionState::new());
     app.manage(DbState::new());
-    let backups_dir = dir.0.join("backups");
-    std::fs::create_dir_all(&backups_dir).unwrap();
     app.manage(AppPaths {
         db_path: dir.0.join("console.db"),
         auth_path: dir.0.join("auth.json"),
-        backups_dir,
+        app_data_dir: dir.0.clone(),
     });
     (app, dir)
 }
@@ -93,15 +89,13 @@ fn app_with_seeded_db_on_disk(label: &str) -> (tauri::App<tauri::test::MockRunti
     let dir = TempAppDir::new(label);
     let app = tauri::test::mock_app();
     app.manage(SessionState::new());
-    let backups_dir = dir.0.join("backups");
-    std::fs::create_dir_all(&backups_dir).unwrap();
     let db_path = dir.0.join("console.db");
     let conn = db::open_encrypted(&db_path, "test-key").unwrap();
     app.manage(DbState::with_connection(conn));
     app.manage(AppPaths {
         db_path,
         auth_path: dir.0.join("auth.json"),
-        backups_dir,
+        app_data_dir: dir.0.clone(),
     });
     (app, dir)
 }

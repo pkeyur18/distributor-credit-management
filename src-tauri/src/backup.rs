@@ -26,6 +26,25 @@ pub(crate) fn sha256_hex(path: &Path) -> Result<String, AppError> {
     Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
 }
 
+/// Row 16 / Rule-43: the backups folder is a name the operator can change
+/// (`console_backup_folder`, validated at write time in
+/// `m7_settings::update_console_backup_settings`), not a fixed constant —
+/// re-read from `conn` at every write/restore so a change takes effect on
+/// the very next backup, with no restart and no re-derivation of `AppPaths`.
+fn resolve_backups_dir(
+    conn: &Connection,
+    app_data_dir: &Path,
+) -> Result<std::path::PathBuf, AppError> {
+    let folder: String = conn.query_row(
+        "SELECT value FROM settings WHERE key = 'console_backup_folder'",
+        [],
+        |r| r.get(0),
+    )?;
+    let dir = app_data_dir.join(folder);
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
 fn next_backup_version(conn: &Connection, period_id: i64) -> Result<i64, AppError> {
     let max: Option<i64> = conn
         .query_row(
@@ -45,10 +64,11 @@ fn next_backup_version(conn: &Connection, period_id: i64) -> Result<i64, AppErro
 pub fn write_backup_copy(
     conn: &Connection,
     db_path: &Path,
-    backups_dir: &Path,
+    app_data_dir: &Path,
     period_id: i64,
     kind: &str,
 ) -> Result<i64, AppError> {
+    let backups_dir = resolve_backups_dir(conn, app_data_dir)?;
     let version = next_backup_version(conn, period_id)?;
     let internal_retained_path = backups_dir.join(format!("period-{period_id}-v{version}.db"));
     std::fs::copy(db_path, &internal_retained_path)?;
@@ -99,10 +119,11 @@ fn next_console_backup_version(conn: &Connection) -> Result<i64, AppError> {
 pub fn write_console_backup_copy(
     conn: &Connection,
     db_path: &Path,
-    backups_dir: &Path,
+    app_data_dir: &Path,
     kind: &str,
     schedule_kind: Option<&str>,
 ) -> Result<i64, AppError> {
+    let backups_dir = resolve_backups_dir(conn, app_data_dir)?;
     let version = next_console_backup_version(conn)?;
     let internal_retained_path = backups_dir.join(format!("console-{kind}-v{version}.db"));
     std::fs::copy(db_path, &internal_retained_path)?;
@@ -242,11 +263,11 @@ fn write_console_backup_audit(
 pub fn run_console_backup_now(
     conn: &Connection,
     db_path: &Path,
-    backups_dir: &Path,
+    app_data_dir: &Path,
     kind: &str,
     schedule_kind: Option<&str>,
 ) -> Result<BackupRecord, AppError> {
-    let id = write_console_backup_copy(conn, db_path, backups_dir, kind, schedule_kind)?;
+    let id = write_console_backup_copy(conn, db_path, app_data_dir, kind, schedule_kind)?;
     write_console_backup_audit(conn, id, kind)?;
     let retention = console_backup_retention_count(conn)?;
     prune_console_backups(conn, retention)?;
@@ -279,9 +300,10 @@ fn write_restore_audit(conn: &Connection, backup_id: i64, source: &str) -> Resul
 fn overwrite_live_database(
     conn: &Connection,
     db_path: &Path,
-    backups_dir: &Path,
+    app_data_dir: &Path,
     source_path: &Path,
 ) -> Result<(), AppError> {
+    let backups_dir = resolve_backups_dir(conn, app_data_dir)?;
     let safety_version = next_console_backup_version(conn)?;
     let safety_path = backups_dir.join(format!("console-pre_restore_safety-v{safety_version}.db"));
     std::fs::copy(db_path, &safety_path)?;
@@ -319,7 +341,7 @@ fn overwrite_live_database(
 pub fn restore_from_backup(
     conn: &Connection,
     db_path: &Path,
-    backups_dir: &Path,
+    app_data_dir: &Path,
     backup_id: i64,
 ) -> Result<(), AppError> {
     let (path, stored_checksum): (String, String) = conn
@@ -338,7 +360,7 @@ pub fn restore_from_backup(
             message: "This backup's checksum no longer matches — the file may have been altered or corrupted.".into(),
         });
     }
-    overwrite_live_database(conn, db_path, backups_dir, Path::new(&path))?;
+    overwrite_live_database(conn, db_path, app_data_dir, Path::new(&path))?;
     // After, not before: the post-restore database is what the Restore
     // card and any future audit read actually query — an entry written
     // into the pre-restore file above would be discarded the moment it's
@@ -355,7 +377,7 @@ pub fn restore_from_backup(
 pub fn restore_from_backup_file(
     conn: &Connection,
     db_path: &Path,
-    backups_dir: &Path,
+    app_data_dir: &Path,
     source_path: &Path,
 ) -> Result<(), AppError> {
     if !source_path.is_file() {
@@ -363,7 +385,7 @@ pub fn restore_from_backup_file(
             message: "The chosen file could not be found.".into(),
         });
     }
-    overwrite_live_database(conn, db_path, backups_dir, source_path)?;
+    overwrite_live_database(conn, db_path, app_data_dir, source_path)?;
     write_restore_audit(conn, 0, "external_file")
 }
 
@@ -425,11 +447,10 @@ mod tests {
         let (conn, dir) = seeded_with_temp_db();
         let period = insert_period(&conn, "2026-08");
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
 
         let version =
-            write_backup_copy(&conn, &db_path, &backups_dir, period, "period_close").unwrap();
+            write_backup_copy(&conn, &db_path, app_data_dir, period, "period_close").unwrap();
 
         assert_eq!(version, 1);
         let (is_original, checksum): (bool, String) = conn
@@ -448,12 +469,11 @@ mod tests {
         let (conn, dir) = seeded_with_temp_db();
         let period = insert_period(&conn, "2026-08");
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
 
-        write_backup_copy(&conn, &db_path, &backups_dir, period, "period_close").unwrap();
+        write_backup_copy(&conn, &db_path, app_data_dir, period, "period_close").unwrap();
         let second =
-            write_backup_copy(&conn, &db_path, &backups_dir, period, "period_close").unwrap();
+            write_backup_copy(&conn, &db_path, app_data_dir, period, "period_close").unwrap();
 
         assert_eq!(second, 2);
         let is_original: bool = conn
@@ -474,10 +494,9 @@ mod tests {
         let (conn, dir) = seeded_with_temp_db();
         let period = insert_period(&conn, "2026-08");
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
 
-        write_backup_copy(&conn, &db_path, &backups_dir, period, "period_close").unwrap();
+        write_backup_copy(&conn, &db_path, app_data_dir, period, "period_close").unwrap();
 
         let (path, checksum): (String, String) = conn
             .query_row(
@@ -495,12 +514,11 @@ mod tests {
     fn console_backups_version_independently_of_any_periods_backups() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
         let period = insert_period(&conn, "2026-08");
-        write_backup_copy(&conn, &db_path, &backups_dir, period, "period_close").unwrap();
+        write_backup_copy(&conn, &db_path, app_data_dir, period, "period_close").unwrap();
 
-        let id = write_console_backup_copy(&conn, &db_path, &backups_dir, "manual", None).unwrap();
+        let id = write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
 
         let (kind, period_id, version): (String, Option<i64>, i64) = conn
             .query_row(
@@ -521,12 +539,11 @@ mod tests {
     fn a_second_console_backup_increments_its_own_version() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
 
-        write_console_backup_copy(&conn, &db_path, &backups_dir, "manual", None).unwrap();
+        write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
         let second_id =
-            write_console_backup_copy(&conn, &db_path, &backups_dir, "scheduled", Some("daily"))
+            write_console_backup_copy(&conn, &db_path, app_data_dir, "scheduled", Some("daily"))
                 .unwrap();
 
         let version: i64 = conn
@@ -543,11 +560,10 @@ mod tests {
     fn pruning_keeps_only_the_retained_count_of_scheduled_and_manual_rows() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
 
         for _ in 0..5 {
-            write_console_backup_copy(&conn, &db_path, &backups_dir, "manual", None).unwrap();
+            write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
         }
 
         prune_console_backups(&conn, 2).unwrap();
@@ -569,14 +585,13 @@ mod tests {
     fn pruning_never_touches_period_close_or_pre_restore_safety_rows() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
         let period = insert_period(&conn, "2026-08");
-        write_backup_copy(&conn, &db_path, &backups_dir, period, "period_close").unwrap();
-        write_console_backup_copy(&conn, &db_path, &backups_dir, "pre_restore_safety", None)
+        write_backup_copy(&conn, &db_path, app_data_dir, period, "period_close").unwrap();
+        write_console_backup_copy(&conn, &db_path, app_data_dir, "pre_restore_safety", None)
             .unwrap();
         for _ in 0..3 {
-            write_console_backup_copy(&conn, &db_path, &backups_dir, "manual", None).unwrap();
+            write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
         }
 
         prune_console_backups(&conn, 0).unwrap();
@@ -611,10 +626,9 @@ mod tests {
     fn run_console_backup_now_writes_a_row_and_an_audit_entry() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
 
-        let record = run_console_backup_now(&conn, &db_path, &backups_dir, "manual", None).unwrap();
+        let record = run_console_backup_now(&conn, &db_path, app_data_dir, "manual", None).unwrap();
 
         assert_eq!(record.kind, "manual");
         let audit_count: i64 = conn
@@ -631,8 +645,7 @@ mod tests {
     fn run_console_backup_now_prunes_to_the_configured_retention_immediately() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
         conn.execute(
             "UPDATE settings SET value = '2' WHERE key = 'console_backup_retention_count'",
             [],
@@ -640,7 +653,7 @@ mod tests {
         .unwrap();
 
         for _ in 0..4 {
-            run_console_backup_now(&conn, &db_path, &backups_dir, "manual", None).unwrap();
+            run_console_backup_now(&conn, &db_path, app_data_dir, "manual", None).unwrap();
         }
 
         let remaining: i64 = conn
@@ -662,14 +675,13 @@ mod tests {
     fn list_restore_points_returns_every_kind_newest_first() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
         let period = insert_period(&conn, "2026-08");
-        write_backup_copy(&conn, &db_path, &backups_dir, period, "period_close").unwrap();
-        write_console_backup_copy(&conn, &db_path, &backups_dir, "scheduled", Some("daily"))
+        write_backup_copy(&conn, &db_path, app_data_dir, period, "period_close").unwrap();
+        write_console_backup_copy(&conn, &db_path, app_data_dir, "scheduled", Some("daily"))
             .unwrap();
         let last_id =
-            write_console_backup_copy(&conn, &db_path, &backups_dir, "manual", None).unwrap();
+            write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
 
         let points = list_restore_points(&conn).unwrap();
 
@@ -684,10 +696,9 @@ mod tests {
     fn restore_from_backup_refuses_an_unknown_id() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
 
-        let err = restore_from_backup(&conn, &db_path, &backups_dir, 999_999).unwrap_err();
+        let err = restore_from_backup(&conn, &db_path, app_data_dir, 999_999).unwrap_err();
         assert!(matches!(err, AppError::NotFound { .. }));
     }
 
@@ -695,9 +706,8 @@ mod tests {
     fn restore_from_backup_refuses_a_degraded_file() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
-        let id = write_console_backup_copy(&conn, &db_path, &backups_dir, "manual", None).unwrap();
+        let app_data_dir = dir.path();
+        let id = write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
         let path: String = conn
             .query_row(
                 "SELECT internal_retained_path FROM backups WHERE id = ?1",
@@ -707,7 +717,7 @@ mod tests {
             .unwrap();
         std::fs::write(&path, b"corrupted after the fact").unwrap();
 
-        let err = restore_from_backup(&conn, &db_path, &backups_dir, id).unwrap_err();
+        let err = restore_from_backup(&conn, &db_path, app_data_dir, id).unwrap_err();
         assert!(matches!(err, AppError::Conflict { .. }));
     }
 
@@ -715,16 +725,15 @@ mod tests {
     fn restore_from_backup_overwrites_the_live_file_and_takes_a_safety_copy_first() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
         // The manual backup's own file is captured *before* its row exists
         // (`write_console_backup_copy`'s own write-after-copy order) — so
         // restoring from it lands a database with zero `backups` rows,
         // which is what makes the post-restore row count below a clean
         // signal that the overwrite actually happened.
-        let id = write_console_backup_copy(&conn, &db_path, &backups_dir, "manual", None).unwrap();
+        let id = write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
 
-        restore_from_backup(&conn, &db_path, &backups_dir, id).unwrap();
+        restore_from_backup(&conn, &db_path, app_data_dir, id).unwrap();
 
         let kinds: Vec<String> = {
             let mut stmt = conn
@@ -756,13 +765,12 @@ mod tests {
     fn restore_from_backup_file_refuses_a_missing_file() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
 
         let err = restore_from_backup_file(
             &conn,
             &db_path,
-            &backups_dir,
+            app_data_dir,
             &dir.path().join("does-not-exist.db"),
         )
         .unwrap_err();
@@ -773,8 +781,7 @@ mod tests {
     fn restore_from_backup_file_copies_an_external_file_over_the_live_database() {
         let (conn, dir) = seeded_with_temp_db();
         let db_path = dir.path().join("console.db");
-        let backups_dir = dir.path().join("backups");
-        std::fs::create_dir_all(&backups_dir).unwrap();
+        let app_data_dir = dir.path();
         // A structurally real encrypted database (same key/schema) — `conn`
         // must keep writing successfully into `db_path` after the overwrite
         // (the safety-copy row), which an arbitrary byte string couldn't
@@ -782,7 +789,7 @@ mod tests {
         let source_path = dir.path().join("brought-from-another-machine.db");
         std::fs::copy(&db_path, &source_path).unwrap();
 
-        restore_from_backup_file(&conn, &db_path, &backups_dir, &source_path).unwrap();
+        restore_from_backup_file(&conn, &db_path, app_data_dir, &source_path).unwrap();
 
         let kinds: Vec<String> = {
             let mut stmt = conn
@@ -798,5 +805,75 @@ mod tests {
             vec!["pre_restore_safety".to_string()],
             "restoring a foreign file must still take a safety copy of what was live (Rule-43)"
         );
+    }
+
+    // --- dynamic `console_backup_folder` resolution ---
+
+    #[test]
+    fn changing_the_backup_folder_setting_moves_where_the_next_backup_lands() {
+        let (conn, dir) = seeded_with_temp_db();
+        let db_path = dir.path().join("console.db");
+        let app_data_dir = dir.path();
+
+        let first_id =
+            write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
+        conn.execute(
+            "UPDATE settings SET value = 'custom-folder' WHERE key = 'console_backup_folder'",
+            [],
+        )
+        .unwrap();
+        let second_id =
+            write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
+
+        let first_path: String = conn
+            .query_row(
+                "SELECT internal_retained_path FROM backups WHERE id = ?1",
+                [first_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let second_path: String = conn
+            .query_row(
+                "SELECT internal_retained_path FROM backups WHERE id = ?1",
+                [second_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        assert!(first_path.contains("/backups/") || first_path.contains("\\backups\\"));
+        assert!(second_path.contains("custom-folder"));
+        assert!(dir.path().join("custom-folder").is_dir());
+    }
+
+    #[test]
+    fn list_restore_points_still_resolves_backups_written_under_a_since_changed_folder() {
+        let (conn, dir) = seeded_with_temp_db();
+        let db_path = dir.path().join("console.db");
+        let app_data_dir = dir.path();
+
+        write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
+        conn.execute(
+            "UPDATE settings SET value = 'custom-folder' WHERE key = 'console_backup_folder'",
+            [],
+        )
+        .unwrap();
+        write_console_backup_copy(&conn, &db_path, app_data_dir, "manual", None).unwrap();
+
+        let points = list_restore_points(&conn).unwrap();
+        assert_eq!(points.len(), 2);
+        for point in &points {
+            let path: String = conn
+                .query_row(
+                    "SELECT internal_retained_path FROM backups WHERE id = ?1",
+                    [point.id],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(
+                Path::new(&path).is_file(),
+                "every listed backup's file must still resolve on disk regardless of the \
+                 folder setting at the time it was written"
+            );
+        }
     }
 }

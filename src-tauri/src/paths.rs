@@ -10,28 +10,27 @@ use tauri::Manager;
 
 const DB_FILE_NAME: &str = "console.db";
 const AUTH_FILE_NAME: &str = "auth.json";
-const BACKUPS_DIR_NAME: &str = "backups";
 
 pub struct AppPaths {
     pub db_path: PathBuf,
     pub auth_path: PathBuf,
-    /// Internal-retained backup copies (`backups.internal_retained_path`,
-    /// ADR-012). First needed by US-M2.2's closed-month correction (S7,
-    /// `backup::write_backup_copy`); S11's close and S14's console backup
-    /// reuse the same directory and helper rather than each deriving it.
-    pub backups_dir: PathBuf,
+    /// Base app-data directory. The backups folder is a name stored in the
+    /// `console_backup_folder` setting (row 16, Rule-43) inside the
+    /// encrypted DB, so unlike `db_path`/`auth_path` it can't be resolved
+    /// here — the DB isn't even open yet at startup. Every backup call site
+    /// joins this with the live setting value at the point of use (see
+    /// `backup::resolve_backups_dir`).
+    pub app_data_dir: PathBuf,
 }
 
 impl AppPaths {
     pub fn resolve(app: &tauri::AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
         let dir = app.path().app_data_dir()?;
         std::fs::create_dir_all(&dir)?;
-        let backups_dir = dir.join(BACKUPS_DIR_NAME);
-        std::fs::create_dir_all(&backups_dir)?;
         Ok(Self {
             db_path: dir.join(DB_FILE_NAME),
             auth_path: dir.join(AUTH_FILE_NAME),
-            backups_dir,
+            app_data_dir: dir,
         })
     }
 }

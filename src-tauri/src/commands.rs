@@ -155,7 +155,7 @@ pub fn edit_entry(
     let conn = guard.as_ref().expect(
         "an authenticated session implies an open database connection — see S5's login flow",
     );
-    m2_entries::edit_entry(conn, &paths.db_path, &paths.backups_dir, input)
+    m2_entries::edit_entry(conn, &paths.db_path, &paths.app_data_dir, input)
 }
 
 auth_stub!(get_period_lock_status);
@@ -409,7 +409,7 @@ pub fn run_console_backup_now(
     let conn = guard.as_ref().expect(
         "an authenticated session implies an open database connection — see S5's login flow",
     );
-    backup::run_console_backup_now(conn, &paths.db_path, &paths.backups_dir, "manual", None)
+    backup::run_console_backup_now(conn, &paths.db_path, &paths.app_data_dir, "manual", None)
 }
 
 // M9 — US-M9.1, S14 (a completeness check; audit writes land per-command from S4,
@@ -520,7 +520,7 @@ pub fn restore_from_backup(
         let conn = guard.as_ref().ok_or_else(|| AppError::NotFound {
             message: "No database is currently open.".into(),
         })?;
-        backup::restore_from_backup(conn, &paths.db_path, &paths.backups_dir, backup_id)?;
+        backup::restore_from_backup(conn, &paths.db_path, &paths.app_data_dir, backup_id)?;
     }
     *locked_conn(&db) = None;
     session.mark_locked();
@@ -546,7 +546,7 @@ pub fn restore_from_backup_file(
         backup::restore_from_backup_file(
             conn,
             &paths.db_path,
-            &paths.backups_dir,
+            &paths.app_data_dir,
             std::path::Path::new(&file_path),
         )?;
     }

@@ -416,14 +416,6 @@ pub fn update_settings(conn: &Connection, patch: SettingsPatch) -> Result<Settin
 
 const VALID_SCHEDULES: &[&str] = &["off", "daily", "weekly", "monthly"];
 
-// ponytail: `folder` round-trips through `settings` (row 16) but nothing
-// reads it back — `paths::AppPaths::resolve` writes to a hardcoded
-// `backups_dir`, resolved once at startup, never re-derived from this
-// value. Editing it here would silently do nothing, which is worse than
-// not offering the control at all — the Settings screen deliberately
-// doesn't expose an input for it (matching the approved prototype, which
-// has none either). Upgrade path: make `AppPaths` read this setting at
-// resolve time (or re-resolve per command) before wiring up an editor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConsoleBackupSettings {
@@ -441,8 +433,11 @@ pub fn get_console_backup_settings(conn: &Connection) -> Result<ConsoleBackupSet
     })
 }
 
-/// API-38. Rule-43: schedule is a closed enum, retention count >= 1. Never
-/// recalculates — backup config touches no calculated figure.
+/// API-38. Rule-43: schedule is a closed enum, retention count >= 1, folder
+/// a single relative subfolder name — not an arbitrary filesystem path
+/// (no separator, no `..`, never absolute), since it's joined directly onto
+/// the app-data directory at every backup write (`backup::resolve_backups_dir`).
+/// Never recalculates — backup config touches no calculated figure.
 pub fn update_console_backup_settings(
     conn: &Connection,
     input: ConsoleBackupSettings,
@@ -457,6 +452,18 @@ pub fn update_console_backup_settings(
         return Err(AppError::Validation {
             field: "retentionCount".into(),
             message: "Retention count must be at least 1.".into(),
+        });
+    }
+    if input.folder.trim().is_empty() {
+        return Err(AppError::Validation {
+            field: "folder".into(),
+            message: "Backup folder name cannot be empty.".into(),
+        });
+    }
+    if input.folder.contains('/') || input.folder.contains('\\') || input.folder.contains("..") {
+        return Err(AppError::Validation {
+            field: "folder".into(),
+            message: "Backup folder must be a single folder name, not a path.".into(),
         });
     }
 
@@ -910,5 +917,69 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn console_backup_settings_refuses_an_empty_folder() {
+        let conn = seeded();
+        let err = update_console_backup_settings(
+            &conn,
+            ConsoleBackupSettings {
+                schedule: "off".into(),
+                retention_count: 10,
+                folder: "  ".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn console_backup_settings_refuses_a_folder_with_a_path_separator() {
+        let conn = seeded();
+        let err = update_console_backup_settings(
+            &conn,
+            ConsoleBackupSettings {
+                schedule: "off".into(),
+                retention_count: 10,
+                folder: "some/nested/folder".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn console_backup_settings_refuses_a_folder_that_escapes_app_data() {
+        let conn = seeded();
+        let err = update_console_backup_settings(
+            &conn,
+            ConsoleBackupSettings {
+                schedule: "off".into(),
+                retention_count: 10,
+                folder: "../elsewhere".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn console_backup_settings_folder_round_trips() {
+        let conn = seeded();
+        let updated = update_console_backup_settings(
+            &conn,
+            ConsoleBackupSettings {
+                schedule: "off".into(),
+                retention_count: 10,
+                folder: "my-backups".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.folder, "my-backups");
+        assert_eq!(
+            get_console_backup_settings(&conn).unwrap().folder,
+            "my-backups"
+        );
     }
 }

@@ -641,6 +641,7 @@ function BackupScheduleCard({
 }) {
   const toast = useToast();
   const [retention, setRetention] = useState(String(backupSettings.retentionCount));
+  const [folder, setFolder] = useState(backupSettings.folder);
   const [runningBackup, setRunningBackup] = useState(false);
 
   // T-M7.4-2: the segmented control saves immediately, no separate Save step.
@@ -664,6 +665,20 @@ function BackupScheduleCard({
       const updated = await updateConsoleBackupSettings({ ...backupSettings, retentionCount });
       onBackupSettingsChange(updated);
       toast.add({ title: "Retention saved", type: "success" });
+    } catch (raw) {
+      toast.add({ title: errorMessage(raw), type: "danger" });
+    }
+  }
+
+  async function saveFolder() {
+    if (!folder.trim()) {
+      toast.add({ title: "Backup folder name cannot be empty", type: "danger" });
+      return;
+    }
+    try {
+      const updated = await updateConsoleBackupSettings({ ...backupSettings, folder });
+      onBackupSettingsChange(updated);
+      toast.add({ title: "Backup folder saved", type: "success" });
     } catch (raw) {
       toast.add({ title: errorMessage(raw), type: "danger" });
     }
@@ -704,9 +719,22 @@ function BackupScheduleCard({
         Older backups beyond this count are removed automatically — closed-month backups are
         never affected.
       </InputHint>
+      <div className="mt-3.5 max-w-55">
+        <label htmlFor="backup-folder" className="text-label mb-1 block">
+          Backup folder name
+        </label>
+        <Input id="backup-folder" value={folder} onChange={(e) => setFolder(e.target.value)} />
+      </div>
+      <InputHint className="mt-1.5">
+        A single folder name inside the app's data directory — not a path. Changing it only
+        affects backups written from now on; existing ones stay where they are.
+      </InputHint>
       <div className="mt-3.5 flex gap-2">
         <Button variant="secondary" onClick={saveRetention}>
           Save
+        </Button>
+        <Button variant="secondary" onClick={saveFolder}>
+          Save folder
         </Button>
         <Button disabled={runningBackup} onClick={backUpNow}>
           Back up now
