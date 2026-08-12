@@ -1,7 +1,6 @@
 import { Outlet } from "react-router";
 import { Sidebar } from "./sidebar";
 import { OutstandingMonthBanner } from "./outstanding-month-banner";
-import { NotificationList } from "./notification-list";
 import { OutstandingAlertProvider, useOutstandingAlert } from "@/lib/outstanding-alert-context";
 import { useInactivityLock } from "@/lib/use-inactivity-lock";
 
@@ -28,9 +27,6 @@ function AppShellLayout() {
       <Sidebar />
       <div className="flex h-screen flex-col overflow-hidden">
         <OutstandingMonthBanner alert={alert} />
-        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-end border-b border-border bg-surface px-8">
-          <NotificationList alert={alert} />
-        </header>
         <main className="flex-1 overflow-y-auto px-8 pb-10 pt-5">
           <Outlet />
         </main>
