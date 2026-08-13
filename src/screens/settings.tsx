@@ -32,6 +32,8 @@ import { runConsoleBackupNow } from "@/lib/ipc/m8-auth";
 import { listRestorePoints, restoreFromBackup, restoreFromBackupFile } from "@/lib/ipc/preflight";
 import type { BackupRecord, Settings as SettingsData, SlabRow } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
+import { backupPrimaryLabel, backupProvenanceText } from "@/lib/backup-labels";
+import { useAuth } from "@/lib/auth-context";
 import { MANDATORY_EXPORT_COLUMNS, OPTIONAL_EXPORT_COLUMNS } from "@/lib/export-columns";
 
 function SectionCard({
@@ -848,23 +850,6 @@ function BackupScheduleCard({
   );
 }
 
-function backupPrimaryLabel(record: BackupRecord): string {
-  const date = new Date(record.createdAt).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-  if (record.kind === "period_close") return `Closed month — ${date}`;
-  if (record.kind === "pre_restore_safety") return `Safety copy — ${date}`;
-  if (record.kind === "scheduled") {
-    const cadence = record.scheduleKind
-      ? record.scheduleKind[0].toUpperCase() + record.scheduleKind.slice(1)
-      : "Scheduled";
-    return `${cadence} — ${date}`;
-  }
-  return `Manual — ${date}`;
-}
-
 function RestoreCard({
   restorePoints,
   onRestored,
@@ -873,6 +858,7 @@ function RestoreCard({
   onRestored: () => void;
 }) {
   const toast = useToast();
+  const { markSignedOut } = useAuth();
   const [selectedId, setSelectedId] = useState<string | null>(
     restorePoints[0] ? String(restorePoints[0].id) : null,
   );
@@ -901,6 +887,11 @@ function RestoreCard({
       setConfirmTarget(null);
       onRestored();
       toast.add({ title: "Restored — sign in again", type: "success" });
+      // T-M8.6-4: the backend already dropped the session (a restored file
+      // may hold a different credential) — the frontend must follow it to
+      // sign-in rather than staying on a screen whose next authenticated
+      // call would just fail with `auth_required`.
+      markSignedOut();
     } catch (raw) {
       toast.add({ title: errorMessage(raw), type: "danger" });
     } finally {
@@ -925,7 +916,7 @@ function RestoreCard({
             options={restorePoints.map((r) => ({
               value: String(r.id),
               primary: backupPrimaryLabel(r),
-              provenance: `Version ${r.version}`,
+              provenance: backupProvenanceText(r),
             }))}
           />
           <Button

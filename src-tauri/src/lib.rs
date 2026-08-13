@@ -15,7 +15,9 @@ pub mod m5_close;
 pub mod m6_reports;
 pub mod m7_settings;
 pub mod m8_auth;
+pub mod m9_audit;
 pub mod paths;
+pub mod qa_dataset;
 pub mod session;
 
 use db_state::DbState;

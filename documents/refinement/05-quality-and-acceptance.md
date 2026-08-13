@@ -373,7 +373,7 @@ A story is **Done** only when all of the following are true:
 A module is **Done** only when, in addition to every story within it meeting the per-story bar:
 
 - Every rule attributed to that module ([02](02-business-rules.md) §7's map) shows a passing test, not just "documented."
-- Any open item in [06](06-decision-log-and-open-items.md) §3 attributed to that module is resolved — not merely noted and deferred. As of this consolidation, **O2–O5 are build decisions** that should be taken deliberately before the module ships, not defaults slipped in silently — M6's own former open item (O1, the mandatory export column count) was resolved 8 Aug 2026 as C9/D-1.
+- Any open item in [06](06-decision-log-and-open-items.md) §3 attributed to that module is resolved — not merely noted and deferred. As of this consolidation, **O2–O5 are build decisions** that should be taken deliberately before the module ships, not defaults slipped in silently — M6's own former open item (O1, the mandatory export column count) was resolved 8 Aug 2026 as C9/D-1. **O6 (added S14)** is a different kind of open item — an architectural limitation US-M9.1's completeness audit found, not a default awaiting a decision — and does not block M8/M9 from being Done; it's recorded so a future reader doesn't assume the two audit gaps it names were simply missed.
 - The prototype-approved behaviours ported into that module — the settings recalculation warning, the last-slab-row refusal, the data-recovery screen, the console backup schedule/restore flows — match their approved reference behaviour exactly, not a re-interpretation.
 - The six worked scenarios still reproduce their golden totals through the real UI (not just a unit test) once M2/M3/M4 are all Done together.
 

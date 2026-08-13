@@ -294,13 +294,13 @@ Index `(period_id, version DESC)`; index `(kind, created_at DESC)` for retention
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER PK | |
-| `entity_type` | TEXT NOT NULL | `member`/`entry`/`setting`/`period` |
+| `entity_type` | TEXT NOT NULL | `member`/`entry`/`setting`/`period`/`backup`/`auth` (D-12/D-13's corrected set) |
 | `entity_id` | INTEGER NOT NULL | |
 | `field` | TEXT NOT NULL | |
 | `old_value` | TEXT NULL | |
 | `new_value` | TEXT NULL | |
 | `changed_at` | TEXT NOT NULL | |
-| `cause` | TEXT NOT NULL | `entry`/`edit`/`correction`/`settings_change`/`period_close`/`manual_backup`. `reversal` retired — see [06](06-decision-log-and-open-items.md) §6 |
+| `cause` | TEXT NOT NULL | `entry`/`edit`/`correction`/`settings_change`/`period_close`/`manual_backup`/`console_backup` — the closed seven (T-M9.1-3). `reversal` retired (`reverse_entry` dropped — see [06](06-decision-log-and-open-items.md) §6); `restore` was added in error during S10, never part of this list, and retired in S14 alongside it — see `backup::restore_from_backup`'s doc comment for why a restore's own record lives in the S14 backups-manifest instead (§9.5) |
 
 Index `(entity_type, entity_id)`.
 
@@ -579,11 +579,11 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-26 | `setup_first_run` | First-run wizard: set PIN and/or password, generate recovery codes | **Unauthenticated** (only when no `auth` row exists) | PIN 6 numeric digits; password ≥8 chars, letter+number; ≥1 credential required | Hash + store credential(s) (Argon2id), generate + hash recovery codes | auth setup |
-| API-27 | `login` | Authenticate with PIN or password | **Unauthenticated** (entry point) | Credential must match stored hash | Verify + update failed_attempts/locked_until | Only on failed-lockout transitions |
+| API-26 | `setup_first_run` | First-run wizard: set PIN and/or password, generate recovery codes | **Unauthenticated** (only when no `auth` row exists) | PIN 6 numeric digits; password ≥8 chars, letter+number; ≥1 credential required | Hash + store credential(s) (Argon2id), generate + hash recovery codes | `entity_type = 'auth'`, cause `entry`, one entry per credential configured, naming only *that* a PIN/password was set ("PIN set") — never the value (T-M9.1-6). Implemented S14 — couldn't audit before then, since `audit_log` lives inside the database this call is what creates |
+| API-27 | `login` | Authenticate with PIN or password | **Unauthenticated** (entry point) | Credential must match stored hash | Verify + update failed_attempts/locked_until | ⚠️ **Gap, not yet built:** "only on failed-lockout transitions" was never realizable as written — lockout state (`auth.json`) is written before any database connection exists, the same reason `use_recovery_code` below can't audit either. Left open at the end of S14; needs either a documented exception (no `audit_log` entry for lockout, ever) or a design that doesn't require one |
 | API-28 | `lock_session` | Manually lock the session | Auth | — | Idempotent | Not audited |
-| API-29 | `unlock_session` | Resume a locked session | Locked-session state | Same as `login` | Same as `login` | Same as `login` |
-| API-30 | `use_recovery_code` | Reset credential(s) via a one-time recovery code | **Unauthenticated** | Code must match an unused hashed code | Verify code, invalidate all old codes, set new credential, generate new codes | credential recovery |
+| API-29 | `unlock_session` | Resume a locked session | Locked-session state | Same as `login` | Same as `login` | Same gap as `login` above |
+| API-30 | `use_recovery_code` | Reset credential(s) via a one-time recovery code | **Unauthenticated** | Code must match an unused hashed code | Verify code, invalidate all old codes, set new credential, generate new codes | ⚠️ **Gap, not yet built:** genuinely unauthenticated (Rule-29's closed set of seven) — no database connection exists to write into, the same limitation restores had before S14's manifest. Unlike restores, there's no equivalent "record it in a file instead" answer here without writing something credential-adjacent to an unencrypted sidecar, which is a real new security question (T-M9.1-6), not a S14-sized fix |
 | API-31 | `get_outstanding_alert` | Fetch current outstanding-month alert state | Auth | — | Read-only | Not audited |
 | API-39 | `run_console_backup_now` | Take an immediate whole-console backup; also the internal call the schedule check makes at login | Auth | — (`kind` inferred: `manual` user-triggered, `scheduled` login-triggered) | Copy + checksum the live DB file; prune `scheduled`/`manual` rows beyond retention, oldest first | `console_backup` |
 
@@ -591,10 +591,10 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-34 | `check_data_readable` | Can the encrypted database be opened? Decides sign-in vs recovery screen | **Unauthenticated** | — | Read-only | Not audited |
-| API-35 | `list_restore_points` | Retained backups, every `kind`, newest first | **Unauthenticated** | — | Read-only | Not audited |
-| API-36 | `restore_from_backup` | Replace the unreadable database with a retained backup | **Unauthenticated** | **Must verify checksum before overwriting** — mismatch → refused, nothing overwritten. Writes a `pre_restore_safety` backup of the current file first | One transaction: safety-backup → verify → restore → drop any session → leave app at sign-in | On success |
-| API-40 | `restore_from_backup_file` | Replace the current/not-yet-existing database with an admin-picked file | **Unauthenticated** | Same checksum-verify-first requirement. Backs both the first-run "Restore instead" link and Settings' "Restore from a file…" (frontend gates the latter behind its own checklist-confirm modal) | Same as API-36 | On success |
+| API-34 | `check_data_readable` | Can the encrypted database be opened? Decides sign-in vs recovery screen | **Unauthenticated** | Two-layer (S14): sidecar exists and parses; database file exists and is page-aligned. A structurally-plausible-but-actually-corrupted file still passes — `login`'s own Argon2-succeeds-but-SQLCipher-open-fails ordering is the real backstop, reported as `AppError::DataUnreadable` | Read-only | Not audited |
+| API-35 | `list_restore_points` | Retained backups, every `kind`, newest first | **Unauthenticated** | — | Read-only, reads the S14 backups-manifest (§9.5), never `backups` SQL — same call for this screen and the authenticated Settings Restore card | Not audited |
+| API-36 | `restore_from_backup` | Replace the unreadable database with a retained backup | **Unauthenticated** | **Must verify checksum before overwriting** — mismatch → refused, nothing overwritten. Writes a `pre_restore_safety` backup of the current file first, to the manifest | One transaction: safety-backup → verify → restore → drop any session → leave app at sign-in | No `audit_log` entry (S14 revision — see §9.5's own explanation); the manifest's `pre_restore_safety` entry is the durable record instead |
+| API-40 | `restore_from_backup_file` | Replace the current/not-yet-existing database with an admin-picked file | **Unauthenticated** | Same checksum-verify-first requirement. Backs both the first-run "Restore instead" link and Settings' "Restore from a file…" (frontend gates the latter behind its own checklist-confirm modal) | Same as API-36 | Same as API-36 |
 
 ### Module M9 — Audit Log
 
@@ -768,6 +768,10 @@ If the client never takes the external-medium backup, the internal copy and the 
 **Retention.** After every `scheduled`/`manual` write, rows of those two kinds beyond `settings.console_backup_retention_count` (default 10) are deleted, oldest first. `period_close` rows (permanent) and `pre_restore_safety` rows are never pruned by this.
 
 **Restore, and its safety net.** `restore_from_backup_file` is one mechanism behind three surfaces: a plain "Restore from a backup file instead" link on the ordinary first-run setup screen (a brand-new machine has no console to log into and no local backups to choose from — skips straight to a file picker); the same recovery screen the db-error path uses (reworded, not duplicated); and the authenticated Settings "Restore" card (gated behind the frontend's own checklist-confirm modal before the command is called). Every restore path writes one `pre_restore_safety` backup of whatever is currently live **before** overwriting it, and drops any live session immediately after — the restored file may hold a different credential.
+
+**The backups manifest (S14, new).** `backups` rows live *inside* the SQLCipher file — unreadable without a key, and there is no key before login. API-34/35/36/40 are nonetheless unauthenticated of necessity (Rule-29's closed set of seven), so an unencrypted mirror, `backups-manifest.json` (sibling to the existing `auth.json` sidecar), carries exactly the fields §8.6 already says these commands may reveal pre-auth — id/kind/version/checksum/path/created_at, never member data or figures. Every `backups`-row write in `backup.rs` mirrors into it at the same call site, so the two can't drift independently. `list_restore_points` reads the manifest exclusively now — one function, one list, for both the authenticated Restore card and the unauthenticated data-recovery screen, rather than two lists that could disagree. This extends ADR-012's reasoning rather than reversing it: ADR-012 rejected a *second SQL table*; the manifest is a second location for the same reason a disk-encryption tool's keyslot header sits outside the volume it protects — the thing that answers "what's here" can't itself require the key to read.
+
+A `pre_restore_safety` entry is manifest-only, never a `backups` SQL row, and is written *before* the physical overwrite while the live file is still the one it was resolved against — the S10-era version wrote it (and a `cause = 'restore'` `audit_log` row) *after* the overwrite, through the pre-restore `Connection`, whose key context no longer matched the file underneath it. Harmless only by accident (every existing test restored between same-key fixtures); AC-38's actual shape — a different credential on the restored file — is exactly what would have exposed it. No `audit_log` entry is written for a restore at all as of S14: writing one before the overwrite is silently discarded whenever the restored content predates that write (every restore-to-an-older-backup, by definition), and writing one after requires a connection to whatever database is now live, which may need a credential this process never had. The manifest's `pre_restore_safety` entry, with its own `created_at`, is the durable record instead.
 
 **What this doesn't change.** The month-close backup gate, correction versioning, and the single-machine caveat (§9.3) all continue to apply to `period_close` rows exactly as before.
 

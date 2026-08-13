@@ -15,6 +15,7 @@ use crate::m5_close;
 use crate::m6_reports;
 use crate::m7_settings;
 use crate::m8_auth;
+use crate::m9_audit;
 use crate::paths::AppPaths;
 use crate::session::{require_locked, require_session, SessionState};
 
@@ -52,20 +53,6 @@ pub fn add_member(
         "an authenticated session implies an open database connection — see S5's login flow",
     );
     m1_members::add_member(conn, input)
-}
-
-macro_rules! auth_stub {
-    ($name:ident) => {
-        #[tauri::command]
-        pub fn $name(
-            session: tauri::State<'_, SessionState>,
-        ) -> Result<serde_json::Value, AppError> {
-            require_session(&session)?;
-            Err(AppError::NotImplemented {
-                command: stringify!($name),
-            })
-        }
-    };
 }
 
 // M1 remainder — US-M1.2/M1.3/M1.4, S5.
@@ -586,9 +573,22 @@ pub fn run_console_backup_now(
     backup::run_console_backup_now(conn, &paths.db_path, &paths.app_data_dir, "manual", None)
 }
 
-// M9 — US-M9.1, S14 (a completeness check; audit writes land per-command from S4,
-// but the read command itself has no consumer until then).
-auth_stub!(get_audit_log);
+/// API-32 (US-M9.1, S14). Read-only — reading the log produces no entry of
+/// its own. `member_query` narrows to a member's own audit trail via
+/// Rule-44's shared search (see `m9_audit::get_audit_log`'s doc comment).
+#[tauri::command]
+pub fn get_audit_log(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    member_query: Option<String>,
+) -> Result<Vec<m9_audit::AuditLogEntry>, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m9_audit::get_audit_log(conn, member_query.as_deref())
+}
 
 // The closed set of seven unauthenticated commands (03-business-rules.md
 // Rule-29 / 06-security-authorization-matrix.md §3). None of these call
@@ -601,6 +601,12 @@ auth_stub!(get_audit_log);
 /// key before returning. `m8_auth::setup_first_run` refuses a second call
 /// once the sidecar file exists (see its own doc comment for why that file,
 /// not an `auth` DB row, is the source of truth).
+///
+/// T-M9.1-2's completeness pass: this command genuinely couldn't audit
+/// before S14 — `audit_log` lives inside the encrypted database, which
+/// doesn't exist until the line below opens it. Never the credential
+/// itself (T-M9.1-6) — "PIN set"/"Password set" names *that* a credential
+/// was chosen, same convention the prototype used.
 #[tauri::command]
 pub fn setup_first_run(
     paths: tauri::State<'_, AppPaths>,
@@ -608,12 +614,37 @@ pub fn setup_first_run(
     db: tauri::State<'_, DbState>,
     input: m8_auth::SetupFirstRunInput,
 ) -> Result<m8_auth::SetupFirstRunResult, AppError> {
+    // Both may be set at once (C6/M8.1) — one entry per credential type
+    // configured, same "one per changed thing" convention as `edit_member`.
+    let (pin_set, password_set) = (input.pin.is_some(), input.password.is_some());
     let (result, master_key) = m8_auth::setup_first_run(&paths.auth_path, input)?;
     let conn = crate::db::open_encrypted(
         &paths.db_path,
         &m8_auth::crypto::sqlcipher_raw_key_pragma(&master_key),
     )?;
     m5_close::run_period_catchup(&conn)?;
+    if pin_set {
+        m9_audit::write_audit_entry(
+            &conn,
+            "auth",
+            0,
+            "credential",
+            None,
+            Some("PIN set"),
+            "entry",
+        )?;
+    }
+    if password_set {
+        m9_audit::write_audit_entry(
+            &conn,
+            "auth",
+            0,
+            "credential",
+            None,
+            Some("Password set"),
+            "entry",
+        )?;
+    }
     *db.0.lock().expect("db mutex poisoned") = Some(conn);
     session.mark_authenticated();
     Ok(result)
@@ -623,6 +654,12 @@ pub fn setup_first_run(
 /// credential type or part was wrong (Rule-29); a locked account reports
 /// `AccountLocked` instead so the login screen's countdown has something to
 /// show. Success opens the database with the recovered master key.
+///
+/// US-M8.6 (S14): if `m8_auth::login` (Argon2) succeeds but the SQLCipher
+/// open still fails, that's unambiguous — Argon2 verification never reads
+/// `db_path`, only the sidecar — so it can only mean a corrupted database,
+/// never a bad credential. Reported as `DataUnreadable`, which the frontend
+/// routes to the data-recovery screen instead of the generic message.
 #[tauri::command]
 pub fn login(
     paths: tauri::State<'_, AppPaths>,
@@ -634,8 +671,38 @@ pub fn login(
     let conn = crate::db::open_encrypted(
         &paths.db_path,
         &m8_auth::crypto::sqlcipher_raw_key_pragma(&master_key),
-    )?;
+    )
+    .map_err(|_| AppError::DataUnreadable)?;
     m5_close::run_period_catchup(&conn)?;
+    // T-M8.5-2: checked once, at every successful login — the only moment
+    // the process is reliably running, since there's no background service
+    // while closed. Fires *silently*: a failure here is technical-logged,
+    // never surfaced, per NFR-11/T-M9.1-5 — a missed scheduled backup isn't
+    // a reason to block getting into the console the admin actually opened
+    // it for.
+    match backup::scheduled_backup_due(&conn) {
+        Ok(Some(schedule_kind)) => {
+            if let Err(e) = backup::run_console_backup_now(
+                &conn,
+                &paths.db_path,
+                &paths.app_data_dir,
+                "scheduled",
+                Some(&schedule_kind),
+            ) {
+                m9_audit::tech_log(
+                    &paths.app_data_dir,
+                    m9_audit::TechLogLevel::Error,
+                    &format!("scheduled console backup failed at login: {e}"),
+                );
+            }
+        }
+        Ok(None) => {}
+        Err(e) => m9_audit::tech_log(
+            &paths.app_data_dir,
+            m9_audit::TechLogLevel::Error,
+            &format!("schedule-due check failed at login: {e}"),
+        ),
+    }
     *db.0.lock().expect("db mutex poisoned") = Some(conn);
     session.mark_authenticated();
     Ok(())
@@ -653,37 +720,56 @@ pub fn use_recovery_code(
     m8_auth::use_recovery_code(&paths.auth_path, input)
 }
 
-/// API-34 — minimal slice pulled forward from US-M8.6 (S14): whether the
-/// sidecar credential file exists is exactly "has this machine been set up
-/// before", which is what the frontend needs to route Setup vs Login at
-/// launch. S14 deepens this into genuine corrupted-database detection
-/// without changing this boolean contract.
+/// API-34 — real corrupted-database detection (S14 deepens the S10 "does a
+/// sidecar exist" placeholder). Still `Result<bool, AppError>`, so the
+/// contract is unchanged: `Ok(false)` = genuinely first run (Setup);
+/// `Ok(true)` = normal (Login); `Err` = this machine has been set up
+/// before but its data looks broken (Recovery) — the frontend only
+/// branches on Ok/Err here, never on the error's own kind.
+///
+/// This is a shallow, structural check only — non-zero size, page-aligned —
+/// since there's no key to decrypt anything with yet. A corrupted file that
+/// happens to pass it is still caught by `login`'s own backstop below
+/// (Argon2 succeeds, SQLCipher open fails) the moment a credential is
+/// actually tried.
 #[tauri::command]
 pub fn check_data_readable(paths: tauri::State<'_, AppPaths>) -> Result<bool, AppError> {
-    Ok(paths.auth_path.exists())
+    if !paths.auth_path.exists() {
+        return Ok(false);
+    }
+    // A sidecar that exists but fails to parse is corrupted, not absent —
+    // `AuthStore::load` already returns `AppError::Io` for that case.
+    m8_auth::store::AuthStore::load(&paths.auth_path)?;
+
+    const SQLCIPHER_PAGE_SIZE: u64 = 4096;
+    let readable = std::fs::metadata(&paths.db_path)
+        .map(|m| m.len() > 0 && m.len() % SQLCIPHER_PAGE_SIZE == 0)
+        .unwrap_or(false);
+    if !readable {
+        return Err(AppError::DataUnreadable);
+    }
+    Ok(true)
 }
 
-/// API-35 — unauthenticated per the closed set of seven (Rule-29). S10
-/// only reaches this from the authenticated Settings screen (T-M7.4-5),
-/// where `db`'s connection is already open; a genuinely pre-login read (no
-/// connection, no key) is the "corrupted-database detection" work
-/// `check_data_readable`'s own doc comment already defers to S14 — this
-/// refuses cleanly rather than attempting it.
+/// API-35 — unauthenticated per the closed set of seven (Rule-29): reads
+/// the manifest, not `backups`, so it works identically whether or not a
+/// session is open (the authenticated Settings Restore card and the
+/// data-recovery screen are the same call). See `backup`'s module doc
+/// comment for why the manifest exists at all.
 #[tauri::command]
 pub fn list_restore_points(
-    db: tauri::State<'_, DbState>,
+    paths: tauri::State<'_, AppPaths>,
 ) -> Result<Vec<backup::BackupRecord>, AppError> {
-    let guard = locked_conn(&db);
-    let conn = guard.as_ref().ok_or_else(|| AppError::NotFound {
-        message: "No database is currently open.".into(),
-    })?;
-    backup::list_restore_points(conn)
+    backup::list_restore_points(&paths.app_data_dir)
 }
 
-/// API-36 — same authenticated-only scope as `list_restore_points` this
-/// sprint. Drops the session on success: the restored file may hold a
-/// different credential (§9.5), so the next access must go through `login`
-/// again rather than trust the now-stale in-memory connection.
+/// API-36 — genuinely unauthenticated now: uses whatever connection
+/// happens to be open (Settings, authenticated) purely to write the
+/// `audit_log` row before anything is touched, and works with none at all
+/// (the data-recovery screen, no session, possibly no key ever derived).
+/// `session.clear()`, not `mark_locked()` — the restored file may hold a
+/// **different** credential (§9.5), so the next access must go through a
+/// fresh `login`, not `unlock_session`, which would re-try the old one.
 #[tauri::command]
 pub fn restore_from_backup(
     paths: tauri::State<'_, AppPaths>,
@@ -693,20 +779,22 @@ pub fn restore_from_backup(
 ) -> Result<(), AppError> {
     {
         let guard = locked_conn(&db);
-        let conn = guard.as_ref().ok_or_else(|| AppError::NotFound {
-            message: "No database is currently open.".into(),
-        })?;
-        backup::restore_from_backup(conn, &paths.db_path, &paths.app_data_dir, backup_id)?;
+        backup::restore_from_backup(
+            guard.as_ref(),
+            &paths.db_path,
+            &paths.app_data_dir,
+            backup_id,
+        )?;
     }
     *locked_conn(&db) = None;
-    session.mark_locked();
+    session.clear();
     Ok(())
 }
 
-/// API-40 — same authenticated-only scope and post-restore session drop as
-/// `restore_from_backup`. Backs Settings' "Restore from a file…"
-/// (T-M7.4-5), fed by the native file picker (`tauri-plugin-dialog`) on
-/// the frontend.
+/// API-40 — same unauthenticated-capable scope and post-restore sign-out
+/// as `restore_from_backup`. Backs Settings' "Restore from a file…"
+/// (T-M7.4-5) and both data-recovery paths (T-M8.6-5/6), fed by the native
+/// file picker (`tauri-plugin-dialog`) on the frontend.
 #[tauri::command]
 pub fn restore_from_backup_file(
     paths: tauri::State<'_, AppPaths>,
@@ -716,42 +804,19 @@ pub fn restore_from_backup_file(
 ) -> Result<(), AppError> {
     {
         let guard = locked_conn(&db);
-        let conn = guard.as_ref().ok_or_else(|| AppError::NotFound {
-            message: "No database is currently open.".into(),
-        })?;
         backup::restore_from_backup_file(
-            conn,
+            guard.as_ref(),
             &paths.db_path,
             &paths.app_data_dir,
             std::path::Path::new(&file_path),
         )?;
     }
     *locked_conn(&db) = None;
-    session.mark_locked();
+    session.clear();
     Ok(())
 }
 
 pub use crate::command_names::{ALL_COMMAND_NAMES, UNAUTHENTICATED_COMMAND_NAMES};
-
-/// QA.2's contract test needs to exercise the remaining stub commands
-/// generically by name — `create_root_member`/`add_member` (M1.1),
-/// `setup_first_run`/`login`/`check_data_readable` (M8.1/M8.2, S5),
-/// `record_entry`/`edit_entry`/`lock_session`/`unlock_session` (M2.1/M2.2/
-/// M8.3, S7), and `get_period_lock_status`/`get_outstanding_alert`
-/// (M5.2/M5.3/M2.3/M2.4, S12) all have real logic now and their own
-/// dedicated tests instead (see `tests/contract.rs`). Rust has no runtime
-/// reflection to call a function by string, so this is the one place that
-/// enumerates the match by hand; `ALL_COMMAND_NAMES` is what keeps it
-/// honest against gaps.
-pub fn call_stub_by_name(
-    name: &str,
-    session: tauri::State<'_, SessionState>,
-) -> Result<serde_json::Value, AppError> {
-    match name {
-        "get_audit_log" => get_audit_log(session),
-        other => panic!("unknown command in ALL_COMMAND_NAMES: {other}"),
-    }
-}
 
 #[cfg(test)]
 mod tests {

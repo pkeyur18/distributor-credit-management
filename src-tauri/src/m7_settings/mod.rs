@@ -13,10 +13,6 @@ use serde::{Deserialize, Serialize};
 use crate::error::AppError;
 use crate::m3_calc;
 
-fn today_iso() -> String {
-    chrono::Local::now().date_naive().to_string()
-}
-
 /// D-12/D-13's `setting` entity type, `settings_change` cause — covers both
 /// a slab-row write (`entity_id` = that row's own id) and a general
 /// settings-key write (no natural row, so `entity_id` is 0 — unconstrained,
@@ -28,12 +24,15 @@ fn write_audit(
     field: &str,
     new_value: &str,
 ) -> Result<(), AppError> {
-    conn.execute(
-        "INSERT INTO audit_log (entity_type, entity_id, field, old_value, new_value, changed_at, cause)
-         VALUES ('setting', ?1, ?2, NULL, ?3, ?4, 'settings_change')",
-        rusqlite::params![entity_id, field, new_value, today_iso()],
-    )?;
-    Ok(())
+    crate::m9_audit::write_audit_entry(
+        conn,
+        "setting",
+        entity_id,
+        field,
+        None,
+        Some(new_value),
+        "settings_change",
+    )
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -467,13 +466,23 @@ pub fn update_console_backup_settings(
         });
     }
 
+    // T-M9.1-2's completeness pass: these three writes had no audit entry
+    // at all before S14, unlike every other settings write in this module.
     write_setting(conn, "console_backup_schedule", &input.schedule)?;
+    write_audit(conn, 0, "console_backup_schedule", &input.schedule)?;
     write_setting(
         conn,
         "console_backup_retention_count",
         &input.retention_count.to_string(),
     )?;
+    write_audit(
+        conn,
+        0,
+        "console_backup_retention_count",
+        &input.retention_count.to_string(),
+    )?;
     write_setting(conn, "console_backup_folder", &input.folder)?;
+    write_audit(conn, 0, "console_backup_folder", &input.folder)?;
     get_console_backup_settings(conn)
 }
 
@@ -887,6 +896,32 @@ mod tests {
         let reread = get_console_backup_settings(&conn).unwrap();
         assert_eq!(reread.schedule, "weekly");
         assert_eq!(reread.retention_count, 20);
+    }
+
+    /// T-M9.1-2: this write had no audit entry at all before S14.
+    #[test]
+    fn console_backup_settings_update_writes_one_audit_entry_per_field() {
+        let conn = seeded();
+        update_console_backup_settings(
+            &conn,
+            ConsoleBackupSettings {
+                schedule: "weekly".into(),
+                retention_count: 20,
+                folder: "backups".into(),
+            },
+        )
+        .unwrap();
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM audit_log WHERE cause = 'settings_change' \
+                 AND field IN ('console_backup_schedule', 'console_backup_retention_count', \
+                                'console_backup_folder')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 3);
     }
 
     #[test]

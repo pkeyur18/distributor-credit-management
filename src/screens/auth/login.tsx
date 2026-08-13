@@ -45,6 +45,13 @@ export function Login() {
       if (presented.kind === "account_locked") {
         setLockedSeconds(presented.retryAfterSeconds ?? 0);
         setError(null);
+      } else if (presented.kind === "data_unreadable") {
+        // US-M8.6: Argon2 succeeded but the database itself won't open —
+        // never a credential problem (see error.rs's own doc comment on
+        // `AppError::DataUnreadable`). Route to recovery, not the login
+        // error state.
+        navigate("/auth/data-recovery", { replace: true });
+        return;
       } else {
         setError(presented.message);
       }

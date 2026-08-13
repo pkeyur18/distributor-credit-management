@@ -78,7 +78,12 @@ export interface BackupRecord {
   createdAt: string;
 }
 
-// D-12/D-13 corrected value sets.
+// D-12/D-13 corrected value sets. T-M9.1-3 (S14): `reversal` was already
+// retired (`reverse_entry` dropped); `restore` never belonged here either —
+// it wasn't part of the documented seven-value taxonomy
+// (`02-business-rules.md`/[04] §5.3) and its S10-era producer wrote through
+// an unsafe post-overwrite connection — see `backup::restore_from_backup`'s
+// doc comment. Neither value must be reintroduced under a new meaning.
 export type AuditEntityType = "member" | "entry" | "setting" | "period" | "backup" | "auth";
 export type AuditCause =
   | "entry"
@@ -87,8 +92,7 @@ export type AuditCause =
   | "settings_change"
   | "period_close"
   | "manual_backup"
-  | "console_backup"
-  | "restore";
+  | "console_backup";
 
 export interface AuditLogEntry {
   id: number;

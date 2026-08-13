@@ -34,6 +34,7 @@ fn app_with_seeded_db() -> tauri::App<tauri::test::MockRuntime> {
     app.manage(AppPaths {
         db_path: dir.0.join("console.db"),
         auth_path: dir.0.join("auth.json"),
+        backups_manifest_path: dir.0.join("backups-manifest.json"),
         app_data_dir: dir.0.clone(),
     });
     std::mem::forget(dir);
@@ -75,6 +76,7 @@ fn app_with_temp_paths(label: &str) -> (tauri::App<tauri::test::MockRuntime>, Te
     app.manage(AppPaths {
         db_path: dir.0.join("console.db"),
         auth_path: dir.0.join("auth.json"),
+        backups_manifest_path: dir.0.join("backups-manifest.json"),
         app_data_dir: dir.0.clone(),
     });
     (app, dir)
@@ -96,6 +98,7 @@ fn app_with_seeded_db_on_disk(label: &str) -> (tauri::App<tauri::test::MockRunti
     app.manage(AppPaths {
         db_path,
         auth_path: dir.0.join("auth.json"),
+        backups_manifest_path: dir.0.join("backups-manifest.json"),
         app_data_dir: dir.0.clone(),
     });
     (app, dir)
@@ -166,88 +169,11 @@ fn the_unauthenticated_set_is_exactly_the_named_seven() {
     }
 }
 
-// The structural property T-QA.2-2 actually needs: with no session, every
-// command *not* in the unauthenticated list refuses with `auth_required`,
-// and every command *in* it never does (a stub `not_implemented` refusal
-// is fine — reaching that error at all proves the gate was never hit).
-#[test]
-fn every_authenticated_command_refuses_without_a_session_and_only_those() {
-    let app = tauri::test::mock_app();
-    app.manage(SessionState::new());
-    app.manage(DbState::new());
-    let session = app.state::<SessionState>();
-
-    // create_root_member/add_member (M1.1), edit_member/deactivate_member/
-    // reactivate_member/search_members (M1.2/M1.3/M1.4, S5),
-    // setup_first_run/login/check_data_readable (M8.1/M8.2, S5) and
-    // record_entry/edit_entry/lock_session/unlock_session (M2.1/M2.2/M8.3,
-    // S7) have real logic and their own dedicated tests below — this loop
-    // covers the remaining stub commands via `call_stub_by_name`.
-    const HAS_REAL_LOGIC: &[&str] = &[
-        "create_root_member",
-        "add_member",
-        "edit_member",
-        "deactivate_member",
-        "reactivate_member",
-        "search_members",
-        "setup_first_run",
-        "login",
-        "check_data_readable",
-        "record_entry",
-        "edit_entry",
-        "lock_session",
-        "unlock_session",
-        "get_member_detail",
-        "get_direct_children_chart",
-        "use_recovery_code",
-        // US-M7.1/M7.2/M7.4, S10 (US-M8.5/M8.6's own commands pulled
-        // forward — see `commands.rs`'s "M8 remainder" comment).
-        "get_settings",
-        "update_settings",
-        "add_slab_row",
-        "remove_slab_row",
-        "update_slab_row",
-        "get_console_backup_settings",
-        "update_console_backup_settings",
-        "run_console_backup_now",
-        "list_restore_points",
-        "restore_from_backup",
-        "restore_from_backup_file",
-        // US-M7.3/US-M5.1, S11.
-        "preview_settings_impact",
-        "get_outstanding_periods",
-        "begin_close",
-        "confirm_backup_and_close",
-        "manual_backup_current_period",
-        // US-M5.2/M5.3/M2.3/M2.4, S12.
-        "get_period_lock_status",
-        "get_outstanding_alert",
-        // US-M6.5/M6.1/M6.2/M6.3/M6.4, S13.
-        "export_monthly",
-        "export_yearly_average",
-        "export_low_contribution",
-        "list_backups",
-        "redownload_backup",
-    ];
-    for &name in ALL_COMMAND_NAMES
-        .iter()
-        .filter(|&&n| !HAS_REAL_LOGIC.contains(&n))
-    {
-        let result = commands::call_stub_by_name(name, session.clone());
-        let is_unauthenticated = UNAUTHENTICATED_COMMAND_NAMES.contains(&name);
-        match result {
-            Err(AppError::AuthRequired) => assert!(
-                !is_unauthenticated,
-                "{name} is in the unauthenticated list but hit the session gate"
-            ),
-            Err(AppError::NotImplemented { .. }) | Ok(_) => assert!(
-                is_unauthenticated,
-                "{name} is not in the unauthenticated list but did not hit the session gate"
-            ),
-            Err(other) => panic!("{name}: unexpected error variant {other:?}"),
-        }
-    }
-}
+// T-QA.2-2's generic stub-command loop (`call_stub_by_name`) is retired as
+// of S14: `get_audit_log` was the last command without real logic, and
+// every one of the 40 in `ALL_COMMAND_NAMES` now has its own dedicated
+// auth-gating test (this file, plus `ipc_dispatch.rs`) — see
+// `get_audit_log_requires_a_session` below for the last graduate.
 
 #[test]
 fn create_root_member_requires_a_session() {
@@ -528,6 +454,108 @@ fn check_data_readable_is_false_before_setup_and_true_after() {
     assert!(commands::check_data_readable(app.state::<AppPaths>()).unwrap());
 }
 
+// US-M8.6 (S14): the two-layer detection `check_data_readable` deepens
+// into — a corrupted (not merely absent) database or sidecar routes to
+// data-recovery, distinct from "never set up" (Setup) and "opens fine"
+// (Login). See `commands.rs`'s own doc comment on this command.
+
+#[test]
+fn check_data_readable_errs_on_a_truncated_database_with_an_intact_sidecar() {
+    let (app, _dir) = app_with_temp_paths("check-data-readable-truncated-db");
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    assert!(commands::check_data_readable(app.state::<AppPaths>()).unwrap());
+
+    // Simulate disk corruption: the sidecar (auth.json) survives, the
+    // database file itself doesn't.
+    std::fs::write(&app.state::<AppPaths>().db_path, b"not a real database").unwrap();
+
+    let result = commands::check_data_readable(app.state::<AppPaths>());
+    assert!(matches!(result, Err(AppError::DataUnreadable)));
+}
+
+#[test]
+fn check_data_readable_errs_on_a_missing_database_with_an_intact_sidecar() {
+    let (app, _dir) = app_with_temp_paths("check-data-readable-missing-db");
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    std::fs::remove_file(&app.state::<AppPaths>().db_path).unwrap();
+
+    let result = commands::check_data_readable(app.state::<AppPaths>());
+    assert!(matches!(result, Err(AppError::DataUnreadable)));
+}
+
+#[test]
+fn check_data_readable_errs_on_a_corrupted_sidecar() {
+    let (app, _dir) = app_with_temp_paths("check-data-readable-bad-sidecar");
+    std::fs::write(&app.state::<AppPaths>().auth_path, b"{not valid json").unwrap();
+
+    let result = commands::check_data_readable(app.state::<AppPaths>());
+    assert!(
+        result.is_err(),
+        "a sidecar that exists but fails to parse must not read as Setup"
+    );
+}
+
+/// The other half of the backstop: a structurally-plausible-but-actually-
+/// corrupted file (same size, garbage content) passes `check_data_readable`'s
+/// shallow check but must still be caught the moment a real credential is
+/// tried — `login`'s own Argon2-succeeds-but-SQLCipher-open-fails ordering.
+#[test]
+fn login_reports_data_unreadable_when_argon2_succeeds_but_the_database_wont_open() {
+    let (app, _dir) = app_with_temp_paths("login-data-unreadable");
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    // Drop the session `setup_first_run` left behind and corrupt the live
+    // database with a page-aligned garbage file — passes the shallow
+    // structural check, still fails to actually open.
+    *app.state::<DbState>().0.lock().unwrap() = None;
+    app.state::<SessionState>().clear();
+    std::fs::write(&app.state::<AppPaths>().db_path, vec![0u8; 4096]).unwrap();
+    assert!(
+        commands::check_data_readable(app.state::<AppPaths>()).unwrap(),
+        "page-aligned garbage passes the shallow check — that's the accepted limit"
+    );
+
+    let result = commands::login(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        CredentialInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    );
+    assert!(
+        matches!(result, Err(AppError::DataUnreadable)),
+        "correct credential, unopenable file — must never present as a bad-credential error: {result:?}"
+    );
+}
+
 #[test]
 fn setup_first_run_requires_no_session_and_leaves_one_authenticated_with_a_usable_database() {
     let (app, _dir) = app_with_temp_paths("setup-first-run");
@@ -554,6 +582,36 @@ fn setup_first_run_requires_no_session_and_leaves_one_authenticated_with_a_usabl
         root_input("9876566666"),
     );
     assert!(member.is_ok());
+}
+
+/// T-M9.1-2: `setup_first_run` couldn't audit before S14 (`audit_log` lives
+/// inside a database that doesn't exist until this call creates it) — this
+/// is the gap that pass found and closed.
+#[test]
+fn setup_first_run_writes_an_auth_audit_entry_naming_the_credential_not_its_value() {
+    let (app, _dir) = app_with_temp_paths("setup-first-run-audit");
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+
+    let entries =
+        commands::get_audit_log(app.state::<SessionState>(), app.state::<DbState>(), None).unwrap();
+    let auth_entry = entries
+        .iter()
+        .find(|e| e.entity_type == "auth")
+        .expect("setup_first_run must write an auth-entity audit entry");
+    assert_eq!(auth_entry.cause, "entry");
+    assert_eq!(auth_entry.new_value.as_deref(), Some("PIN set"));
+    assert!(!entries
+        .iter()
+        .any(|e| e.new_value.as_deref() == Some("482913")));
 }
 
 #[test]
@@ -984,21 +1042,35 @@ fn run_console_backup_now_end_to_end_produces_a_manual_backup() {
     .unwrap();
 
     assert_eq!(record.kind, "manual");
-    let points = commands::list_restore_points(app.state::<DbState>()).unwrap();
+    let points = commands::list_restore_points(app.state::<AppPaths>()).unwrap();
     assert_eq!(
         points[0].id, record.id,
         "T-M7.4-4: the new manual backup must lead the Restore card's list"
     );
 }
 
+// US-M8.6 (S14): the pre-auth data-recovery path's whole premise —
+// `list_restore_points`/`restore_from_backup`/`restore_from_backup_file`
+// must work with **no** database connection open at all, not merely
+// refuse cleanly. See `backup.rs`'s module doc comment for why (the
+// manifest, not `backups` SQL).
+
 #[test]
-fn list_restore_points_refuses_cleanly_with_no_database_open() {
-    let app = app_with_seeded_db();
-    // `app_with_seeded_db` manages an in-memory connection directly, so
-    // clear it to simulate the genuine "nothing open yet" state.
+fn list_restore_points_works_with_no_database_open() {
+    let (app, _dir) = app_with_seeded_db_on_disk("list-restore-points-no-session");
+    app.state::<SessionState>().mark_authenticated();
+    let record = commands::run_console_backup_now(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+    )
+    .unwrap();
+    // Simulate the genuine pre-login state: no connection, no session.
     *app.state::<DbState>().0.lock().unwrap() = None;
-    let result = commands::list_restore_points(app.state::<DbState>());
-    assert!(matches!(result, Err(AppError::NotFound { .. })));
+    app.state::<SessionState>().mark_locked();
+
+    let points = commands::list_restore_points(app.state::<AppPaths>()).unwrap();
+    assert_eq!(points[0].id, record.id);
 }
 
 #[test]
@@ -1024,6 +1096,36 @@ fn restore_from_backup_end_to_end_drops_the_session() {
         !app.state::<SessionState>().is_authenticated(),
         "a restored file may hold a different credential — the session must not survive it"
     );
+    assert!(
+        !app.state::<SessionState>().is_locked(),
+        "a full sign-out (session.clear()), not a lock — unlock_session would retry the old credential"
+    );
+}
+
+#[test]
+fn restore_from_backup_works_with_no_database_open() {
+    let (app, dir) = app_with_seeded_db_on_disk("restore-from-backup-no-session");
+    app.state::<SessionState>().mark_authenticated();
+    let record = commands::run_console_backup_now(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+    )
+    .unwrap();
+    *app.state::<DbState>().0.lock().unwrap() = None;
+    app.state::<SessionState>().mark_locked();
+    let _ = &dir; // keeps the temp dir alive for the duration of the test
+
+    let result = commands::restore_from_backup(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        record.id,
+    );
+    assert!(
+        result.is_ok(),
+        "the pre-auth recovery screen has no session to lose — this is exactly its call shape: {result:?}"
+    );
 }
 
 #[test]
@@ -1042,6 +1144,35 @@ fn restore_from_backup_file_end_to_end_through_the_command_layer() {
     .unwrap();
 
     assert!(!app.state::<SessionState>().is_authenticated());
+    assert!(!app.state::<SessionState>().is_locked());
+}
+
+/// AC-38's actual shape: restoring between two *differently-keyed*
+/// encrypted files. Proves the ordering fix in `overwrite_live_database` —
+/// the S10-era version wrote through the pre-restore `Connection` after
+/// the physical overwrite, which a same-key fixture (every other test
+/// here) could never expose.
+#[test]
+fn restore_from_backup_file_succeeds_across_a_different_credential() {
+    let (app, dir) = app_with_seeded_db_on_disk("restore-cross-credential");
+    let source_path = dir.0.join("other-machine.db");
+    db::open_encrypted(&source_path, "a completely different key").unwrap();
+    // The genuine pre-auth shape: no open connection, no session — this
+    // console's own database may not even be openable with its own key.
+    *app.state::<DbState>().0.lock().unwrap() = None;
+
+    let result = commands::restore_from_backup_file(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        source_path.to_string_lossy().into_owned(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+
+    // The live file now genuinely holds the *other* key — confirm it opens
+    // with that one and not the original.
+    let db_path = app.state::<AppPaths>().db_path.clone();
+    assert!(db::open_encrypted(&db_path, "a completely different key").is_ok());
 }
 
 // --- preview_settings_impact (API-33, US-M7.3) ---
@@ -1417,7 +1548,7 @@ fn the_full_close_flow_writes_a_permanent_record_and_zeroes_live_figures() {
         "the closed month must drop off the outstanding list"
     );
 
-    let points = commands::list_restore_points(app.state::<DbState>()).unwrap();
+    let points = commands::list_restore_points(app.state::<AppPaths>()).unwrap();
     assert!(
         points.iter().any(|p| p.kind == "period_close"),
         "the close must have written a period_close backup"
@@ -1453,6 +1584,125 @@ fn manual_backup_current_period_end_to_end_through_the_command_layer() {
     .unwrap();
 
     assert_eq!(record.kind, "manual");
-    let points = commands::list_restore_points(app.state::<DbState>()).unwrap();
+    let points = commands::list_restore_points(app.state::<AppPaths>()).unwrap();
     assert_eq!(points[0].id, record.id);
+}
+
+// --- get_audit_log (API-32, US-M9.1) ---
+
+#[test]
+fn get_audit_log_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::get_audit_log(app.state::<SessionState>(), app.state::<DbState>(), None);
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn get_audit_log_reflects_a_real_mutation_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9990000010"),
+    )
+    .unwrap();
+
+    let entries =
+        commands::get_audit_log(app.state::<SessionState>(), app.state::<DbState>(), None).unwrap();
+    assert!(
+        entries
+            .iter()
+            .any(|e| e.entity_type == "member" && e.entity_id == root.id),
+        "create_root_member must write its own audit entry"
+    );
+
+    let filtered = commands::get_audit_log(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        Some("9990000010".into()),
+    )
+    .unwrap();
+    assert!(!filtered.is_empty());
+    assert!(filtered.iter().all(|e| e.entity_id == root.id));
+}
+
+// --- T-M8.5-2: the login-time console-backup schedule check ---
+
+#[test]
+fn login_takes_a_scheduled_backup_when_due() {
+    let (app, _dir) = app_with_temp_paths("login-schedule-due");
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    {
+        let db_state = app.state::<DbState>();
+        let guard = db_state.0.lock().unwrap();
+        let conn = guard.as_ref().unwrap();
+        conn.execute(
+            "UPDATE settings SET value = 'daily' WHERE key = 'console_backup_schedule'",
+            [],
+        )
+        .unwrap();
+    }
+    *app.state::<DbState>().0.lock().unwrap() = None;
+    app.state::<SessionState>().clear();
+
+    commands::login(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        CredentialInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+
+    let points = commands::list_restore_points(app.state::<AppPaths>()).unwrap();
+    assert!(
+        points.iter().any(|p| p.kind == "scheduled"),
+        "a due daily schedule must fire silently at login"
+    );
+}
+
+#[test]
+fn login_does_not_back_up_when_the_schedule_is_off() {
+    let (app, _dir) = app_with_temp_paths("login-schedule-off");
+    commands::setup_first_run(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        SetupFirstRunInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+    *app.state::<DbState>().0.lock().unwrap() = None;
+    app.state::<SessionState>().clear();
+
+    commands::login(
+        app.state::<AppPaths>(),
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        CredentialInput {
+            pin: Some("482913".into()),
+            password: None,
+        },
+    )
+    .unwrap();
+
+    let points = commands::list_restore_points(app.state::<AppPaths>()).unwrap();
+    assert!(
+        points.iter().all(|p| p.kind != "scheduled"),
+        "the seeded default schedule is off — login must not back up"
+    );
 }

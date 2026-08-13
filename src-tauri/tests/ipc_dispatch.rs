@@ -53,6 +53,7 @@ fn invoke_setup_first_run(body: InvokeBody) -> Result<serde_json::Value, serde_j
     app.manage(AppPaths {
         db_path: dir.0.join("console.db"),
         auth_path: dir.0.join("auth.json"),
+        backups_manifest_path: dir.0.join("backups-manifest.json"),
         app_data_dir: dir.0.clone(),
     });
 

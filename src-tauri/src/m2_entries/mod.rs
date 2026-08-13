@@ -105,27 +105,25 @@ fn load_entry(conn: &Connection, id: i64) -> Result<BusinessVolumeEntry, AppErro
     })
 }
 
+// D-12: `entity_type` is `member | entry | setting | period | backup | auth` —
+// 'entry' is the value for a business_volume_entries row.
 fn write_audit(
     conn: &Connection,
     entry_id: i64,
-    old_amount: Option<i64>,
-    new_amount: i64,
+    field: &str,
+    old_value: Option<&str>,
+    new_value: &str,
     cause: &str,
 ) -> Result<(), AppError> {
-    conn.execute(
-        // D-12: `entity_type` is `member | entry | setting | period | backup | auth` —
-        // 'entry' is the value for a business_volume_entries row.
-        "INSERT INTO audit_log (entity_type, entity_id, field, old_value, new_value, changed_at, cause)
-         VALUES ('entry', ?1, 'amount', ?2, ?3, ?4, ?5)",
-        rusqlite::params![
-            entry_id,
-            old_amount.map(|v| v.to_string()),
-            new_amount.to_string(),
-            today_iso(),
-            cause,
-        ],
-    )?;
-    Ok(())
+    crate::m9_audit::write_audit_entry(
+        conn,
+        "entry",
+        entry_id,
+        field,
+        old_value,
+        Some(new_value),
+        cause,
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -166,7 +164,17 @@ pub fn record_entry(
     )?;
     let entry_id = tx.last_insert_rowid();
     m3_calc::recalculate_chain(&tx, input.member_id, period_id)?;
-    write_audit(&tx, entry_id, None, input.amount, "entry")?;
+    // One row for the new entry (T-M1.1-9's onboarding precedent) — a
+    // creation isn't a "changed field", so `amount` alone stands for it
+    // rather than a second row for `entry_date`.
+    write_audit(
+        &tx,
+        entry_id,
+        "amount",
+        None,
+        &input.amount.to_string(),
+        "entry",
+    )?;
     tx.commit()?;
 
     load_entry(conn, entry_id)
@@ -221,18 +229,37 @@ pub fn edit_entry(
         "UPDATE business_volume_entries SET amount = ?1, entry_date = ?2, updated_at = ?3 WHERE id = ?4",
         rusqlite::params![input.amount, input.entry_date, updated_at, input.id],
     )?;
+    // T-M9.1-2's completeness pass: `edit_entry` can change both `amount`
+    // and `entry_date` in one call (RQ-21) — an earlier version audited
+    // `amount` unconditionally and never `entry_date` at all, so a
+    // date-only correction (a real, reachable Correction Panel path) wrote
+    // no audit entry. One row per field that actually changed, guarded, so
+    // an unchanged amount doesn't produce a misleading "X → X" row either.
+    let cause = if closed { "correction" } else { "edit" };
     if closed {
         m3_calc::write_correction_snapshot(&tx, existing.member_id, period_id)?;
+    } else {
+        m3_calc::recalculate_chain(&tx, existing.member_id, period_id)?;
+    }
+    if existing.amount != input.amount {
         write_audit(
             &tx,
             input.id,
-            Some(existing.amount),
-            input.amount,
-            "correction",
+            "amount",
+            Some(&existing.amount.to_string()),
+            &input.amount.to_string(),
+            cause,
         )?;
-    } else {
-        m3_calc::recalculate_chain(&tx, existing.member_id, period_id)?;
-        write_audit(&tx, input.id, Some(existing.amount), input.amount, "edit")?;
+    }
+    if existing.entry_date != input.entry_date {
+        write_audit(
+            &tx,
+            input.id,
+            "entry_date",
+            Some(&existing.entry_date),
+            &input.entry_date,
+            cause,
+        )?;
     }
     tx.commit()?;
 
@@ -645,6 +672,55 @@ mod tests {
             )
             .unwrap();
         assert_eq!(cause, "edit");
+    }
+
+    /// T-M9.1-2's completeness pass: `edit_entry` can move a date within
+    /// its own month (RQ-21) without touching the amount — the Correction
+    /// Panel sends both fields on every save, so this is a real, reachable
+    /// path, not a hypothetical. An earlier version of `write_audit`
+    /// hardcoded `field = "amount"` and audited every save as an amount
+    /// change even when only the date moved.
+    #[test]
+    fn edit_entry_audits_a_date_only_change_and_never_writes_a_no_op_amount_row() {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        let entry = record_entry(
+            &db.conn,
+            RecordEntryInput {
+                member_id: root,
+                amount: 100_000,
+                entry_date: "2026-08-15".into(),
+            },
+        )
+        .unwrap();
+
+        edit_entry(
+            &db.conn,
+            &db.db_path(),
+            &db.app_data_dir(),
+            EditEntryInput {
+                id: entry.id,
+                amount: 100_000, // unchanged
+                entry_date: "2026-08-20".into(),
+            },
+        )
+        .unwrap();
+
+        let rows: Vec<(String, String)> = {
+            let mut stmt = db
+                .conn
+                .prepare("SELECT field, cause FROM audit_log WHERE entity_id = ?1 ORDER BY id")
+                .unwrap();
+            stmt.query_map([entry.id], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
+        };
+        // Row 0 is `record_entry`'s own "amount"/"entry" row; the edit
+        // above must add exactly one more, for "entry_date", never a
+        // second "amount" row (nothing about the amount changed).
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        assert_eq!(rows[1], ("entry_date".to_string(), "edit".to_string()));
     }
 
     #[test]
