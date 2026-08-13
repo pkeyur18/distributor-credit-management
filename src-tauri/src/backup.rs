@@ -100,8 +100,19 @@ pub mod manifest {
         Ok(min.unwrap_or(0) - 1)
     }
 
+    /// Upsert by id, not a blind push. `write_backup_copy`/
+    /// `write_console_backup_copy` call this from inside a caller-owned SQL
+    /// transaction that can still roll back afterward (e.g. a period-close
+    /// that fails a later step) — `backups.id` has no `AUTOINCREMENT`, so a
+    /// rolled-back insert's rowid can be reused by a later, successful one.
+    /// Without the upsert, that reuse would leave two entries sharing one
+    /// id (`find` and `list` would then disagree about which is current).
+    /// The physical file from the failed attempt is left in place —
+    /// harmless, since it's a real, checksummed, restorable backup even
+    /// though its close never completed, not a corrupted one.
     pub fn append(manifest_path: &Path, entry: BackupManifestEntry) -> Result<(), AppError> {
         let mut entries = read_all(manifest_path)?;
+        entries.retain(|e| e.id != entry.id);
         entries.push(entry);
         write_all(manifest_path, &entries)
     }
@@ -1125,5 +1136,47 @@ mod tests {
                  folder setting at the time it was written"
             );
         }
+    }
+
+    /// Final-check catch: `backups.id` has no `AUTOINCREMENT`, so a rolled-
+    /// back SQL transaction's rowid can be reused by a later, successful
+    /// insert — `write_backup_copy`/`write_console_backup_copy` call
+    /// `manifest::append` from inside exactly that kind of caller-owned
+    /// transaction (`confirm_backup_and_close`'s single close transaction).
+    /// A blind push would leave two entries sharing one id; the upsert
+    /// must replace the stale one instead.
+    #[test]
+    fn manifest_append_upserts_by_id_rather_than_duplicating() {
+        let dir = tempfile_dir::TempDir::new();
+        let manifest_path = dir.path().join("backups-manifest.json");
+        let stale = manifest::BackupManifestEntry {
+            id: 7,
+            period_id: None,
+            kind: "manual".to_string(),
+            schedule_kind: None,
+            version: 1,
+            internal_retained_path: "stale-path.db".to_string(),
+            checksum: "stale-checksum".to_string(),
+            is_original: false,
+            created_at: "2026-01-01".to_string(),
+        };
+        manifest::append(&manifest_path, stale).unwrap();
+
+        let fresh = manifest::BackupManifestEntry {
+            id: 7,
+            period_id: None,
+            kind: "manual".to_string(),
+            schedule_kind: None,
+            version: 2,
+            internal_retained_path: "fresh-path.db".to_string(),
+            checksum: "fresh-checksum".to_string(),
+            is_original: false,
+            created_at: "2026-02-01".to_string(),
+        };
+        manifest::append(&manifest_path, fresh).unwrap();
+
+        let entries = manifest::list(&manifest_path).unwrap();
+        assert_eq!(entries.len(), 1, "the stale entry must be replaced, not duplicated");
+        assert_eq!(entries[0].checksum, "fresh-checksum");
     }
 }
