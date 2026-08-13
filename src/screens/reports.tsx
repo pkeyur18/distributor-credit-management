@@ -3,13 +3,15 @@ import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { useToast } from "@/components/ui/toast";
 import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
-import { exportMonthly, exportYearlyAverage } from "@/lib/ipc/m6-reports";
+import { exportMonthly, exportYearlyAverage, exportLowContribution } from "@/lib/ipc/m6-reports";
+import { getSettings } from "@/lib/ipc/m7-settings";
 import { MANDATORY_EXPORT_COLUMNS, OPTIONAL_EXPORT_COLUMNS } from "@/lib/export-columns";
 import { toErrorPresentation } from "@/lib/ipc/errors";
-import { monthLabel } from "@/lib/utils";
+import { centsToDisplay, displayToCents, monthLabel } from "@/lib/utils";
 
 // US-M6.1 (§5.8). Rule-19/D-1's five mandatory columns are always included
 // (T-M6.1-2) — the picker below only ever offers Rule-33's optional list,
@@ -24,10 +26,13 @@ export function Reports() {
   const [columns, setColumns] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [exportingYearly, setExportingYearly] = useState(false);
+  const [thresholdInput, setThresholdInput] = useState("100.00");
+  const [exportingLow, setExportingLow] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
     getPeriodLockStatus().then(setLockStatus);
+    getSettings().then((s) => setThresholdInput(centsToDisplay(s.lowContributionThreshold)));
   }, []);
 
   function toggleColumn(key: string) {
@@ -76,6 +81,27 @@ export function Reports() {
       toast.add({ title: toErrorPresentation(raw).message, type: "danger" });
     } finally {
       setExportingYearly(false);
+    }
+  }
+
+  async function handleExportLowContribution() {
+    const outputPath = await saveFileDialog({
+      defaultPath: "member-rewards-low-contribution.xlsx",
+      filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }],
+    });
+    if (!outputPath) return;
+    const threshold = displayToCents(thresholdInput);
+    setExportingLow(true);
+    try {
+      await exportLowContribution({
+        threshold: threshold ?? undefined,
+        outputPath,
+      });
+      toast.add({ title: "Low-contribution report exported", type: "success" });
+    } catch (raw) {
+      toast.add({ title: toErrorPresentation(raw).message, type: "danger" });
+    } finally {
+      setExportingLow(false);
     }
   }
 
@@ -148,6 +174,41 @@ export function Reports() {
             Export .xlsx
           </Button>
         </CardHeader>
+      </Card>
+
+      {/* No on-screen preview table, unlike the prototype's client-side
+          mockup — the 40-command API surface has no read-only command for
+          this data separate from the export itself (ADR-007 keeps the
+          WebView from computing it locally), so the reduction is the
+          threshold field and export action only. */}
+      <Card className="mt-4">
+        <CardHeader>
+          <div>
+            <CardTitle>Low-contribution report</CardTitle>
+            <CardDescription>
+              Yearly average of own Business Volume, below a threshold
+            </CardDescription>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={exportingLow}
+            onClick={handleExportLowContribution}
+          >
+            Export .xlsx
+          </Button>
+        </CardHeader>
+        <label htmlFor="low-threshold" className="text-label mb-1 block">
+          Threshold
+        </label>
+        <Input
+          id="low-threshold"
+          className="num max-w-50"
+          type="text"
+          inputMode="decimal"
+          value={thresholdInput}
+          onChange={(e) => setThresholdInput(e.target.value)}
+        />
       </Card>
     </>
   );

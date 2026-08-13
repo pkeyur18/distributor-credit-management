@@ -403,6 +403,81 @@ pub fn export_yearly_average(
     })
 }
 
+fn low_contribution_threshold_setting(conn: &Connection) -> Result<i64, AppError> {
+    let value: String = conn.query_row(
+        "SELECT value FROM settings WHERE key = 'low_contribution_threshold'",
+        [],
+        |r| r.get(0),
+    )?;
+    value.parse().map_err(|_| AppError::Validation {
+        field: "lowContributionThreshold".into(),
+        message: "Stored low-contribution threshold is not a valid number.".into(),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportLowContributionInput {
+    /// Cents (ADR-004). `None` reads `settings.low_contribution_threshold`
+    /// (default 100.00) — T-M6.3-2's "overridable per run" without
+    /// changing the stored setting.
+    pub threshold: Option<i64>,
+    pub output_path: String,
+}
+
+/// API-18/Rule-24: filters on the yearly average of **own** Business
+/// Volume, never Total Business Volume — the client's answer differed
+/// from the architect's original recommendation and was deliberately
+/// re-confirmed (Rule-24's own source note). Reuses
+/// `compute_yearly_averages`'s per-member denominator (T-M6.2-1), so a
+/// late joiner is filtered on their own average, not one diluted by
+/// months before they existed.
+pub fn export_low_contribution(
+    conn: &Connection,
+    input: ExportLowContributionInput,
+) -> Result<ExportResult, AppError> {
+    let threshold = match input.threshold {
+        Some(t) => t,
+        None => low_contribution_threshold_setting(conn)?,
+    };
+    let rows: Vec<YearlyAverageRow> = compute_yearly_averages(conn)?
+        .into_iter()
+        .filter(|r| r.avg_business_volume < threshold as f64)
+        .collect();
+
+    let mut workbook = Workbook::new();
+    let worksheet = workbook.add_worksheet();
+    let headers = [
+        "Name",
+        "Member Number",
+        "Phone",
+        "Average Business Volume",
+        "Months",
+    ];
+    for (col, header) in headers.iter().enumerate() {
+        worksheet.write(0, col as u16, *header).map_err(xlsx_err)?;
+    }
+    // T-M6.3-3: an empty result is still a valid, successfully-written
+    // extract — zero data rows, not an error.
+    for (i, row) in rows.iter().enumerate() {
+        let r = (i + 1) as u32;
+        worksheet.write(r, 0, row.name.as_str()).map_err(xlsx_err)?;
+        worksheet.write(r, 1, row.id).map_err(xlsx_err)?;
+        worksheet
+            .write(r, 2, row.phone.as_str())
+            .map_err(xlsx_err)?;
+        worksheet
+            .write(r, 3, row.avg_business_volume / 100.0)
+            .map_err(xlsx_err)?;
+        worksheet.write(r, 4, row.period_count).map_err(xlsx_err)?;
+    }
+    workbook.save(&input.output_path).map_err(xlsx_err)?;
+
+    Ok(ExportResult {
+        file_path: input.output_path,
+    })
+}
+
 /// D-1/Rule-19/Rule-33 (06-decision-log-and-open-items.md C9): five
 /// columns, always present on every per-member extract, untickable in the
 /// column picker, in this fixed order.
@@ -822,6 +897,91 @@ mod tests {
         let output_path = temp_output_path("yearly-average");
 
         let result = export_yearly_average(&conn, &output_path.to_string_lossy()).unwrap();
+
+        assert_eq!(result.file_path, output_path.to_string_lossy());
+        assert!(output_path.exists());
+        std::fs::remove_dir_all(output_path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn export_low_contribution_filters_on_own_bv_not_total_bv() {
+        // Rule-24: this member's own Business Volume average (50.00) is
+        // below a 100.00 threshold, but their Total Business Volume
+        // average (5,000.00, inflated by a downline) is nowhere near it.
+        // Filtering on TBV instead would wrongly exclude them.
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-05", "closed");
+        let low_own_bv = insert_member(&conn, "Low Own BV, High TBV", true, None);
+        insert_snapshot(&conn, low_own_bv, period, 1, 5_000, 500_000, true);
+        let high_own_bv = insert_member(&conn, "High Own BV", true, None);
+        insert_snapshot(&conn, high_own_bv, period, 1, 200_000, 200_000, true);
+        let output_path = temp_output_path("low-contribution-own-bv");
+
+        export_low_contribution(
+            &conn,
+            ExportLowContributionInput {
+                threshold: Some(10_000), // 100.00
+                output_path: output_path.to_string_lossy().into_owned(),
+            },
+        )
+        .unwrap();
+
+        // The row-loading path is what actually decides inclusion — assert
+        // it directly, since the written file's cells can't be read back
+        // by this crate.
+        let rows: Vec<YearlyAverageRow> = compute_yearly_averages(&conn)
+            .unwrap()
+            .into_iter()
+            .filter(|r| r.avg_business_volume < 10_000.0)
+            .collect();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, low_own_bv);
+        std::fs::remove_dir_all(output_path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn export_low_contribution_defaults_to_the_settings_threshold() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-05", "closed");
+        // Seeded low_contribution_threshold is 10_000 (100.00) — this
+        // member's 50.00 average must be included with no threshold
+        // override at all.
+        let member = insert_member(&conn, "Below Default Threshold", true, None);
+        insert_snapshot(&conn, member, period, 1, 5_000, 5_000, true);
+        let output_path = temp_output_path("low-contribution-default-threshold");
+
+        let threshold = low_contribution_threshold_setting(&conn).unwrap();
+        assert_eq!(threshold, 10_000);
+
+        export_low_contribution(
+            &conn,
+            ExportLowContributionInput {
+                threshold: None,
+                output_path: output_path.to_string_lossy().into_owned(),
+            },
+        )
+        .unwrap();
+        assert!(output_path.exists());
+        std::fs::remove_dir_all(output_path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn export_low_contribution_writes_successfully_with_an_empty_result() {
+        // T-M6.3-3: nobody below threshold is a valid outcome, not an error.
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-05", "closed");
+        let member = insert_member(&conn, "Well Above Threshold", true, None);
+        insert_snapshot(&conn, member, period, 1, 1_000_000, 1_000_000, true);
+        let output_path = temp_output_path("low-contribution-empty");
+
+        let result = export_low_contribution(
+            &conn,
+            ExportLowContributionInput {
+                threshold: Some(100),
+                output_path: output_path.to_string_lossy().into_owned(),
+            },
+        )
+        .unwrap();
 
         assert_eq!(result.file_path, output_path.to_string_lossy());
         assert!(output_path.exists());

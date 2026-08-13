@@ -12,7 +12,7 @@ use bvconsole_lib::db_state::DbState;
 use bvconsole_lib::error::AppError;
 use bvconsole_lib::m1_members::{AddMemberInput, AddMemberOutcome, CreateRootMemberInput};
 use bvconsole_lib::m2_entries::{EditEntryInput, RecordEntryInput};
-use bvconsole_lib::m6_reports::ExportMonthlyInput;
+use bvconsole_lib::m6_reports::{ExportLowContributionInput, ExportMonthlyInput};
 use bvconsole_lib::m8_auth::{CredentialInput, SetupFirstRunInput};
 use bvconsole_lib::paths::AppPaths;
 use bvconsole_lib::session::SessionState;
@@ -222,9 +222,10 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
         // US-M5.2/M5.3/M2.3/M2.4, S12.
         "get_period_lock_status",
         "get_outstanding_alert",
-        // US-M6.5/M6.1/M6.2, S13.
+        // US-M6.5/M6.1/M6.2/M6.3, S13.
         "export_monthly",
         "export_yearly_average",
+        "export_low_contribution",
     ];
     for &name in ALL_COMMAND_NAMES
         .iter()
@@ -1227,6 +1228,41 @@ fn export_yearly_average_end_to_end_through_the_command_layer() {
         app.state::<SessionState>(),
         app.state::<DbState>(),
         output_path.to_string_lossy().into_owned(),
+    )
+    .unwrap();
+
+    assert_eq!(result.file_path, output_path.to_string_lossy());
+    assert!(output_path.exists());
+}
+
+#[test]
+fn export_low_contribution_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::export_low_contribution(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        ExportLowContributionInput {
+            threshold: None,
+            output_path: "unused.xlsx".into(),
+        },
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn export_low_contribution_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+
+    let output_dir = TempAppDir::new("export-low-contribution-output");
+    let output_path = output_dir.0.join("low-contribution.xlsx");
+    let result = commands::export_low_contribution(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        ExportLowContributionInput {
+            threshold: Some(10_000),
+            output_path: output_path.to_string_lossy().into_owned(),
+        },
     )
     .unwrap();
 

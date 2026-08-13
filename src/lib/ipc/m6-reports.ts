@@ -27,13 +27,13 @@ export function exportYearlyAverage(outputPath: string): Promise<ExportResult> {
 }
 
 export interface ExportLowContributionInput {
+  /** Cents (ADR-004). Omit to read settings.lowContributionThreshold. */
   threshold?: number;
+  outputPath: string;
 }
 
 // API-18 — filters on own Business Volume, not Total Business Volume (Rule-24).
-export function exportLowContribution(
-  input: ExportLowContributionInput = {},
-): Promise<ExportResult> {
+export function exportLowContribution(input: ExportLowContributionInput): Promise<ExportResult> {
   return invokeCommand("export_low_contribution", { ...input });
 }
 
