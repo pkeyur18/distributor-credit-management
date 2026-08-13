@@ -51,9 +51,10 @@ describe("computeFullTreeLayout", () => {
     const length = 5000;
     const layout = computeFullTreeLayout(chain(length));
     expect(layout.positions.size).toBe(length + 1);
-    // Every node sits directly above the next: one connector per edge, all
-    // vertical (parent's x2 midpoint equals child's).
-    expect(layout.lines).toHaveLength(length);
+    // Every node sits directly above the next: three connector segments per
+    // edge (down, across, down), all vertical since parent and child share
+    // the same x (the elbow's horizontal segment is zero-length).
+    expect(layout.lines).toHaveLength(length * 3);
     for (const line of layout.lines) expect(line.x1).toBe(line.x2);
     expect(layout.positions.get(length)?.y).toBe(length * (FT_NODE_H + FT_GAP_Y));
   });
@@ -71,7 +72,34 @@ describe("computeFullTreeLayout", () => {
   it("connects every non-root node to its introducer", () => {
     const nodes = flatTree(60);
     const layout = computeFullTreeLayout(nodes);
-    expect(layout.lines).toHaveLength(60);
+    // Three elbow segments (down, across, down) per edge.
+    expect(layout.lines).toHaveLength(60 * 3);
+  });
+
+  it("routes an edge to an off-centre child as an elbow through the gap's midpoint", () => {
+    const layout = computeFullTreeLayout(flatTree(3));
+    const parentPos = layout.positions.get(0)!;
+    const childPos = layout.positions.get(1)!; // leftmost leaf, off-centre from the parent
+    const [down, across, drop] = layout.lines.slice(0, 3);
+    const midY = parentPos.y + FT_NODE_H + FT_GAP_Y / 2;
+    expect(down).toEqual({
+      x1: parentPos.x + FT_NODE_W / 2,
+      y1: parentPos.y + FT_NODE_H,
+      x2: parentPos.x + FT_NODE_W / 2,
+      y2: midY,
+    });
+    expect(across).toEqual({
+      x1: parentPos.x + FT_NODE_W / 2,
+      y1: midY,
+      x2: childPos.x + FT_NODE_W / 2,
+      y2: midY,
+    });
+    expect(drop).toEqual({
+      x1: childPos.x + FT_NODE_W / 2,
+      y1: midY,
+      x2: childPos.x + FT_NODE_W / 2,
+      y2: childPos.y,
+    });
   });
 
   it("handles 25,000 members (NFR-2 ceiling) without error, wide or deep", () => {
