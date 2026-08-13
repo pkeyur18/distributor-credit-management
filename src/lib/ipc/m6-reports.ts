@@ -1,5 +1,4 @@
 import { invokeCommand } from "./client";
-import type { BackupRecord } from "./entities";
 
 export interface ExportResult {
   filePath: string;
@@ -37,12 +36,22 @@ export function exportLowContribution(input: ExportLowContributionInput): Promis
   return invokeCommand("export_low_contribution", { ...input });
 }
 
+// Closed periods that have a snapshot (T-M5.4-2 — an empty-month close is
+// never listed here) — distinct from `preflight.ts`'s `BackupRecord`,
+// which lists every whole-console backup for Settings' restore card.
+export interface ClosedMonthBackup {
+  periodId: number;
+  periodMonth: string;
+  latestVersion: number;
+  isCorrected: boolean;
+}
+
 // API-19
-export function listBackups(): Promise<BackupRecord[]> {
+export function listBackups(): Promise<ClosedMonthBackup[]> {
   return invokeCommand("list_backups");
 }
 
-// API-20 — always the latest version of that period's backup.
-export function redownloadBackup(periodId: number): Promise<ExportResult> {
-  return invokeCommand("redownload_backup", { periodId });
+// API-20 — always the latest version of that period's backup (T-M6.4-2).
+export function redownloadBackup(periodId: number, outputPath: string): Promise<ExportResult> {
+  return invokeCommand("redownload_backup", { periodId, outputPath });
 }

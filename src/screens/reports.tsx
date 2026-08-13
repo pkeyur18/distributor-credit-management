@@ -7,7 +7,14 @@ import { Input } from "@/components/ui/input";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { useToast } from "@/components/ui/toast";
 import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
-import { exportMonthly, exportYearlyAverage, exportLowContribution } from "@/lib/ipc/m6-reports";
+import {
+  exportMonthly,
+  exportYearlyAverage,
+  exportLowContribution,
+  listBackups,
+  redownloadBackup,
+  type ClosedMonthBackup,
+} from "@/lib/ipc/m6-reports";
 import { getSettings } from "@/lib/ipc/m7-settings";
 import { MANDATORY_EXPORT_COLUMNS, OPTIONAL_EXPORT_COLUMNS } from "@/lib/export-columns";
 import { toErrorPresentation } from "@/lib/ipc/errors";
@@ -28,11 +35,15 @@ export function Reports() {
   const [exportingYearly, setExportingYearly] = useState(false);
   const [thresholdInput, setThresholdInput] = useState("100.00");
   const [exportingLow, setExportingLow] = useState(false);
+  const [backups, setBackups] = useState<ClosedMonthBackup[] | null>(null);
+  const [selectedBackupPeriodId, setSelectedBackupPeriodId] = useState<number | null>(null);
+  const [exportingBackup, setExportingBackup] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
     getPeriodLockStatus().then(setLockStatus);
     getSettings().then((s) => setThresholdInput(centsToDisplay(s.lowContributionThreshold)));
+    listBackups().then(setBackups);
   }, []);
 
   function toggleColumn(key: string) {
@@ -102,6 +113,30 @@ export function Reports() {
       toast.add({ title: toErrorPresentation(raw).message, type: "danger" });
     } finally {
       setExportingLow(false);
+    }
+  }
+
+  const selectedBackup =
+    backups?.find((b) => b.periodId === selectedBackupPeriodId) ?? backups?.[0] ?? null;
+
+  async function handleRedownloadBackup() {
+    if (!selectedBackup) return;
+    const outputPath = await saveFileDialog({
+      defaultPath: `member-rewards-closed-${selectedBackup.periodMonth}-v${selectedBackup.latestVersion}.xlsx`,
+      filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }],
+    });
+    if (!outputPath) return;
+    setExportingBackup(true);
+    try {
+      await redownloadBackup(selectedBackup.periodId, outputPath);
+      toast.add({
+        title: `${monthLabel(selectedBackup.periodMonth)} snapshot exported (version ${selectedBackup.latestVersion})`,
+        type: "success",
+      });
+    } catch (raw) {
+      toast.add({ title: toErrorPresentation(raw).message, type: "danger" });
+    } finally {
+      setExportingBackup(false);
     }
   }
 
@@ -210,6 +245,45 @@ export function Reports() {
           onChange={(e) => setThresholdInput(e.target.value)}
         />
       </Card>
+
+      {backups && backups.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader>
+            <div>
+              <CardTitle>Closed month snapshot</CardTitle>
+              <CardDescription>Every field as recorded when that month closed</CardDescription>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!selectedBackup || exportingBackup}
+              onClick={handleRedownloadBackup}
+            >
+              Export .xlsx
+            </Button>
+          </CardHeader>
+          <label htmlFor="closed-snapshot-month" className="text-label mb-1 block">
+            Month
+          </label>
+          <select
+            id="closed-snapshot-month"
+            className="h-8.5 max-w-70 rounded-sm border border-border bg-surface px-2.5 text-body text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
+            value={selectedBackup?.periodId ?? ""}
+            onChange={(e) => setSelectedBackupPeriodId(Number(e.target.value))}
+          >
+            {backups.map((b) => (
+              <option key={b.periodId} value={b.periodId}>
+                {monthLabel(b.periodMonth)}
+                {b.isCorrected ? ` — corrected, v${b.latestVersion}` : ""}
+              </option>
+            ))}
+          </select>
+          <p className="text-caption text-muted-text mt-1.5">
+            Always exports the latest version. If this month has since been corrected, the export
+            reflects the correction — the original stays in the audit trail, not the file.
+          </p>
+        </Card>
+      )}
     </>
   );
 }

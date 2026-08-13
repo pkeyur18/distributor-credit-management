@@ -342,8 +342,35 @@ pub fn export_low_contribution(
     m6_reports::export_low_contribution(conn, input)
 }
 
-auth_stub!(list_backups);
-auth_stub!(redownload_backup);
+/// API-19.
+#[tauri::command]
+pub fn list_backups(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<Vec<m6_reports::ClosedMonthBackup>, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m6_reports::list_backups(conn)
+}
+
+/// API-20.
+#[tauri::command]
+pub fn redownload_backup(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    period_id: i64,
+    output_path: String,
+) -> Result<m6_reports::ExportResult, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m6_reports::redownload_backup(conn, period_id, &output_path)
+}
 
 // M7 — US-M7.1/M7.2/M7.4, S10 (the mid-period recalculation warning,
 // US-M7.3/API-33's `preview_settings_impact`, stays a stub — S11).
@@ -721,8 +748,6 @@ pub fn call_stub_by_name(
     session: tauri::State<'_, SessionState>,
 ) -> Result<serde_json::Value, AppError> {
     match name {
-        "list_backups" => list_backups(session),
-        "redownload_backup" => redownload_backup(session),
         "get_audit_log" => get_audit_log(session),
         other => panic!("unknown command in ALL_COMMAND_NAMES: {other}"),
     }
@@ -774,17 +799,19 @@ mod tests {
             // US-M5.2/M5.3/M2.3/M2.4, S12.
             "get_period_lock_status",
             "get_outstanding_alert",
-            // US-M6.5/M6.1/M6.2/M6.3, S13.
+            // US-M6.5/M6.1/M6.2/M6.3/M6.4, S13.
             "export_monthly",
             "export_yearly_average",
             "export_low_contribution",
+            "list_backups",
+            "redownload_backup",
         ];
         let stub_names: Vec<&str> = ALL_COMMAND_NAMES
             .iter()
             .copied()
             .filter(|n| !HAS_REAL_LOGIC.contains(n))
             .collect();
-        assert_eq!(stub_names.len(), 3);
+        assert_eq!(stub_names.len(), 1);
         // Exercised properly (with real State fixtures) in tests/contract.rs;
         // this just proves the dispatcher doesn't panic on any known name.
     }

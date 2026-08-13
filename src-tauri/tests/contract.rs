@@ -222,10 +222,12 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
         // US-M5.2/M5.3/M2.3/M2.4, S12.
         "get_period_lock_status",
         "get_outstanding_alert",
-        // US-M6.5/M6.1/M6.2/M6.3, S13.
+        // US-M6.5/M6.1/M6.2/M6.3/M6.4, S13.
         "export_monthly",
         "export_yearly_average",
         "export_low_contribution",
+        "list_backups",
+        "redownload_backup",
     ];
     for &name in ALL_COMMAND_NAMES
         .iter()
@@ -1266,6 +1268,75 @@ fn export_low_contribution_end_to_end_through_the_command_layer() {
     )
     .unwrap();
 
+    assert_eq!(result.file_path, output_path.to_string_lossy());
+    assert!(output_path.exists());
+}
+
+#[test]
+fn list_backups_and_redownload_backup_require_a_session() {
+    let app = app_with_seeded_db();
+    assert!(matches!(
+        commands::list_backups(app.state::<SessionState>(), app.state::<DbState>()),
+        Err(AppError::AuthRequired)
+    ));
+    assert!(matches!(
+        commands::redownload_backup(
+            app.state::<SessionState>(),
+            app.state::<DbState>(),
+            1,
+            "unused.xlsx".into(),
+        ),
+        Err(AppError::AuthRequired)
+    ));
+}
+
+#[test]
+fn list_backups_and_redownload_backup_end_to_end_through_the_command_layer() {
+    let (app, _dir) = app_with_seeded_db_on_disk("list-and-redownload-backups");
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876599907"),
+    )
+    .unwrap();
+    commands::record_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        RecordEntryInput {
+            member_id: root.id,
+            amount: 100_000,
+            entry_date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        },
+    )
+    .unwrap();
+    let period_id = mark_current_month_awaiting_close(&app);
+    commands::confirm_backup_and_close(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        app.state::<AppPaths>(),
+        bvconsole_lib::m5_close::ConfirmBackupAndCloseInput {
+            period_id,
+            external_medium_path: None,
+        },
+    )
+    .unwrap();
+
+    let backups =
+        commands::list_backups(app.state::<SessionState>(), app.state::<DbState>()).unwrap();
+    assert_eq!(backups.len(), 1);
+    assert_eq!(backups[0].period_id, period_id);
+    assert!(!backups[0].is_corrected);
+
+    let output_dir = TempAppDir::new("redownload-backup-output");
+    let output_path = output_dir.0.join("closed-snapshot.xlsx");
+    let result = commands::redownload_backup(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        period_id,
+        output_path.to_string_lossy().into_owned(),
+    )
+    .unwrap();
     assert_eq!(result.file_path, output_path.to_string_lossy());
     assert!(output_path.exists());
 }

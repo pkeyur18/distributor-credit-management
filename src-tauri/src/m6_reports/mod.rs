@@ -478,6 +478,73 @@ pub fn export_low_contribution(
     })
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClosedMonthBackup {
+    pub period_id: i64,
+    pub period_month: String,
+    pub latest_version: i64,
+    pub is_corrected: bool,
+}
+
+/// API-19: closed periods that have a snapshot — the `INNER JOIN` against
+/// `monthly_snapshots` excludes an empty-month close (T-M5.4-1's zero-row
+/// path) automatically, matching T-M5.4-2's "not offered as a closed-month
+/// export option." This is a different listing from `backup::list_restore_points`
+/// (API-35, S14): that one lists every whole-console backup by row for the
+/// Settings restore card; this one lists closed *periods* that have
+/// exportable snapshot data, for the Reports screen's re-download card.
+pub fn list_backups(conn: &Connection) -> Result<Vec<ClosedMonthBackup>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT p.id, p.period_month, MAX(s.version)
+         FROM periods p
+         JOIN monthly_snapshots s ON s.period_id = p.id
+         WHERE p.status = 'closed'
+         GROUP BY p.id
+         ORDER BY p.period_month DESC",
+    )?;
+    let rows = stmt
+        .query_map([], |r| {
+            let latest_version: i64 = r.get(2)?;
+            Ok(ClosedMonthBackup {
+                period_id: r.get(0)?,
+                period_month: r.get(1)?,
+                latest_version,
+                is_corrected: latest_version > 1,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// API-20/HIGH-1: the command behind the prototype's "Closed month
+/// snapshot" card — no separate export command exists. Always the latest
+/// version (T-M6.4-2): a correction's original stays in the audit trail
+/// only, never re-enters an export. Fixed column set, matching the
+/// prototype's `exportClosedSnapshot()` exactly — no picker on this card.
+pub fn redownload_backup(
+    conn: &Connection,
+    period_id: i64,
+    output_path: &str,
+) -> Result<ExportResult, AppError> {
+    let rows = load_snapshot_export_rows(conn, period_id)?;
+    if rows.is_empty() {
+        return Err(AppError::NotFound {
+            message: "No backup found for that period.".into(),
+        });
+    }
+    let fixed_columns = [
+        OptionalColumn::SlabPct,
+        OptionalColumn::Rewards,
+        OptionalColumn::RoyaltyEarned,
+        OptionalColumn::ActiveStatus,
+    ];
+    write_export_xlsx(&rows, &fixed_columns, output_path)?;
+    Ok(ExportResult {
+        file_path: output_path.to_string(),
+    })
+}
+
 /// D-1/Rule-19/Rule-33 (06-decision-log-and-open-items.md C9): five
 /// columns, always present on every per-member extract, untickable in the
 /// column picker, in this fixed order.
@@ -986,5 +1053,78 @@ mod tests {
         assert_eq!(result.file_path, output_path.to_string_lossy());
         assert!(output_path.exists());
         std::fs::remove_dir_all(output_path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn list_backups_reports_the_latest_version_and_marks_a_correction() {
+        let conn = seeded();
+        let corrected = insert_period(&conn, "2026-04", "closed");
+        let plain = insert_period(&conn, "2026-05", "closed");
+        let member = insert_member(&conn, "Someone", true, None);
+        insert_snapshot(&conn, member, corrected, 1, 100_000, 100_000, true);
+        insert_snapshot(&conn, member, corrected, 2, 150_000, 150_000, true);
+        insert_snapshot(&conn, member, plain, 1, 50_000, 50_000, true);
+
+        let backups = list_backups(&conn).unwrap();
+        assert_eq!(backups.len(), 2);
+        assert_eq!(backups[0].period_month, "2026-05", "newest first");
+
+        let corrected_row = backups.iter().find(|b| b.period_id == corrected).unwrap();
+        assert_eq!(corrected_row.latest_version, 2);
+        assert!(corrected_row.is_corrected);
+
+        let plain_row = backups.iter().find(|b| b.period_id == plain).unwrap();
+        assert_eq!(plain_row.latest_version, 1);
+        assert!(!plain_row.is_corrected);
+    }
+
+    #[test]
+    fn list_backups_excludes_an_empty_month_close() {
+        // T-M5.4-2: an empty-month close has zero monthly_snapshots rows —
+        // it must not appear in the closed-month re-download list at all.
+        let conn = seeded();
+        insert_period(&conn, "2026-05", "closed");
+        let backups = list_backups(&conn).unwrap();
+        assert!(backups.is_empty());
+    }
+
+    #[test]
+    fn list_backups_excludes_a_period_that_is_not_yet_closed() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-08", "awaiting_close");
+        let member = insert_member(&conn, "Someone", true, None);
+        insert_snapshot(&conn, member, period, 1, 10_000, 10_000, true);
+        let backups = list_backups(&conn).unwrap();
+        assert!(backups.is_empty(), "a snapshot only exists on closed periods in real use, but this still shouldn't list a non-closed one");
+    }
+
+    #[test]
+    fn redownload_backup_always_reads_the_latest_version() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-05", "closed");
+        let member = insert_member(&conn, "Corrected", true, None);
+        insert_snapshot(&conn, member, period, 1, 100_000, 100_000, true);
+        insert_snapshot(&conn, member, period, 2, 999_000, 999_000, true);
+        let output_path = temp_output_path("redownload-corrected");
+
+        let result = redownload_backup(&conn, period, &output_path.to_string_lossy()).unwrap();
+
+        assert_eq!(result.file_path, output_path.to_string_lossy());
+        assert!(output_path.exists());
+        let rows = load_snapshot_export_rows(&conn, period).unwrap();
+        assert_eq!(
+            rows[0].business_volume, 999_000,
+            "always the latest version"
+        );
+        std::fs::remove_dir_all(output_path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn redownload_backup_refuses_a_period_with_no_snapshot() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-05", "closed");
+        let output_path = temp_output_path("redownload-empty");
+        let err = redownload_backup(&conn, period, &output_path.to_string_lossy()).unwrap_err();
+        assert!(matches!(err, AppError::NotFound { .. }));
     }
 }
