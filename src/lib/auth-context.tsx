@@ -12,7 +12,18 @@ import { checkDataReadable } from "@/lib/ipc/preflight";
 // reachable server-side from a locked state (`session.rs`'s own
 // `require_locked`), so the client must remember it too rather than
 // treating "locked" and "never logged in" as the same thing.
-type AuthState = "loading" | "needs-setup" | "needs-login" | "authenticated" | "locked";
+//
+// `needs-recovery` (US-M8.6, S14): `check_data_readable` now genuinely
+// rejects when this machine has been set up before but its data looks
+// broken — routing that into `needs-login` (the old `.catch` behaviour)
+// would show the ordinary sign-in screen over data that can't be opened.
+type AuthState =
+  | "loading"
+  | "needs-setup"
+  | "needs-login"
+  | "needs-recovery"
+  | "authenticated"
+  | "locked";
 
 interface AuthContextValue {
   state: AuthState;
@@ -31,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     checkDataReadable()
       .then((exists) => setState(exists ? "needs-login" : "needs-setup"))
-      .catch(() => setState("needs-login"));
+      .catch(() => setState("needs-recovery"));
   }, []);
 
   return (

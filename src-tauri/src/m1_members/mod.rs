@@ -280,12 +280,15 @@ fn advisory_warnings(
 // §6, M1 table) — one row per onboarding, not per field, since there's no
 // "before" value for a brand-new member.
 fn write_onboarding_audit(conn: &Connection, member_id: i64) -> Result<(), AppError> {
-    conn.execute(
-        "INSERT INTO audit_log (entity_type, entity_id, field, old_value, new_value, changed_at, cause)
-         VALUES ('member', ?1, 'member', NULL, 'Onboarded', ?2, 'entry')",
-        rusqlite::params![member_id, today_iso()],
-    )?;
-    Ok(())
+    crate::m9_audit::write_audit_entry(
+        conn,
+        "member",
+        member_id,
+        "member",
+        None,
+        Some("Onboarded"),
+        "entry",
+    )
 }
 
 /// API-01. Callable exactly once — guarded by "no member with a NULL
@@ -413,12 +416,15 @@ fn write_field_audit(
     old: &str,
     new: &str,
 ) -> Result<(), AppError> {
-    conn.execute(
-        "INSERT INTO audit_log (entity_type, entity_id, field, old_value, new_value, changed_at, cause)
-         VALUES ('member', ?1, ?2, ?3, ?4, ?5, 'edit')",
-        rusqlite::params![member_id, field, old, new, today_iso()],
-    )?;
-    Ok(())
+    crate::m9_audit::write_audit_entry(
+        conn,
+        "member",
+        member_id,
+        field,
+        Some(old),
+        Some(new),
+        "edit",
+    )
 }
 
 // V1.8: "any attempt to change an introducer → refuse outright." `deny_

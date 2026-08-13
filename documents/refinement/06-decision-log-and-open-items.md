@@ -159,6 +159,15 @@ A conflict that precedence does not settle belongs in §3, not in code.
 | **Who answers** | **The architect**, as a build decision, unless the client wants per-level widths for a deeper structure. |
 | **Until answered** | Suppress the width warning for any level with no configured width; the depth warning (Rule-32) still fires independently. Do not silently reuse level 4's width for level 5+ — that would produce a warning the client never configured. |
 
+### O6 — `login`'s lockout-transition audit and `use_recovery_code`'s audit are architecturally unrealizable as documented **[NEW — found in S14's US-M9.1 completeness pass]**
+
+| | |
+|---|---|
+| **The question** | `04-technical-architecture.md` §6 documents `login`/`unlock_session` as audited "only on failed-lockout transitions" and `use_recovery_code` as audited with cause "credential recovery". Neither is built, and neither can be with the architecture as it stands: `audit_log` lives inside the SQLCipher database, and both these paths run — by design, per Rule-29's closed set of seven unauthenticated commands — with no key and no open connection. `setup_first_run` had the identical problem and S14 could close it (a connection opens moments later, once the credential is created); `login`'s lockout bookkeeping and `use_recovery_code`'s credential reset both live entirely in the unencrypted `auth.json` sidecar and never reach a point where a database connection exists. |
+| **Why it matters** | NFR-5's "an audit log that can explain any figure" doesn't strictly need these — neither touches a member's figures — but a security-relevant event (repeated failed logins escalating a lockout; a recovery code consuming itself and replacing the credential) going unrecorded anywhere is a real gap for an admin trying to reconstruct what happened after the fact. Rule-43/S14 solved the structurally similar "restore" case with an unencrypted manifest, but that mechanism was justified because backup metadata was already deemed safe to reveal pre-auth (§8.6). Recording lockout/recovery *events* in a similar unencrypted file is a different risk profile — it starts to reveal security-relevant activity to anyone with filesystem access, before any credential has been proven. |
+| **Who answers** | **The architect.** Either accept that these two paths are simply never audited (correct the API table to say so plainly, matching how `lock_session`/most reads already say "Not audited") or decide what a pre-auth-safe security event log would need to look like and whether that's worth building. |
+| **Until answered** | Left exactly as S10 left it — neither path writes anything. The API table (§6) now states this explicitly as an open gap rather than a built behaviour, so a future reader doesn't assume it exists. |
+
 ---
 
 ## 4. Source-document contradictions — INC-1 to INC-5, all closed 3 August 2026

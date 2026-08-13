@@ -63,6 +63,15 @@ pub enum AppError {
     /// filesystem one.
     #[error("export error: {0}")]
     Export(String),
+    /// US-M8.6 (S14): raised by `login` specifically when Argon2id
+    /// verification *succeeds* but the subsequent SQLCipher open still
+    /// fails. Argon2 verification never touches `db_path` — only
+    /// `auth_path` — so that ordering is an unambiguous signal that the
+    /// database file itself is unreadable, not that the credential was
+    /// wrong. The frontend routes this to the data-recovery screen instead
+    /// of the generic "incorrect PIN or password" message.
+    #[error("this console's data could not be opened")]
+    DataUnreadable,
 }
 
 // Tauri commands return errors to the WebView as JSON, never as an opaque
@@ -85,6 +94,7 @@ impl Serialize for AppError {
             AppError::PeriodNotAcceptingEntries { .. } => "period_not_accepting_entries",
             AppError::PeriodClosed { .. } => "period_closed",
             AppError::Export(_) => "export",
+            AppError::DataUnreadable => "data_unreadable",
         };
         let mut state = serializer.serialize_struct("AppError", 7)?;
         state.serialize_field("kind", kind)?;

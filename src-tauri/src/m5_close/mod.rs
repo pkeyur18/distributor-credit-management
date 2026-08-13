@@ -260,10 +260,14 @@ fn write_period_close_backup_and_snapshots(
         "UPDATE periods SET status = 'closed', closed_at = ?2 WHERE id = ?1",
         rusqlite::params![period_id, today],
     )?;
-    conn.execute(
-        "INSERT INTO audit_log (entity_type, entity_id, field, old_value, new_value, changed_at, cause)
-         VALUES ('period', ?1, 'status', 'awaiting_close', 'closed', ?2, 'period_close')",
-        rusqlite::params![period_id, today],
+    crate::m9_audit::write_audit_entry(
+        conn,
+        "period",
+        period_id,
+        "status",
+        Some("awaiting_close"),
+        Some("closed"),
+        "period_close",
     )?;
     Ok(external_medium_copy_failed)
 }
@@ -354,13 +358,17 @@ pub fn manual_backup_current_period(
     })?;
 
     let id = backup::write_console_backup_copy(conn, db_path, app_data_dir, "manual", None)?;
-    conn.execute(
-        "INSERT INTO audit_log (entity_type, entity_id, field, old_value, new_value, changed_at, cause)
-         VALUES ('backup', ?1, 'kind', NULL, 'manual', ?2, 'manual_backup')",
-        rusqlite::params![id, chrono::Local::now().date_naive().to_string()],
+    crate::m9_audit::write_audit_entry(
+        conn,
+        "backup",
+        id,
+        "kind",
+        None,
+        Some("manual"),
+        "manual_backup",
     )?;
     let retention = backup::console_backup_retention_count(conn)?;
-    backup::prune_console_backups(conn, retention)?;
+    backup::prune_console_backups(conn, app_data_dir, retention)?;
     backup::get_backup_record(conn, id)
 }
 

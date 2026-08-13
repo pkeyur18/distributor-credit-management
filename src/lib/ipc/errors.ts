@@ -23,7 +23,8 @@ export type AppErrorKind =
   | "auth_required"
   | "not_implemented"
   | "invalid_credential"
-  | "account_locked";
+  | "account_locked"
+  | "data_unreadable";
 
 export interface AppErrorPresentation {
   kind: AppErrorKind | "unknown";
@@ -69,6 +70,9 @@ const PRESENTATIONS: Record<AppErrorKind, (raw: RawAppError) => string> = {
   },
   account_locked: (raw) =>
     `Too many attempts. Try again in ${raw.retryAfterSeconds ?? 0}s.`,
+  // US-M8.6: the login screen catches this kind specifically and routes to
+  // the data-recovery screen rather than displaying this message.
+  data_unreadable: () => "This console's data could not be opened.",
 };
 
 function isKnownKind(kind: string | undefined): kind is AppErrorKind {

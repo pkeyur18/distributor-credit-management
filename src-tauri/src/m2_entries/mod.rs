@@ -112,20 +112,19 @@ fn write_audit(
     new_amount: i64,
     cause: &str,
 ) -> Result<(), AppError> {
-    conn.execute(
-        // D-12: `entity_type` is `member | entry | setting | period | backup | auth` —
-        // 'entry' is the value for a business_volume_entries row.
-        "INSERT INTO audit_log (entity_type, entity_id, field, old_value, new_value, changed_at, cause)
-         VALUES ('entry', ?1, 'amount', ?2, ?3, ?4, ?5)",
-        rusqlite::params![
-            entry_id,
-            old_amount.map(|v| v.to_string()),
-            new_amount.to_string(),
-            today_iso(),
-            cause,
-        ],
-    )?;
-    Ok(())
+    // D-12: `entity_type` is `member | entry | setting | period | backup | auth` —
+    // 'entry' is the value for a business_volume_entries row.
+    let old = old_amount.map(|v| v.to_string());
+    let new = new_amount.to_string();
+    crate::m9_audit::write_audit_entry(
+        conn,
+        "entry",
+        entry_id,
+        "amount",
+        old.as_deref(),
+        Some(&new),
+        cause,
+    )
 }
 
 #[derive(Debug, Deserialize)]

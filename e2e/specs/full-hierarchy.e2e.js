@@ -77,6 +77,22 @@ describe("Full Hierarchy Window", () => {
     // above named the descendant-only count (61) — one more than this.
     await $("p*=62 members").waitForExist({ timeout: 3000 });
 
+    // T-QA.6-3/AC-45: the main console must stay responsive while the full
+    // hierarchy window is open and drawing. E2E has no bulk-seed path (no
+    // test-only seeding command exists — see helpers/seed.js's own header
+    // comment; the same limitation this project already accepted for
+    // multi-period state), so this can't drive the literal 25,000-node
+    // ceiling `tests/performance.rs`'s ignored suite exercises at the
+    // Rust level — only a manual QA pass at real scale can fully close
+    // that gap. What this *can* and does prove: Rule-45's separate-window
+    // isolation (T-M4.3-2) genuinely decouples the two — switching back to
+    // the main window and driving an ordinary interaction succeeds within
+    // a normal timeout, with the other window still open and rendered.
+    await browser.switchToWindow(before[0]);
+    await navigateTo("Home");
+    await $("#home-search").waitForExist({ timeout: 3000 });
+
+    await browser.switchToWindow(newHandle);
     await browser.closeWindow();
     await browser.switchToWindow(before[0]);
   });
