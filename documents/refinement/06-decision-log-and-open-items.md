@@ -5,7 +5,7 @@ The place to look when something in this specification appears wrong, contradict
 Three kinds of thing live here:
 
 - **§2 — Conflicts (C1–C9):** places where two source documents disagree, and which one wins. All resolved. The resolution is already applied throughout the rest of this set; §2 records *why*, so nobody re-litigates it.
-- **§3 — Open items (O2–O5):** genuinely undecided. **No default has been invented for any of them.**
+- **§3 — Open items (O2–O6):** genuinely undecided. **No default has been invented for any of them.**
 - **§6 — Do not re-raise:** decisions that look like oversights and are not.
 
 **Change requests are recorded in §5, by date.** The most recent are **CR-4 and CR-5 of 8 August 2026**, which add Rule-46 and amend Rule-12. CR-4 in particular **reverses the 3 August 2026 decision that a member earns nothing on their own Business Volume** — if you find a document still describing that as an absolute rule, or citing the pre-CR-4 golden totals (35/22/450/1,000/980), that document is stale and §5 is right. CR-1, CR-2 and CR-3 of 7 August 2026 (amending Rule-36, adding Rule-44 and Rule-45) remain in force alongside CR-4/CR-5.
@@ -117,7 +117,7 @@ A conflict that precedence does not settle belongs in §3, not in code.
 
 ---
 
-## 3. Open items — O2 to O5
+## 3. Open items — O2 to O6
 
 **Nothing below has a default invented for it.** Each states the question, why it matters, what the closest available evidence is, and who has to answer.
 
@@ -380,8 +380,8 @@ Each of these looks like an oversight on first encounter and is not. Each was co
 |---|---|
 | **Blocking issues** | **None.** No item, at any point in this analysis, met the bar of "implementation should not begin until resolved" |
 | **Conflicts** | 9, all resolved by precedence and applied throughout this set (C9 added 8 Aug 2026 — see `PI/05-decisions-and-gaps.md` D-1) |
-| **Open items** | 4 — O2–O5 are build decisions to be taken deliberately rather than by default |
+| **Open items** | 5 — O2–O5 are build decisions to be taken deliberately rather than by default; O6 (added S14) is an architectural limitation found by US-M9.1's completeness audit, not a build decision — `login`'s lockout-transition audit and `use_recovery_code`'s audit cannot be built as documented without a new security tradeoff |
 | **Modules gated** | None. No open item blocks any module from starting |
-| **Prototype behaviours awaiting port** | 5 — the settings recalculation warning, the last-slab-row refusal, the data-recovery screen, the whole-console backup schedule/retention, and the restore flows. All are **approved reference behaviour**, to be ported like any other approved design |
+| **Prototype behaviours, approved reference** | 5 — the settings recalculation warning, the last-slab-row refusal, the data-recovery screen, the whole-console backup schedule/retention, and the restore flows. All now ported — S14 closed the last of them (the data-recovery screen and the restore flows, M8.6) |
 
 C9's mandatory-column resolution is architect-resolved, not client-confirmed — worth raising in the next client conversation, but it does not block M6, which is already built against it.
