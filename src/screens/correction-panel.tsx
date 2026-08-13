@@ -4,6 +4,7 @@ import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { Input, InputHint } from "@/components/ui/input";
+import { PageHeader } from "@/components/page-header";
 import { editEntry } from "@/lib/ipc/m2-entries";
 import type { BusinessVolumeEntry as Entry } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
@@ -59,7 +60,7 @@ export function CorrectionPanel() {
 
   return (
     <>
-      <h1 className="text-headline">Correct a closed month</h1>
+      <PageHeader title="Correct a closed month" />
 
       <div className="mt-3.5 max-w-md rounded-sm border border-border bg-bg px-3.5 py-3 text-caption">
         Editing a record recalculates the affected chain and writes a new snapshot version — the

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Business Volume Console",
+  "productName": "Member Rewards Console",
   "version": "0.1.0",
   "identifier": "com.siddharthpatel.bvconsole",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Business Volume Console",
+        "title": "Member Rewards Console",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,

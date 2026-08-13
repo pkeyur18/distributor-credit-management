@@ -5,6 +5,7 @@ import { PlusCircle, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MemberModal } from "@/components/member-modal";
+import { PageHeader } from "@/components/page-header";
 import { SearchResultsList } from "@/components/search-results-list";
 import { BarListChart, type BarListRow } from "@/components/bar-list-chart";
 import { EmptyState } from "@/components/empty-state";
@@ -60,14 +61,16 @@ export function Home() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <h1 className="text-headline">Home</h1>
-        <Button variant="primary" onClick={() => setAddMemberOpen(true)}>
-          <PlusCircle className="size-4" />
-          Add member
-        </Button>
-      </div>
-      <p className="text-caption mt-1">Search any member, or scan today's standing</p>
+      <PageHeader
+        title="Home"
+        subtitle="Search any member, or scan today's standing"
+        actions={
+          <Button variant="primary" onClick={() => setAddMemberOpen(true)}>
+            <PlusCircle className="size-4" />
+            Add member
+          </Button>
+        }
+      />
 
       {noRootYet && (
         <div className="mt-4">

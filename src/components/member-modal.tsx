@@ -5,6 +5,7 @@ import { Input, InputHint } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AlertNote } from "@/components/ui/alert-note";
 import { Pill } from "@/components/ui/pill";
+import { useToast } from "@/components/ui/toast";
 import { SearchResultsList } from "@/components/search-results-list";
 import {
   addMember,
@@ -36,7 +37,10 @@ import { toErrorPresentation, type AppErrorPresentation } from "@/lib/ipc/errors
 // these five fields, and a `SearchResult` (which carries them too, see its
 // doc comment) satisfies this directly — no `get_member_detail` (S8) round
 // trip needed to open Edit from a search result this sprint.
-type EditableMember = Pick<Member, "id" | "name" | "phone" | "email" | "address" | "introducerMemberId">;
+type EditableMember = Pick<
+  Member,
+  "id" | "name" | "phone" | "email" | "address" | "introducerMemberId" | "consentDate"
+>;
 
 interface MemberModalProps {
   open: boolean;
@@ -78,6 +82,7 @@ function MemberModal({
   onSearchRef = (q) => searchMembers(q, true),
   onSaved,
 }: MemberModalProps) {
+  const toast = useToast();
   const [form, setForm] = useState(EMPTY_FORM);
   const [selectedRef, setSelectedRef] = useState<SearchResult | null>(null);
   const [refQuery, setRefQuery] = useState("");
@@ -165,6 +170,7 @@ function MemberModal({
         });
         await onSubmitReactivate(reactivatingId);
         onSaved?.(updated);
+        toast.add({ title: "Member reactivated", type: "success" });
         handleOpenChange(false);
         return;
       }
@@ -178,6 +184,7 @@ function MemberModal({
           address: form.address,
         });
         onSaved?.(updated);
+        toast.add({ title: "Member updated", type: "success" });
         handleOpenChange(false);
         return;
       }
@@ -191,6 +198,7 @@ function MemberModal({
           consentGiven: form.consentGiven,
         });
         onSaved?.(root);
+        toast.add({ title: "Member added", type: "success" });
         handleOpenChange(false);
         return;
       }
@@ -215,8 +223,10 @@ function MemberModal({
         setReactivationOffer(outcome.existingMember);
       } else if (outcome.warnings.length > 0) {
         setSavedWithWarnings({ member: outcome.member, warnings: outcome.warnings });
+        toast.add({ title: "Member added", type: "success" });
       } else {
         onSaved?.(outcome.member);
+        toast.add({ title: "Member added", type: "success" });
         handleOpenChange(false);
       }
     } catch (raw) {
@@ -230,12 +240,19 @@ function MemberModal({
   const title = isReactivating ? "Reactivate member" : mode === "edit" ? "Edit member" : "Add member";
   const saveLabel = isReactivating ? "Reactivate" : "Save";
   const showConsentCheckbox = mode === "add" && !isReactivating;
+  const needsIntroducer = mode === "add" && !noMembersYet && !isReactivating;
+  const isFormValid =
+    form.name.trim() !== "" &&
+    form.phone.trim() !== "" &&
+    form.address.trim() !== "" &&
+    (!needsIntroducer || selectedRef !== null) &&
+    (!showConsentCheckbox || form.consentGiven);
 
   return (
-    <Modal open={open} onOpenChange={handleOpenChange} dismissable={false}>
+    <Modal open={open} onOpenChange={handleOpenChange} dismissable={false} wide>
       <ModalHeader title={title} />
       <ModalBody>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {error && <AlertNote variant="danger">{error.message}</AlertNote>}
           {isReactivating && (
             <AlertNote variant="warn">
@@ -268,66 +285,78 @@ function MemberModal({
             </AlertNote>
           )}
 
-          <div>
-            <label htmlFor="member-name" className="text-label mb-1 block">
-              Name *
-            </label>
-            <Input
-              id="member-name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="member-name" className="text-label mb-1.5 block">
+                Name <span className="text-danger">*</span>
+              </label>
+              <Input
+                id="member-name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="member-phone" className="text-label mb-1.5 block">
+                Phone <span className="text-danger">*</span>
+              </label>
+              <Input
+                id="member-phone"
+                type="tel"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+            </div>
           </div>
-          <div>
-            <label htmlFor="member-phone" className="text-label mb-1 block">
-              Phone *
-            </label>
-            <Input
-              id="member-phone"
-              type="tel"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            />
-          </div>
-          <div>
-            <label htmlFor="member-email" className="text-label mb-1 block">
-              Email
-            </label>
-            <Input
-              id="member-email"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-          </div>
-          <div>
-            <label htmlFor="member-address" className="text-label mb-1 block">
-              Address *
-            </label>
-            <Input
-              id="member-address"
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="member-email" className="text-label mb-1.5 block">
+                Email
+              </label>
+              <Input
+                id="member-email"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="member-address" className="text-label mb-1.5 block">
+                Address <span className="text-danger">*</span>
+              </label>
+              <Input
+                id="member-address"
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
+            </div>
           </div>
 
           {mode === "edit" && !isReactivating ? (
             <div>
-              <span className="text-label mb-1 block">Introducer</span>
-              <p className="text-body text-muted-text">
-                {member?.introducerMemberId ? `#${member.introducerMemberId}` : "None (root member)"}
-              </p>
-              <InputHint>Fixed at creation — never changes (Rule-37).</InputHint>
+              <label htmlFor="member-ref-locked" className="text-label mb-1.5 block">
+                Introducer (Reference ID)
+              </label>
+              <Input
+                id="member-ref-locked"
+                disabled
+                value={
+                  member?.introducerMemberId ? `#${member.introducerMemberId}` : "None — root member"
+                }
+              />
+              <InputHint>Cannot be changed after onboarding — a member’s introducer is permanent.</InputHint>
             </div>
           ) : noMembersYet ? (
             <div>
-              <span className="text-label mb-1 block">Introducer</span>
-              <p className="text-body text-muted-text">None — this is the first member.</p>
+              <label htmlFor="member-ref-locked" className="text-label mb-1.5 block">
+                Introducer (Reference ID)
+              </label>
+              <Input id="member-ref-locked" disabled value="None — this is the first member." />
             </div>
           ) : !isReactivating ? (
             <div>
-              <label htmlFor="member-ref-search" className="text-label mb-1 block">
-                Introducer *
+              <label htmlFor="member-ref-search" className="text-label mb-1.5 block">
+                Introducer (Reference ID) <span className="text-danger">*</span>
               </label>
               {selectedRef ? (
                 <div className="flex items-center justify-between rounded-sm border border-border bg-surface px-3 py-2">
@@ -362,6 +391,7 @@ function MemberModal({
                   </div>
                 </>
               )}
+              <InputHint>Must resolve to an existing, active member. Locked once saved.</InputHint>
             </div>
           ) : null}
 
@@ -381,8 +411,13 @@ function MemberModal({
             </label>
           ) : (
             <div>
-              <span className="text-label mb-1 block">Consent</span>
-              <Pill variant="active">Captured</Pill>
+              <span className="text-label mb-1.5 block">Consent</span>
+              <div className="flex items-center gap-2">
+                <Pill variant="active">Captured</Pill>
+                {member?.consentDate && (
+                  <span className="text-[12px] text-muted-text">{member.consentDate}</span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -397,7 +432,7 @@ function MemberModal({
             <ModalCancel />
             <Button
               variant="primary"
-              disabled={(showConsentCheckbox && !form.consentGiven) || submitting}
+              disabled={!isFormValid || submitting}
               onClick={handleSave}
             >
               {saveLabel}

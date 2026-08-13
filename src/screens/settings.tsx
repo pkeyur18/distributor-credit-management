@@ -10,6 +10,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { RestoreOptionList } from "@/components/restore-option-list";
 import { ChecklistConfirmDialog } from "@/components/checklist-confirm-dialog";
 import { RecalcWarningDialog } from "@/components/recalc-warning-dialog";
+import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/components/ui/toast";
 import { centsToDisplay, displayToCents } from "@/lib/utils";
 import { getDirectChildrenChart } from "@/lib/ipc/m4-search";
@@ -1007,7 +1008,7 @@ export function Settings() {
   if (!settings || !backupSettings) {
     return (
       <>
-        <h1 className="text-headline">Settings</h1>
+        <PageHeader title="Settings" />
         <AlertNote variant="danger" className="mt-4 max-w-md">
           Settings could not be loaded.
         </AlertNote>
@@ -1017,8 +1018,7 @@ export function Settings() {
 
   return (
     <>
-      <h1 className="text-headline">Settings</h1>
-      <p className="mt-1 text-caption">Each section saves independently</p>
+      <PageHeader title="Settings" subtitle="Each section saves independently" />
 
       <div className="mt-5 flex flex-col gap-4">
         <SlabTableCard rows={slabRows} onRowsChange={setSlabRows} />

@@ -72,6 +72,18 @@ export function Login() {
 
   const lockedOut = lockedSeconds !== null && lockedSeconds > 0;
 
+  // PinKeypad only wires onscreen taps — physical keyboard digits/Backspace
+  // fell through to nothing since there was no listener for them.
+  useEffect(() => {
+    if (mode !== "pin" || lockedOut) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (/^[0-9]$/.test(e.key)) pinPress(e.key);
+      else if (e.key === "Backspace") setPinBuffer((b) => b.slice(0, -1));
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mode, lockedOut, pinBuffer, submitting]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg px-4">
       <div className="w-full max-w-95 rounded-lg border border-border bg-surface p-6">
