@@ -443,7 +443,7 @@ fn search_members_end_to_end_through_the_command_layer() {
 fn get_member_detail_requires_a_session() {
     let app = app_with_seeded_db();
     let result =
-        commands::get_member_detail(app.state::<SessionState>(), app.state::<DbState>(), 1);
+        commands::get_member_detail(app.state::<SessionState>(), app.state::<DbState>(), 1, None);
     assert!(matches!(result, Err(AppError::AuthRequired)));
 }
 
@@ -455,6 +455,7 @@ fn get_direct_children_chart_requires_a_session() {
         app.state::<DbState>(),
         None,
         false,
+        None,
     );
     assert!(matches!(result, Err(AppError::AuthRequired)));
 }
@@ -470,9 +471,13 @@ fn get_member_detail_and_get_direct_children_chart_end_to_end_through_the_comman
     )
     .unwrap();
 
-    let detail =
-        commands::get_member_detail(app.state::<SessionState>(), app.state::<DbState>(), root.id)
-            .unwrap();
+    let detail = commands::get_member_detail(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root.id,
+        None,
+    )
+    .unwrap();
     assert_eq!(detail.member.id, root.id);
     assert_eq!(detail.leg_count, 0);
 
@@ -482,6 +487,7 @@ fn get_member_detail_and_get_direct_children_chart_end_to_end_through_the_comman
         app.state::<DbState>(),
         None,
         false,
+        None,
     )
     .unwrap();
     assert_eq!(chart.nodes[0].member_id, root.id);

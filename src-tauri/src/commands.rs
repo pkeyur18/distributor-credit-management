@@ -194,36 +194,43 @@ pub fn preview_settings_impact(
 
 // M4 — US-M4.1/M4.2, S8; US-M4.3, S9.
 
+/// `period_month`: T-M2.5-3's month switcher. `None` resolves to the
+/// oldest recordable period (never "whatever period_id is highest") — see
+/// `m4_search::resolve_view_period_id`.
 #[tauri::command]
 pub fn get_member_detail(
     session: tauri::State<'_, SessionState>,
     db: tauri::State<'_, DbState>,
     member_id: i64,
+    period_month: Option<String>,
 ) -> Result<m4_search::MemberDetail, AppError> {
     require_session(&session)?;
     let guard = locked_conn(&db);
     let conn = guard.as_ref().expect(
         "an authenticated session implies an open database connection — see S5's login flow",
     );
-    m4_search::get_member_detail(conn, member_id)
+    m4_search::get_member_detail(conn, member_id, period_month.as_deref())
 }
 
 /// API-11. `full_tree: true` is US-M4.3's parameter, implemented here
 /// because Home's slab-distribution charts (US-M4.4, same sprint) are the
 /// first caller that needs it — see `m4_search`'s own doc comment.
+/// `period_month`: T-M2.5-3's month switcher, same default as
+/// `get_member_detail` above.
 #[tauri::command]
 pub fn get_direct_children_chart(
     session: tauri::State<'_, SessionState>,
     db: tauri::State<'_, DbState>,
     member_id: Option<i64>,
     full_tree: bool,
+    period_month: Option<String>,
 ) -> Result<m4_search::DirectChildrenChartResult, AppError> {
     require_session(&session)?;
     let guard = locked_conn(&db);
     let conn = guard.as_ref().expect(
         "an authenticated session implies an open database connection — see S5's login flow",
     );
-    m4_search::get_direct_children_chart(conn, member_id, full_tree)
+    m4_search::get_direct_children_chart(conn, member_id, full_tree, period_month.as_deref())
 }
 
 // M5 — US-M5.1, S11; US-M5.2/M5.3/M5.5, S12 (US-M5.4 is S13 and stays a stub).
