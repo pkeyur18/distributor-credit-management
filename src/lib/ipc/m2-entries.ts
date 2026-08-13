@@ -1,5 +1,5 @@
 import { invokeCommand } from "./client";
-import type { BusinessVolumeEntry } from "./entities";
+import type { BusinessVolumeEntry, PeriodEntries } from "./entities";
 
 export interface PeriodLockStatus {
   /** Recordable periods, oldest first — never a plain boolean (CR-2). */
@@ -23,6 +23,13 @@ export interface RecordEntryInput {
 // current month while an earlier period is awaiting_close (Rule-36/V2.7).
 export function recordEntry(input: RecordEntryInput): Promise<BusinessVolumeEntry> {
   return invokeCommand("record_entry", { input });
+}
+
+// API-41 — the period table and its two summary nodes on Volume Entry all
+// read off this one list; `periodMonth` is caller-supplied (already
+// resolved via `getPeriodLockStatus`), never re-derived server-side.
+export function listPeriodEntries(periodMonth: string): Promise<PeriodEntries> {
+  return invokeCommand("list_period_entries", { periodMonth });
 }
 
 export interface EditEntryInput {

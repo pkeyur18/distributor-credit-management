@@ -70,12 +70,14 @@ export async function addMember({ name, phone, address, referenceId }) {
 // toggle. Defaults to today's date, which is always within the current
 // (only) recordable month until US-M2.3/M2.5 (S12/S13) exist.
 export async function recordEntry({ memberName, amount }) {
-  await navigateTo("Business Volume Entry");
+  await navigateTo("Volume Entry");
   await $("#entry-search").setValue(memberName);
   const result = $(`button*=${memberName}`);
   await result.waitForExist({ timeout: 3000 });
   await result.click();
   await $("#entry-amount").setValue(amount);
   await $("button=Save entry").click();
-  await $("div=Recorded this session").waitForExist({ timeout: 3000 });
+  // API-41's period table refetches after a successful save — the new row
+  // appearing is the save's own confirmation, not just a UI convenience.
+  await $(`td*=${memberName}`).waitForExist({ timeout: 3000 });
 }

@@ -18,23 +18,21 @@ import {
 import { SearchResultsList } from "@/components/search-results-list";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
 import { useMemberSearch } from "@/lib/use-member-search";
 import { searchMembers } from "@/lib/ipc/m1-members";
-import { recordEntry, getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
-import type { BusinessVolumeEntry as Entry } from "@/lib/ipc/entities";
-import type { SearchResult } from "@/lib/ipc/entities";
+import {
+  recordEntry,
+  getPeriodLockStatus,
+  listPeriodEntries,
+  type PeriodLockStatus,
+} from "@/lib/ipc/m2-entries";
+import type { PeriodEntryRecord, SearchResult } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { useToast } from "@/components/ui/toast";
 import { centsToDisplay, displayToCents, monthLabel } from "@/lib/utils";
 
 const PAGE_SIZES = [10, 25, 50] as const;
-
-// Frontend-only pairing of a recorded entry with the member name shown
-// against it — `BusinessVolumeEntry` itself carries no name (see
-// entities.ts), and this session-scoped list is the only feed available
-// (no command in the closed 40-command surface lists a member's past
-// entries yet — same gap the file's header comment already documents).
-type SessionEntry = Entry & { memberName: string };
 
 // Strips anything that isn't a digit or decimal point as the operator
 // types, and collapses a second "." rather than let it through — a
@@ -72,12 +70,11 @@ function monthBounds(ym: string) {
   return { min: isoDate(first), max: isoDate(isCurrent ? new Date() : last) };
 }
 
-// US-M2.1 (§5.4). T-M2.1-6's "this period's entries" list has no backing
-// command yet — no API in the closed 40-command surface lists a member's
-// past entries (get_member_detail is S8, get_audit_log is S14). Until one
-// of those ships, this list is only what's been recorded in the current
-// app session, not the month's full history — labelled honestly below
-// rather than implying it's complete.
+// US-M2.1 (§5.4). API-41's `list_period_entries` backs the table below and
+// the two summary nodes above the lock-status banner — all three read the
+// same fetch, scoped to `recordingMonth` (the outstanding month while one
+// exists, otherwise the current month; T-M2.3-2/T-M2.3-4's existing rule,
+// reused rather than re-derived).
 export function BusinessVolumeEntry() {
   const [query, setQuery] = useState("");
   const { results } = useMemberSearch(query);
@@ -92,7 +89,10 @@ export function BusinessVolumeEntry() {
   const [amountError, setAmountError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [sessionEntries, setSessionEntries] = useState<SessionEntry[]>([]);
+  // Starts empty rather than behind a loading gate (both summary nodes
+  // read 0 until the first fetch resolves, then replace with real
+  // figures — an explicit product decision, not an oversight).
+  const [periodEntries, setPeriodEntries] = useState<PeriodEntryRecord[]>([]);
   const [entriesPage, setEntriesPage] = useState(0);
   const [entriesPageSize, setEntriesPageSize] = useState<number>(PAGE_SIZES[0]);
   const toast = useToast();
@@ -129,6 +129,16 @@ export function BusinessVolumeEntry() {
     setDate(monthBounds(month).max);
   }
 
+  // API-41: refetches whenever the recording month changes (including the
+  // one-time correction once `getPeriodLockStatus` resolves and moves
+  // `recordingMonth` off its `currentYm()` fallback).
+  useEffect(() => {
+    listPeriodEntries(recordingMonth).then((result) => {
+      setPeriodEntries(result.entries);
+      setEntriesPage(0);
+    });
+  }, [recordingMonth]);
+
   const cents = displayToCents(amountInput);
   const canSave = !!selected && cents !== null && !saving;
 
@@ -139,8 +149,6 @@ export function BusinessVolumeEntry() {
     setDateError(null);
     try {
       const entry = await recordEntry({ memberId: selected.id, amount: cents, entryDate: date });
-      setSessionEntries((prev) => [{ ...entry, memberName: selected.name }, ...prev]);
-      setEntriesPage(0);
       setAmountInput("");
       toast.add({
         title: `Recorded ${centsToDisplay(entry.amount)} for ${selected.name}`,
@@ -153,10 +161,14 @@ export function BusinessVolumeEntry() {
       // search, already reading `member_period_totals`) is the only
       // command today that also carries totalBusinessVolume/slabPct, so
       // this re-fetches by ID rather than waiting on get_member_detail
-      // (S8).
+      // (S8). The period table/summary nodes get the same in-place
+      // refresh via `list_period_entries` (API-41).
       const refreshed = await searchMembers(String(selected.id), false);
       const match = refreshed.find((r) => r.id === selected.id);
       if (match) setSelected(match);
+      const refreshedEntries = await listPeriodEntries(recordingMonth);
+      setPeriodEntries(refreshedEntries.entries);
+      setEntriesPage(0);
     } catch (raw) {
       const presented = toErrorPresentation(raw);
       // T-M2.4-2: a period-eligibility refusal is about the date, not the
@@ -176,22 +188,39 @@ export function BusinessVolumeEntry() {
     }
   }
 
-  const sortedEntries = [...sessionEntries].sort(
-    (a, b) => b.entryDate.localeCompare(a.entryDate) || b.id - a.id,
-  );
-  const totalEntriesPages = Math.max(1, Math.ceil(sortedEntries.length / entriesPageSize));
+  // Already sorted server-side (entry_date desc, id desc) — paginated here,
+  // not re-sorted.
+  const totalEntriesPages = Math.max(1, Math.ceil(periodEntries.length / entriesPageSize));
   const currentEntriesPage = Math.min(entriesPage, totalEntriesPages - 1);
   const entriesRangeStart = currentEntriesPage * entriesPageSize;
-  const entriesPageRows = sortedEntries.slice(
+  const entriesPageRows = periodEntries.slice(
     entriesRangeStart,
     entriesRangeStart + entriesPageSize,
   );
+
+  // Raw entry-record counts (not distinct members), per the confirmed
+  // definition — a member with two entries this month counts as two here.
+  const entriesThisMonthCount = periodEntries.length;
+  const todayIso = isoDate(new Date());
+  const recordedTodayCount = periodEntries.filter((e) => e.entryDate === todayIso).length;
 
   return (
     <>
       <PageHeader title="Volume Entry" />
 
       <div className="mx-auto max-w-200">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg border border-border bg-surface p-3.5">
+            <div className="text-label text-muted-text">Entries recorded</div>
+            <div className="num mt-1 text-numeric-lg">{entriesThisMonthCount}</div>
+            <div className="text-caption mt-0.5">{monthLabel(recordingMonth)}</div>
+          </div>
+          <div className="rounded-lg border border-border bg-surface p-3.5">
+            <div className="text-label text-muted-text">Recorded today</div>
+            <div className="num mt-1 text-numeric-lg">{recordedTodayCount}</div>
+          </div>
+        </div>
+
         {lockStatus && (
           <AlertNote variant="warn" className="mt-3.5">
             Recording into <strong>{monthLabel(recordingMonth)}</strong>.{" "}
@@ -321,78 +350,84 @@ export function BusinessVolumeEntry() {
           </Link>
         </p>
 
-        {sessionEntries.length > 0 && (
-          <div className="mt-4.5">
-            <div className="text-title-sm mb-1.5">Recorded this session</div>
-            <TableWrap>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Member #</TableHead>
-                    <TableHead>Recorded Date</TableHead>
-                    <TableHead numeric>Business Volume</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entriesPageRows.map((e) => (
-                    <TableRow key={`${e.id}-${e.updatedAt ?? e.createdAt}`}>
-                      <TableCell primary>{e.memberName}</TableCell>
-                      <TableCell className="mono">{e.memberId}</TableCell>
-                      <TableCell>{e.entryDate}</TableCell>
-                      <TableCell numeric>
-                        <span className="num">{centsToDisplay(e.amount)}</span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableWrap>
-            <div className="mt-2.5 flex items-center justify-between">
-              <span className="text-caption">
-                Showing {entriesRangeStart + 1}–
-                {Math.min(entriesRangeStart + entriesPageSize, sortedEntries.length)} of{" "}
-                {sortedEntries.length}
-              </span>
-              <div className="flex items-center gap-2">
-                <label htmlFor="entries-page-size" className="text-caption">
-                  Rows per page
-                </label>
-                <select
-                  id="entries-page-size"
-                  className="h-7.5 w-auto rounded-sm border border-border bg-surface px-2 text-body text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
-                  value={entriesPageSize}
-                  onChange={(e) => {
-                    setEntriesPageSize(Number(e.target.value));
-                    setEntriesPage(0);
-                  }}
-                >
-                  {PAGE_SIZES.map((size) => (
-                    <option key={size} value={size}>
-                      {size}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={currentEntriesPage === 0}
-                  onClick={() => setEntriesPage((p) => p - 1)}
-                >
-                  Prev
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={currentEntriesPage >= totalEntriesPages - 1}
-                  onClick={() => setEntriesPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
+        <div className="mt-4.5">
+          <div className="text-title-sm mb-1.5">{monthLabel(recordingMonth)} entries</div>
+          {periodEntries.length === 0 ? (
+            <div className="rounded-lg border border-border bg-surface">
+              <EmptyState title={`No entries yet in ${monthLabel(recordingMonth)}`} />
             </div>
-          </div>
-        )}
+          ) : (
+            <>
+              <TableWrap>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Member #</TableHead>
+                      <TableHead>Recorded Date</TableHead>
+                      <TableHead numeric>Business Volume</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {entriesPageRows.map((e) => (
+                      <TableRow key={`${e.id}-${e.updatedAt ?? e.createdAt}`}>
+                        <TableCell primary>{e.memberName}</TableCell>
+                        <TableCell className="mono">{e.memberId}</TableCell>
+                        <TableCell>{e.entryDate}</TableCell>
+                        <TableCell numeric>
+                          <span className="num">{centsToDisplay(e.amount)}</span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableWrap>
+              <div className="mt-2.5 flex items-center justify-between">
+                <span className="text-caption">
+                  Showing {entriesRangeStart + 1}–
+                  {Math.min(entriesRangeStart + entriesPageSize, periodEntries.length)} of{" "}
+                  {periodEntries.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="entries-page-size" className="text-caption">
+                    Rows per page
+                  </label>
+                  <select
+                    id="entries-page-size"
+                    className="h-7.5 w-auto rounded-sm border border-border bg-surface px-2 text-body text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
+                    value={entriesPageSize}
+                    onChange={(e) => {
+                      setEntriesPageSize(Number(e.target.value));
+                      setEntriesPage(0);
+                    }}
+                  >
+                    {PAGE_SIZES.map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={currentEntriesPage === 0}
+                    onClick={() => setEntriesPage((p) => p - 1)}
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={currentEntriesPage >= totalEntriesPages - 1}
+                    onClick={() => setEntriesPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </>
   );

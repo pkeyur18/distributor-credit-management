@@ -498,9 +498,9 @@ Each write touches `O(depth × average_width)` rows — bounded by tree depth (t
 
 ---
 
-## 6. API specification — 40 Tauri IPC commands
+## 6. API specification — 41 Tauri IPC commands
 
-**40 commands total** — API-01 to API-40, no gaps. See [06](06-decision-log-and-open-items.md) C2. `reverse_entry` was removed (dead, confirmed) from the original 26-command count.
+**41 commands total** — API-01 to API-41, no gaps. See [06](06-decision-log-and-open-items.md) C2. `reverse_entry` was removed (dead, confirmed) from the original 26-command count; `list_period_entries` (API-41) was added 13 August 2026.
 
 **No delete command exists anywhere, for any entity.** Members, entries, snapshots, backups — none are ever removed (Rule-28, Rule-42, Rule-31).
 
@@ -526,6 +526,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 | API-07 | `get_period_lock_status` | Report **which months accept entries**, oldest first, and which month is blocked and by what | Auth | — | Read-only | Not audited. Returns a list of recordable periods plus the blocking month, **not a boolean** (amended 7 Aug 2026, CR-2 — the name is retained for continuity; the semantics are now "entry eligibility", not "locked yes/no") |
 | API-08 | `record_entry` | Record BV against a member, into the period its `entry_date` falls in | Auth | `amount > 0` (Rule-16a), ≤2 decimals (Rule-16), `entry_date` within its own period's bounds (V2.6). **Refused when that period is `closed`** (use API-09 instead, Rule-39), **and when it is the current month while any earlier period is `awaiting_close`** (V2.7, Rule-36) | Insert entry + chain-upward recalc (ADR-005) **within that entry's own period**, one transaction | `entry` |
 | API-09 | `edit_entry` | Correct an entry — open period **or any closed month** | Auth | Same amount/date validation, scoped to the entry's own period bounds | Update entry + chain recalc; if period closed, additionally new `monthly_snapshots`/`backups` version | `edit` or `correction` |
+| API-41 | `list_period_entries` | List every entry recorded in a given month across all members, newest first — backs Volume Entry's period table and its two summary nodes | Auth | `period_month` required | Read-only | Not audited |
 
 ### Module M3 — Calculation Engine *(no exposed commands except the preview)*
 
@@ -604,7 +605,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 ### 6.1 Command index by ID
 
-`API-01`–`API-06` M1 · `API-07`–`API-09` M2 · `API-10`–`API-11` M4 · `API-12`–`API-15` M5 · `API-16`–`API-20` M6 · `API-21`–`API-25`, `API-37`–`API-38` M7 · `API-26`–`API-31`, `API-39` M8 · `API-32` M9 · `API-33` M3 · `API-34`–`API-36`, `API-40` pre-flight/recovery.
+`API-01`–`API-06` M1 · `API-07`–`API-09`, `API-41` M2 · `API-10`–`API-11` M4 · `API-12`–`API-15` M5 · `API-16`–`API-20` M6 · `API-21`–`API-25`, `API-37`–`API-38` M7 · `API-26`–`API-31`, `API-39` M8 · `API-32` M9 · `API-33` M3 · `API-34`–`API-36`, `API-40` pre-flight/recovery.
 
 ---
 

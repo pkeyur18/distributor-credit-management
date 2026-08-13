@@ -215,7 +215,7 @@ export function Reports() {
       </Card>
 
       {/* No on-screen preview table, unlike the prototype's client-side
-          mockup — the 40-command API surface has no read-only command for
+          mockup — the 41-command API surface has no read-only command for
           this data separate from the export itself (ADR-007 keeps the
           WebView from computing it locally), so the reduction is the
           threshold field and export action only. */}

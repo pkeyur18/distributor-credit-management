@@ -15,6 +15,7 @@
     "allow-record-entry",
     "allow-edit-entry",
     "allow-get-period-lock-status",
+    "allow-list-period-entries",
     "allow-preview-settings-impact",
     "allow-get-member-detail",
     "allow-get-direct-children-chart",

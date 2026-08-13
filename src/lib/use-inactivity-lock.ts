@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 // T-M8.3-2: default 15 minutes (D-4). Spec-wise this should read
 // `session_timeout_minutes` from `settings` — but `get_settings` (US-M7.1)
 // doesn't exist until S10, and there's no other command in the closed
-// 40-command surface that exposes a single setting early. Hardcoded here
+// 41-command surface that exposes a single setting early. Hardcoded here
 // until then; swap for a real read once get_settings ships, not before.
 const DEFAULT_TIMEOUT_MINUTES = 15;
 const ACTIVITY_EVENTS = ["mousemove", "keydown", "mousedown", "scroll", "touchstart"] as const;
