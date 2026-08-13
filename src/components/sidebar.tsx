@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { NavLink, useNavigate } from "react-router";
 import { Moon, Sun, Monitor, Lock, LogOut } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav";
@@ -34,28 +35,34 @@ export function Sidebar() {
   return (
     <aside className="flex h-full w-[236px] flex-col border-r border-border bg-surface">
       <div className="px-4 py-5">
-        <span className="text-title-sm">Business Volume Console</span>
+        <span className="text-title-sm">Member Rewards Console</span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 px-2">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === "/"}
-            className={({ isActive }) =>
-              `flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] ${
-                isActive ? "bg-accent-weak font-semibold text-accent" : "text-ink hover:bg-bg"
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon className="h-4 w-4" style={{ opacity: isActive ? 1 : 0.75 }} />
-                {label}
-              </>
-            )}
-          </NavLink>
+        {NAV_ITEMS.map(({ to, label, icon: Icon, group }) => (
+          <Fragment key={to}>
+            {group ? (
+              <div className="px-2.5 pb-1 pt-3.5 text-[10.5px] font-semibold tracking-[0.06em] text-muted-text uppercase">
+                {group}
+              </div>
+            ) : null}
+            <NavLink
+              to={to}
+              end={to === "/"}
+              className={({ isActive }) =>
+                `flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] ${
+                  isActive ? "bg-accent-weak font-semibold text-accent" : "text-ink hover:bg-bg"
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon className="h-4 w-4" style={{ opacity: isActive ? 1 : 0.75 }} />
+                  {label}
+                </>
+              )}
+            </NavLink>
+          </Fragment>
         ))}
       </nav>
 

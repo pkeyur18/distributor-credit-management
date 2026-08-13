@@ -10,7 +10,7 @@ function Input({ className, ...props }: ComponentProps<"input">) {
     <input
       data-slot="input"
       className={cn(
-        "h-[34px] w-full rounded-sm border border-border bg-surface px-[11px] text-body text-ink outline-none placeholder:text-muted-text",
+        "h-[34px] w-full rounded-sm border border-border bg-surface px-[11px] text-body text-ink outline-none placeholder:text-[12.5px] placeholder:text-muted-text/60",
         "focus:border-accent focus:ring-3 focus:ring-accent-weak",
         "aria-invalid:border-danger",
         "disabled:cursor-not-allowed disabled:bg-bg disabled:text-muted-text",

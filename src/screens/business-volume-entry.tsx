@@ -8,6 +8,7 @@ import { Pill } from "@/components/ui/pill";
 import { AlertNote } from "@/components/ui/alert-note";
 import { SearchResultsList } from "@/components/search-results-list";
 import { MonthSwitcher } from "@/components/month-switcher";
+import { PageHeader } from "@/components/page-header";
 import { useMemberSearch } from "@/lib/use-member-search";
 import { searchMembers } from "@/lib/ipc/m1-members";
 import { recordEntry, getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
@@ -143,7 +144,7 @@ export function BusinessVolumeEntry() {
 
   return (
     <>
-      <h1 className="text-headline">Business Volume Entry</h1>
+      <PageHeader title="Business Volume Entry" />
 
       {lockStatus && (
         <AlertNote variant="warn" className="mt-3.5 max-w-md">

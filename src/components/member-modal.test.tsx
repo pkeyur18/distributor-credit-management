@@ -1,10 +1,16 @@
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, type RenderResult } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { MemberModal } from "./member-modal";
+import { ToastProvider } from "@/components/ui/toast";
 import type { AddMemberOutcome } from "@/lib/ipc/m1-members";
 import type { Member, SearchResult } from "@/lib/ipc/entities";
+
+function renderModal(ui: ReactElement): RenderResult {
+  return render(<ToastProvider>{ui}</ToastProvider>);
+}
 
 const MEMBER: Member = {
   id: 284913,
@@ -47,7 +53,7 @@ async function pickIntroducer(user: ReturnType<typeof userEvent.setup>) {
 
 describe("MemberModal — add mode", () => {
   it("disables Save until consent is ticked", () => {
-    render(
+    renderModal(
       <MemberModal
         open
         onOpenChange={() => {}}
@@ -67,7 +73,7 @@ describe("MemberModal — add mode", () => {
       warnings: [],
     });
     const onSaved = vi.fn();
-    render(
+    renderModal(
       <MemberModal
         open
         onOpenChange={() => {}}
@@ -102,7 +108,7 @@ describe("MemberModal — add mode", () => {
       warnings: ["Level 2 now has 10 members, above the configured width of 9."],
     });
     const onSaved = vi.fn();
-    render(
+    renderModal(
       <MemberModal
         open
         onOpenChange={() => {}}
@@ -134,7 +140,7 @@ describe("MemberModal — add mode", () => {
     const onSubmitEdit = vi.fn().mockResolvedValue({ ...MEMBER, isActive: true });
     const onSubmitReactivate = vi.fn().mockResolvedValue(undefined);
     const onSaved = vi.fn();
-    render(
+    renderModal(
       <MemberModal
         open
         onOpenChange={() => {}}
@@ -163,10 +169,10 @@ describe("MemberModal — add mode", () => {
     expect(onSaved).toHaveBeenCalled();
   });
 
-  it("refuses to save without an introducer selected", async () => {
+  it("keeps Save disabled without an introducer selected", async () => {
     const user = userEvent.setup();
     const onSubmitAdd = vi.fn();
-    render(
+    renderModal(
       <MemberModal
         open
         onOpenChange={() => {}}
@@ -178,9 +184,8 @@ describe("MemberModal — add mode", () => {
 
     await fillRequiredFields(user);
     await user.click(screen.getByLabelText(/consented/));
-    await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByText(/Choose an introducer/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(onSubmitAdd).not.toHaveBeenCalled();
   });
 
@@ -189,7 +194,7 @@ describe("MemberModal — add mode", () => {
     const onSubmitAdd = vi.fn();
     const onSubmitAddRoot = vi.fn().mockResolvedValue({ ...MEMBER, introducerMemberId: null });
     const onSaved = vi.fn();
-    render(
+    renderModal(
       <MemberModal
         open
         onOpenChange={() => {}}
@@ -220,12 +225,12 @@ describe("MemberModal — add mode", () => {
 
 describe("MemberModal — edit mode", () => {
   it("prefills from the member and shows the introducer read-only", () => {
-    render(
+    renderModal(
       <MemberModal open onOpenChange={() => {}} mode="edit" member={MEMBER} onSubmitEdit={vi.fn()} />,
     );
     expect(screen.getByLabelText(/^Name/)).toHaveValue("Asha Patel");
     expect(screen.getByLabelText(/^Phone/)).toHaveValue("9876543210");
-    expect(screen.getByText("#100001")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("#100001")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Introducer \*/)).not.toBeInTheDocument();
   });
 
@@ -233,7 +238,7 @@ describe("MemberModal — edit mode", () => {
     const user = userEvent.setup();
     const onSubmitEdit = vi.fn().mockResolvedValue({ ...MEMBER, name: "Asha P. Renamed" });
     const onSaved = vi.fn();
-    render(
+    renderModal(
       <MemberModal
         open
         onOpenChange={() => {}}
@@ -263,7 +268,7 @@ describe("MemberModal — edit mode", () => {
       kind: "conflict",
       message: "This phone number is already in use by Rahul Shah (#512004).",
     });
-    render(
+    renderModal(
       <MemberModal open onOpenChange={() => {}} mode="edit" member={MEMBER} onSubmitEdit={onSubmitEdit} />,
     );
 

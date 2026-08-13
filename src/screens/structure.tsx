@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingState } from "@/components/loading-state";
+import { PageHeader } from "@/components/page-header";
 import { SearchResultsList } from "@/components/search-results-list";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MonthSwitcher } from "@/components/month-switcher";
@@ -219,8 +220,7 @@ export function Structure() {
 
   return (
     <>
-      <h1 className="text-headline">Structure</h1>
-      <p className="text-caption mt-1">Open one branch at a time</p>
+      <PageHeader title="Structure" subtitle="Open one branch at a time" />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-70 flex-1">

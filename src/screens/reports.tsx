@@ -5,6 +5,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MonthSwitcher } from "@/components/month-switcher";
+import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/components/ui/toast";
 import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
 import {
@@ -142,10 +143,10 @@ export function Reports() {
 
   return (
     <>
-      <h1 className="text-headline">Reports</h1>
-      <p className="text-caption mt-1">
-        Spreadsheet extracts only — no on-screen history of past months
-      </p>
+      <PageHeader
+        title="Reports"
+        subtitle="Spreadsheet extracts only — no on-screen history of past months"
+      />
 
       <Card className="mt-4">
         <CardHeader>

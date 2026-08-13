@@ -3,6 +3,7 @@ import { FileText, Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { getAuditLog } from "@/lib/ipc/m9-audit";
 import type { AuditCause, AuditEntityType, AuditLogEntry } from "@/lib/ipc/entities";
 
@@ -64,11 +65,10 @@ export function Audit() {
 
   return (
     <>
-      <h1 className="text-headline">Audit log</h1>
-      <p className="text-caption mt-1">
-        {entries.length} recorded {entries.length === 1 ? "change" : "changes"} — no entry is
-        ever edited or removed
-      </p>
+      <PageHeader
+        title="Audit log"
+        subtitle={`${entries.length} recorded ${entries.length === 1 ? "change" : "changes"} — no entry is ever edited or removed`}
+      />
 
       <div className="mt-4 max-w-85">
         <div className="relative">
