@@ -274,6 +274,61 @@ pub fn edit_entry(
     load_entry(conn, input.id)
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeriodEntryRecord {
+    pub id: i64,
+    pub member_id: i64,
+    pub member_name: String,
+    pub amount: i64,
+    pub entry_date: String,
+    pub created_at: String,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeriodEntries {
+    pub period_month: String,
+    pub entries: Vec<PeriodEntryRecord>,
+}
+
+/// API-41 — Volume Entry's period table and its two summary nodes (entries
+/// this month, entries recorded today) all read off this one list; the
+/// caller derives both counts client-side rather than round-tripping for
+/// separate aggregates. `period_month` is caller-supplied (Volume Entry
+/// already resolves it via `get_period_lock_status`) rather than
+/// re-derived here, so there is exactly one source of "which month" truth.
+pub fn list_period_entries(
+    conn: &Connection,
+    period_month: &str,
+) -> Result<PeriodEntries, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT bve.id, bve.member_id, m.name, bve.amount, bve.entry_date, bve.created_at, bve.updated_at
+         FROM business_volume_entries bve
+         JOIN members m ON m.id = bve.member_id
+         WHERE bve.period_month = ?1
+         ORDER BY bve.entry_date DESC, bve.id DESC",
+    )?;
+    let entries = stmt
+        .query_map([period_month], |row| {
+            Ok(PeriodEntryRecord {
+                id: row.get("id")?,
+                member_id: row.get("member_id")?,
+                member_name: row.get("name")?,
+                amount: row.get("amount")?,
+                entry_date: row.get("entry_date")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(PeriodEntries {
+        period_month: period_month.to_string(),
+        entries,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -886,5 +941,58 @@ mod tests {
             )
             .unwrap();
         assert_eq!(cause, "correction");
+    }
+
+    // Direct SQL insert, not `record_entry` — `list_period_entries` is a
+    // plain read with no period-status awareness of its own (it doesn't
+    // even join `periods`), so seeding through `record_entry` would just
+    // entangle these tests with Rule-36's gating (an arbitrary past month
+    // with no period row refuses outright) for no reason.
+    fn insert_bve(conn: &Connection, member_id: i64, amount: i64, entry_date: &str) -> i64 {
+        let period_month = &entry_date[..7];
+        conn.execute(
+            "INSERT INTO business_volume_entries (member_id, amount, entry_date, period_month, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?3)",
+            rusqlite::params![member_id, amount, entry_date, period_month],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    #[test]
+    fn list_period_entries_excludes_other_months_and_sorts_newest_date_first() {
+        let db = TempDb::new();
+        let a = insert_member(&db.conn, None);
+        let b = insert_member(&db.conn, None);
+        let earlier = insert_bve(&db.conn, a, 1_000, "2026-08-05");
+        let later = insert_bve(&db.conn, b, 2_000, "2026-08-20");
+        // A different month's entry must never appear in "2026-08"'s list.
+        insert_bve(&db.conn, a, 3_000, "2026-07-10");
+
+        let result = list_period_entries(&db.conn, "2026-08").unwrap();
+        assert_eq!(result.period_month, "2026-08");
+        assert_eq!(result.entries.len(), 2);
+        assert_eq!(result.entries[0].id, later, "the 20th sorts before the 5th");
+        assert_eq!(result.entries[1].id, earlier);
+        assert_eq!(result.entries[0].member_name, "T");
+    }
+
+    #[test]
+    fn list_period_entries_ties_on_date_break_by_newest_id_first() {
+        let db = TempDb::new();
+        let a = insert_member(&db.conn, None);
+        let first = insert_bve(&db.conn, a, 1_000, "2026-08-05");
+        let second = insert_bve(&db.conn, a, 2_000, "2026-08-05");
+
+        let result = list_period_entries(&db.conn, "2026-08").unwrap();
+        assert_eq!(result.entries[0].id, second);
+        assert_eq!(result.entries[1].id, first);
+    }
+
+    #[test]
+    fn list_period_entries_returns_empty_for_a_month_with_no_entries() {
+        let db = TempDb::new();
+        let result = list_period_entries(&db.conn, "2026-08").unwrap();
+        assert!(result.entries.is_empty());
     }
 }

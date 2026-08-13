@@ -28,7 +28,7 @@ describe("Business Volume Entry", () => {
       referenceId: rootId,
     });
 
-    await navigateTo("Business Volume Entry");
+    await navigateTo("Volume Entry");
     await $("#entry-search").setValue("Asha");
     const result = $("button*=Asha Patel");
     await result.waitForExist({ timeout: 3000 });
@@ -39,13 +39,13 @@ describe("Business Volume Entry", () => {
     await expect(saveButton).toBeEnabled();
     await saveButton.click();
 
-    // "Recorded this session" is the local, honest substitute for a
-    // period-entries list — no command in the closed 40-command surface
-    // lists a member's past entries yet (see business-volume-entry.tsx's
-    // own doc comment).
-    const sessionList = $("div=Recorded this session");
-    await sessionList.waitForExist({ timeout: 3000 });
-    await expect($("span=1000.00")).toExist();
+    // API-41's `list_period_entries` backs the real period table below the
+    // form — the saved entry must show up as a row, and the "Entries
+    // recorded" summary node must count it.
+    const amountCell = $("td*=1000.00");
+    await amountCell.waitForExist({ timeout: 3000 });
+    await expect($("td*=Asha Patel")).toExist();
+    await expect($('[id="entries-page-size"]')).toExist();
   });
 
   // T-M2.5-4's negative case: a fresh console has exactly one recordable
@@ -61,7 +61,7 @@ describe("Business Volume Entry", () => {
     // Reuses the session the previous test already set up — nothing here
     // has touched a second period, so exactly one month (the current one)
     // is still recordable.
-    await navigateTo("Business Volume Entry");
+    await navigateTo("Volume Entry");
     await expect($("*=Showing figures for")).not.toExist();
   });
 });

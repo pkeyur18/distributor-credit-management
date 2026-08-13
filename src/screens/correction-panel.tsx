@@ -13,9 +13,11 @@ import { centsToDisplay, displayToCents } from "@/lib/utils";
 
 // US-M2.2 (§5.5), Rule-39 — `edit_entry` is the sole correction mechanism,
 // live period or closed month alike. Looked up **by Entry ID**, not by
-// searching a member's history: no command in the closed 40-command
-// surface lists a member's past entries yet (get_member_detail is S8,
-// get_audit_log is S14), and there's no read command to preview an entry's
+// searching a member's history: `list_period_entries` (API-41) lists a
+// month's entries across every member, not one member's entries across
+// every month — no command in the closed 41-command surface covers that
+// axis yet (get_member_detail is S8, get_audit_log is S14), and there's
+// no read command to preview an entry's
 // current amount/date before editing either — this is a direct correction
 // (new amount + new date go straight to `edit_entry`), not a browse-then-
 // edit flow. An operator working from a paper record already knows what

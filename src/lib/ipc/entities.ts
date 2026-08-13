@@ -27,6 +27,25 @@ export interface BusinessVolumeEntry {
   updatedAt: string | null;
 }
 
+// API-41. Flat DTO (member name blended in server-side, same shape as
+// SearchResult) — Volume Entry's period table and its two summary nodes
+// all read off this one list rather than round-tripping for separate
+// aggregates.
+export interface PeriodEntryRecord {
+  id: number;
+  memberId: number;
+  memberName: string;
+  amount: number;
+  entryDate: string;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+export interface PeriodEntries {
+  periodMonth: string;
+  entries: PeriodEntryRecord[];
+}
+
 export interface SlabRow {
   id: number;
   threshold: number;

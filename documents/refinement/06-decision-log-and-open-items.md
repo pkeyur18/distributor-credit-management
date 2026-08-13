@@ -42,9 +42,9 @@ A conflict that precedence does not settle belongs in §3, not in code.
 |---|---|
 | **Disagreement** | `12-implementation-context.md` §4 says "32-command IPC surface"; §7 of the same file says "36 Tauri IPC commands"; `08-testing-strategy.md` says "there are 36 commands"; `04-api-specification.md` enumerates **API-01 … API-40**. |
 | **Cause** | Three additions in sequence: the original 26 in `architecture.md` Appendix C, minus `reverse_entry` (dropped), plus API-33 and API-34–36 on 6 August, plus API-37–40 on 7 August. Each document froze at a different point. |
-| **Resolution** | **40 commands**, API-01 to API-40, with no gaps. Full contracts in [04](04-technical-architecture.md) §6. |
-| **Authority** | `04-api-specification.md` command-surface summary, 7 Aug 2026 (tier 3, later date, and the document that owns the surface). |
-| **Build consequence** | The Tauri capability allowlist has 40 entries. The contract-test suite has 40 tests, not 36. |
+| **Resolution** | **41 commands**, API-01 to API-41, with no gaps (amended 13 Aug 2026 — `list_period_entries`, API-41 — see "13 August 2026" below). Full contracts in [04](04-technical-architecture.md) §6. |
+| **Authority** | `04-api-specification.md` command-surface summary, 13 Aug 2026 (tier 3, later date, and the document that owns the surface). |
+| **Build consequence** | The Tauri capability allowlist has 41 entries. The contract-test suite has 41 tests, not 36. |
 
 ### C3 — Unauthenticated commands: six or seven?
 
@@ -347,6 +347,16 @@ Raised by the client just before implementation begins. CR-4 changes a calculati
 | **Rule** | No new rule number — a display aggregation of already-defined figures, same as the members-by-slab chart itself has none. FR-1 (extended), V4.6 (new), AC-47 |
 | **Rejected alternative** | A single combined chart showing both member count and Rewards total per bar. Two simple, familiar charts read faster at a glance than one denser dual-value one — the client asked for "easy to understand in one glance," and reuse of an already-understood pattern serves that directly |
 | **No new API/data model change** | Computed from the same in-memory period figures the existing chart already reads; no dedicated backend command exists for either chart today, and none is being added for this one |
+
+### 13 August 2026 — Volume Entry period table and summary nodes
+
+| | |
+|---|---|
+| **Requested** | Volume Entry's entry list should show the real period's entries (every member, not just the current session), sorted by recorded date descending, paginated (10/25/50, default 10), titled `<Month> <Year> entries`. Two summary nodes above the lock-status banner: total entries recorded in that month, and entries recorded today |
+| **Which month** | Reuses the existing recording-month rule (T-M2.3-2/T-M2.3-4, CR-2) rather than a new one: the outstanding month while one exists, otherwise the current month |
+| **Decided** | **API-41 `list_period_entries`** added — the closed 40-command surface (C2) becomes 41. Returns the full month's entry list (member name blended in server-side); both summary nodes and the table's pagination derive from this one fetch client-side, no separate aggregate commands |
+| **Entry-count definition** | Raw entry-record count, not distinct members — a member with two entries in the month counts as two |
+| **Rule** | No new business rule — a read-only listing of already-recorded data, same status as `get_audit_log` (API-32) |
 
 ---
 

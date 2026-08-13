@@ -1,4 +1,4 @@
-// The full 40-command IPC surface (04-technical-architecture.md §6 / §6.1),
+// The full 41-command IPC surface (04-technical-architecture.md §6 / §6.1),
 // registered together so the S4 exit gate ("the contract harness asserts
 // exactly seven unauthenticated commands and 40 total" — 02-roadmap.md) is
 // real from this sprint onward. Only API-01/API-02 (US-M1.1) have logic;
@@ -160,6 +160,22 @@ pub fn get_period_lock_status(
         "an authenticated session implies an open database connection — see S5's login flow",
     );
     m5_close::get_period_lock_status(conn)
+}
+
+/// API-41. `period_month` is caller-supplied — Volume Entry already
+/// resolves it via `get_period_lock_status`, so this doesn't re-derive it.
+#[tauri::command]
+pub fn list_period_entries(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    period_month: String,
+) -> Result<m2_entries::PeriodEntries, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m2_entries::list_period_entries(conn, &period_month)
 }
 
 // M3 — US-M3.1/M3.2, S6; US-M7.3's `preview_settings_impact`, S11.
@@ -864,6 +880,8 @@ mod tests {
             // US-M5.2/M5.3/M2.3/M2.4, S12.
             "get_period_lock_status",
             "get_outstanding_alert",
+            // US-M2.1 period-entries table + summary nodes.
+            "list_period_entries",
             // US-M6.5/M6.1/M6.2/M6.3/M6.4, S13.
             "export_monthly",
             "export_yearly_average",

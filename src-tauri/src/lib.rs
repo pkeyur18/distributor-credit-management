@@ -47,6 +47,7 @@ pub fn run() {
             commands::record_entry,
             commands::edit_entry,
             commands::get_period_lock_status,
+            commands::list_period_entries,
             commands::preview_settings_impact,
             commands::get_member_detail,
             commands::get_direct_children_chart,

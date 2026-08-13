@@ -1,5 +1,13 @@
 import type { LucideIcon } from "lucide-react";
-import { Home, GitBranch, PlusCircle, CalendarCheck, Settings, FileBarChart, History } from "lucide-react";
+import {
+  Home,
+  GitBranch,
+  PlusCircle,
+  CalendarCheck,
+  Settings,
+  FileBarChart,
+  History,
+} from "lucide-react";
 
 export interface NavItem {
   to: string;
@@ -15,7 +23,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Home", icon: Home },
   { to: "/structure", label: "Structure", icon: GitBranch },
-  { to: "/entry", label: "Volumn Entry", icon: PlusCircle },
+  { to: "/entry", label: "Volume Entry", icon: PlusCircle },
   { to: "/close", label: "Monthly Close", icon: CalendarCheck, group: "Period" },
   { to: "/reports", label: "Reports", icon: FileBarChart },
   { to: "/settings", label: "Settings", icon: Settings, group: "Admin" },

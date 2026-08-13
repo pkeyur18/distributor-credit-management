@@ -160,7 +160,7 @@ Full trees: [02](02-business-rules.md) §5. Scenarios 1–5 are the client's own
 - **The settings preview must equal what actually lands:** capture the Rewards figure the warning predicts, confirm the save, then re-open the warning with no further edits and confirm the settled "before" figure equals the earlier prediction exactly.
 - Restore from backup: against a deliberately corrupted database, confirm the recovery state appears rather than a crash; confirm a checksum-mismatch restore is refused and leaves the corrupt file untouched; confirm a successful restore leaves the app at sign-in with the credential still required.
 
-**API / contract — the 40-command IPC surface**
+**API / contract — the 41-command IPC surface**
 One test per command in [04](04-technical-architecture.md) §6: request/response shape, validation rules, authorization, documented error responses. No HTTP layer — these are direct Tauri command-invocation tests against the Rust core.
 
 **Authorization is tested as a closed set, not per-command.** Exactly **seven** commands may run unauthenticated (see [06](06-decision-log-and-open-items.md) C3): `login`, `setup_first_run`, `use_recovery_code`, `check_data_readable`, `list_restore_points`, `restore_from_backup`, `restore_from_backup_file`. The test asserts that list exactly — every other command must refuse without a session, and no eighth command may join the set without the test failing.

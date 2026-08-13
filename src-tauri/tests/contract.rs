@@ -114,23 +114,24 @@ fn root_input(phone: &str) -> CreateRootMemberInput {
     }
 }
 
-// T-QA.2-3: the surface holds exactly 40 commands, API-01 to API-40, no
-// gaps — and this list is the same one `lib.rs` feeds to
-// `generate_handler!` and `build.rs` feeds to the ACL generator (via
-// `command_names.rs`), so the three can never quietly drift apart.
+// T-QA.2-3: the surface holds exactly 41 commands, API-01 to API-41, no
+// gaps (amended for API-41 — see 06-decision-log-and-open-items.md) — and
+// this list is the same one `lib.rs` feeds to `generate_handler!` and
+// `build.rs` feeds to the ACL generator (via `command_names.rs`), so the
+// three can never quietly drift apart.
 #[test]
-fn the_command_surface_holds_exactly_forty_commands() {
+fn the_command_surface_holds_exactly_forty_one_commands() {
     assert_eq!(
         ALL_COMMAND_NAMES.len(),
-        40,
-        "API-01 to API-40, no gaps (C2)"
+        41,
+        "API-01 to API-41, no gaps (C2)"
     );
 
     let capabilities = include_str!("../capabilities/default.json");
     let allow_count = capabilities.matches("\"allow-").count();
     assert_eq!(
-        allow_count, 40,
-        "the Tauri capability allowlist must have exactly 40 allow-* entries"
+        allow_count, 41,
+        "the Tauri capability allowlist must have exactly 41 allow-* entries"
     );
     for name in ALL_COMMAND_NAMES {
         // Tauri's ACL identifiers are hyphen-only (autogenerate_command_permissions
@@ -171,9 +172,10 @@ fn the_unauthenticated_set_is_exactly_the_named_seven() {
 
 // T-QA.2-2's generic stub-command loop (`call_stub_by_name`) is retired as
 // of S14: `get_audit_log` was the last command without real logic, and
-// every one of the 40 in `ALL_COMMAND_NAMES` now has its own dedicated
+// every one of the 41 in `ALL_COMMAND_NAMES` now has its own dedicated
 // auth-gating test (this file, plus `ipc_dispatch.rs`) — see
-// `get_audit_log_requires_a_session` below for the last graduate.
+// `get_audit_log_requires_a_session` below for the last S14 graduate, and
+// `list_period_entries_requires_a_session` for API-41's.
 
 #[test]
 fn create_root_member_requires_a_session() {
@@ -1278,6 +1280,17 @@ fn get_period_lock_status_and_get_outstanding_alert_require_a_session() {
         commands::get_outstanding_alert(app.state::<SessionState>(), app.state::<DbState>()),
         Err(AppError::AuthRequired)
     ));
+}
+
+#[test]
+fn list_period_entries_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::list_period_entries(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        "2026-08".into(),
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
 }
 
 #[test]
