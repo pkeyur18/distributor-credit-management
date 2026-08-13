@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ChevronRight } from "lucide-react";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +23,11 @@ import type { ChartNode } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { centsToDisplay } from "@/lib/utils";
 import { FULL_TREE_GATE } from "@/windows/full-hierarchy-layout";
+import {
+  computeParentChildConnectorLines,
+  type Box,
+  type ConnectorLine,
+} from "./structure-tree-layout";
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 1.5;
@@ -136,32 +140,44 @@ export function Structure() {
   // approach the prototype's own drawTreeConnectors() uses. Not the Full
   // Hierarchy Window's constraint (T-M4.3-4 forbids it there specifically,
   // for that screen's much larger node count).
-  const [lines, setLines] = useState<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
+  const [lines, setLines] = useState<ConnectorLine[]>([]);
   useLayoutEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const canvasBox = canvas.getBoundingClientRect();
-    const next: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-    openPath.forEach((parentId) => {
-      const children = levels[parentId];
-      const parentEl = nodeRefs.current.get(parentId);
-      if (!children || !parentEl) return;
-      const parentBox = parentEl.getBoundingClientRect();
-      const x1 = parentBox.left + parentBox.width / 2 - canvasBox.left;
-      const y1 = parentBox.bottom - canvasBox.top;
-      children.forEach((child) => {
-        const childEl = nodeRefs.current.get(child.memberId);
-        if (!childEl) return;
-        const childBox = childEl.getBoundingClientRect();
-        next.push({
-          x1,
-          y1,
-          x2: childBox.left + childBox.width / 2 - canvasBox.left,
-          y2: childBox.top - canvasBox.top,
-        });
+    function recomputeLines() {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const canvasBox = canvas.getBoundingClientRect();
+      // Rects here are post-transform screen pixels, but this SVG sits inside
+      // the same `transform: scale(zoom)` canvas as the nodes it connects — so
+      // dividing zoom back out here (matching the prototype's drawTreeConnectors)
+      // keeps the ancestor's scale from being applied twice.
+      const toLocalBox = (rect: DOMRect): Box => ({
+        x: (rect.left - canvasBox.left) / zoom,
+        y: (rect.top - canvasBox.top) / zoom,
+        width: rect.width / zoom,
+        height: rect.height / zoom,
       });
-    });
-    setLines(next);
+      const next: ConnectorLine[] = [];
+      openPath.forEach((parentId) => {
+        const children = levels[parentId];
+        const parentEl = nodeRefs.current.get(parentId);
+        if (!children || !parentEl) return;
+        const childBoxes = children
+          .map((child) => nodeRefs.current.get(child.memberId))
+          .filter((el): el is HTMLDivElement => !!el)
+          .map((el) => toLocalBox(el.getBoundingClientRect()));
+        next.push(
+          ...computeParentChildConnectorLines(toLocalBox(parentEl.getBoundingClientRect()), childBoxes),
+        );
+      });
+      setLines(next);
+    }
+    recomputeLines();
+    // Resizing/maximizing the window reflows the centred rows (node
+    // positions shift) without touching any of this effect's own deps —
+    // same gap the prototype's own resize listener closes for
+    // drawTreeConnectors (ui-prototype-v2.html:1398).
+    window.addEventListener("resize", recomputeLines);
+    return () => window.removeEventListener("resize", recomputeLines);
   }, [rootNode, openPath, levels, zoom]);
 
   function fitWidth() {
@@ -219,7 +235,7 @@ export function Structure() {
   }
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader title="Structure" subtitle="Open one branch at a time" />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -296,10 +312,13 @@ export function Structure() {
         />
       )}
 
-      <div ref={wrapRef} className="mt-4 overflow-x-auto rounded-lg border border-border bg-bg p-6">
+      <div
+        ref={wrapRef}
+        className="mt-4 min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-bg p-6"
+      >
         <div
           ref={canvasRef}
-          className="relative flex origin-top-left flex-col items-start gap-9"
+          className="relative flex origin-top-left flex-col items-center gap-9"
           style={{ transform: `scale(${zoom})` }}
         >
           <TreeConnectorLayer>
@@ -359,9 +378,11 @@ export function Structure() {
         </div>
       </div>
 
-      <p className="text-caption mt-3 flex items-center justify-center gap-1 text-center">
-        Click a member to open the legs beneath them <ChevronRight className="size-3" /> opening one
-        closes the branch already open at that level.
+      <p className="text-caption mx-auto mt-3 max-w-3xl shrink-0 text-center">
+        Click a member to open the legs beneath them; opening one closes the branch already open at
+        that level. A wide level scrolls sideways — use the zoom to take more of it in. Each card
+        shows name, member number and own Business Volume only. <strong>View full hierarchy</strong>{" "}
+        opens the whole structure, every branch expanded, in a separate window.
       </p>
 
       <ConfirmDialog
@@ -386,6 +407,6 @@ export function Structure() {
           openFullHierarchyWindow();
         }}
       />
-    </>
+    </div>
   );
 }

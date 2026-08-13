@@ -101,18 +101,23 @@ export function computeFullTreeLayout(nodes: ChartNode[]): FullTreeLayout {
     if (parent) parent.childXs.push(x);
   }
 
+  // Ported from the prototype's layoutFullTree, which routes each edge as an
+  // elbow (down, across, down) through the midpoint of the vertical gap
+  // rather than a straight diagonal — 'M px py V mid H cx V cy'.
   const lines: FullTreeLine[] = [];
   for (const n of nodes) {
     if (n.introducerMemberId == null) continue;
     const parentPos = positions.get(n.introducerMemberId);
     const childPos = positions.get(n.memberId);
     if (!parentPos || !childPos) continue;
-    lines.push({
-      x1: parentPos.x + FT_NODE_W / 2,
-      y1: parentPos.y + FT_NODE_H,
-      x2: childPos.x + FT_NODE_W / 2,
-      y2: childPos.y,
-    });
+    const px = parentPos.x + FT_NODE_W / 2;
+    const py = parentPos.y + FT_NODE_H;
+    const cx = childPos.x + FT_NODE_W / 2;
+    const cy = childPos.y;
+    const midY = py + FT_GAP_Y / 2;
+    lines.push({ x1: px, y1: py, x2: px, y2: midY });
+    lines.push({ x1: px, y1: midY, x2: cx, y2: midY });
+    lines.push({ x1: cx, y1: midY, x2: cx, y2: cy });
   }
 
   return {
