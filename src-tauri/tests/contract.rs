@@ -222,8 +222,9 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
         // US-M5.2/M5.3/M2.3/M2.4, S12.
         "get_period_lock_status",
         "get_outstanding_alert",
-        // US-M6.5/M6.1, S13.
+        // US-M6.5/M6.1/M6.2, S13.
         "export_monthly",
+        "export_yearly_average",
     ];
     for &name in ALL_COMMAND_NAMES
         .iter()
@@ -1197,6 +1198,35 @@ fn export_monthly_end_to_end_through_the_command_layer() {
             optional_columns: vec!["active_status".into()],
             output_path: output_path.to_string_lossy().into_owned(),
         },
+    )
+    .unwrap();
+
+    assert_eq!(result.file_path, output_path.to_string_lossy());
+    assert!(output_path.exists());
+}
+
+#[test]
+fn export_yearly_average_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::export_yearly_average(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        "unused.xlsx".into(),
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn export_yearly_average_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+
+    let output_dir = TempAppDir::new("export-yearly-average-output");
+    let output_path = output_dir.0.join("yearly.xlsx");
+    let result = commands::export_yearly_average(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        output_path.to_string_lossy().into_owned(),
     )
     .unwrap();
 

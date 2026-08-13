@@ -312,6 +312,97 @@ pub fn export_monthly(
     })
 }
 
+struct YearlyAverageRow {
+    id: i64,
+    name: String,
+    phone: String,
+    avg_business_volume: f64,
+    avg_total_business_volume: f64,
+    period_count: i64,
+}
+
+/// Rule-23: the divisor is **per member** — the count of periods that
+/// specifically have a snapshot *for that member*, not a single
+/// system-wide count shared by everyone. T-M6.2-1's "protects late
+/// joiners" is exactly this: a member who joined two months ago has only
+/// two possible snapshots and must average over two, not over every
+/// period the console has ever closed. A member with zero snapshots
+/// (nothing ever closed since they joined) has nothing to average and is
+/// excluded from the report entirely, rather than shown as a division by
+/// zero.
+fn compute_yearly_averages(conn: &Connection) -> Result<Vec<YearlyAverageRow>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT m.id, m.name, m.phone,
+                AVG(s.business_volume), AVG(s.total_business_volume), COUNT(*)
+         FROM members m
+         JOIN monthly_snapshots s ON s.member_id = m.id
+         WHERE s.version = (
+                SELECT MAX(version) FROM monthly_snapshots s2
+                WHERE s2.member_id = s.member_id AND s2.period_id = s.period_id
+               )
+         GROUP BY m.id
+         ORDER BY m.id",
+    )?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(YearlyAverageRow {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                phone: r.get(2)?,
+                avg_business_volume: r.get(3)?,
+                avg_total_business_volume: r.get(4)?,
+                period_count: r.get(5)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// API-17. Extract carries both the Total Business Volume and own-Business
+/// Volume averages, each sharing the one "Months" count (T-M6.2-3) — both
+/// figures are averaged over exactly the same set of periods, since a
+/// snapshot row always carries both fields together.
+pub fn export_yearly_average(
+    conn: &Connection,
+    output_path: &str,
+) -> Result<ExportResult, AppError> {
+    let rows = compute_yearly_averages(conn)?;
+
+    let mut workbook = Workbook::new();
+    let worksheet = workbook.add_worksheet();
+    let headers = [
+        "Name",
+        "Member Number",
+        "Phone",
+        "Average Business Volume",
+        "Average Total Business Volume",
+        "Months",
+    ];
+    for (col, header) in headers.iter().enumerate() {
+        worksheet.write(0, col as u16, *header).map_err(xlsx_err)?;
+    }
+    for (i, row) in rows.iter().enumerate() {
+        let r = (i + 1) as u32;
+        worksheet.write(r, 0, row.name.as_str()).map_err(xlsx_err)?;
+        worksheet.write(r, 1, row.id).map_err(xlsx_err)?;
+        worksheet
+            .write(r, 2, row.phone.as_str())
+            .map_err(xlsx_err)?;
+        worksheet
+            .write(r, 3, row.avg_business_volume / 100.0)
+            .map_err(xlsx_err)?;
+        worksheet
+            .write(r, 4, row.avg_total_business_volume / 100.0)
+            .map_err(xlsx_err)?;
+        worksheet.write(r, 5, row.period_count).map_err(xlsx_err)?;
+    }
+    workbook.save(output_path).map_err(xlsx_err)?;
+
+    Ok(ExportResult {
+        file_path: output_path.to_string(),
+    })
+}
+
 /// D-1/Rule-19/Rule-33 (06-decision-log-and-open-items.md C9): five
 /// columns, always present on every per-member extract, untickable in the
 /// column picker, in this fixed order.
@@ -669,5 +760,71 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn compute_yearly_averages_divides_by_the_members_own_snapshot_count_not_a_global_one() {
+        // T-M6.2-1: "protects late joiners" — Member A has three closed
+        // periods' worth of snapshots, Member B (a late joiner) has one.
+        // B's average must divide by 1, not by 3.
+        let conn = seeded();
+        let p1 = insert_period(&conn, "2026-03", "closed");
+        let p2 = insert_period(&conn, "2026-04", "closed");
+        let p3 = insert_period(&conn, "2026-05", "closed");
+        let a = insert_member(&conn, "Long Timer", true, None);
+        let b = insert_member(&conn, "Late Joiner", true, None);
+        insert_snapshot(&conn, a, p1, 1, 100_000, 100_000, true);
+        insert_snapshot(&conn, a, p2, 1, 200_000, 200_000, true);
+        insert_snapshot(&conn, a, p3, 1, 300_000, 300_000, true);
+        insert_snapshot(&conn, b, p3, 1, 90_000, 90_000, true);
+
+        let rows = compute_yearly_averages(&conn).unwrap();
+        let a_row = rows.iter().find(|r| r.id == a).unwrap();
+        let b_row = rows.iter().find(|r| r.id == b).unwrap();
+
+        assert_eq!(a_row.period_count, 3);
+        assert_eq!(a_row.avg_business_volume, 200_000.0); // (100k+200k+300k)/3
+
+        assert_eq!(
+            b_row.period_count, 1,
+            "late joiner divides by their own count"
+        );
+        assert_eq!(b_row.avg_business_volume, 90_000.0);
+    }
+
+    #[test]
+    fn compute_yearly_averages_uses_the_corrected_version_not_the_original() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-05", "closed");
+        let member = insert_member(&conn, "Corrected", true, None);
+        insert_snapshot(&conn, member, period, 1, 100_000, 100_000, true);
+        insert_snapshot(&conn, member, period, 2, 400_000, 400_000, true);
+
+        let rows = compute_yearly_averages(&conn).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].avg_business_volume, 400_000.0);
+    }
+
+    #[test]
+    fn compute_yearly_averages_excludes_a_member_with_no_snapshot_at_all() {
+        let conn = seeded();
+        insert_member(&conn, "Never Closed A Month Under", true, None);
+        let rows = compute_yearly_averages(&conn).unwrap();
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn export_yearly_average_writes_a_file_with_the_expected_header() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-05", "closed");
+        let member = insert_member(&conn, "Solo", true, None);
+        insert_snapshot(&conn, member, period, 1, 100_000, 100_000, true);
+        let output_path = temp_output_path("yearly-average");
+
+        let result = export_yearly_average(&conn, &output_path.to_string_lossy()).unwrap();
+
+        assert_eq!(result.file_path, output_path.to_string_lossy());
+        assert!(output_path.exists());
+        std::fs::remove_dir_all(output_path.parent().unwrap()).ok();
     }
 }

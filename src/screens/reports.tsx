@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { useToast } from "@/components/ui/toast";
 import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
-import { exportMonthly } from "@/lib/ipc/m6-reports";
+import { exportMonthly, exportYearlyAverage } from "@/lib/ipc/m6-reports";
 import { MANDATORY_EXPORT_COLUMNS, OPTIONAL_EXPORT_COLUMNS } from "@/lib/export-columns";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { monthLabel } from "@/lib/utils";
@@ -23,6 +23,7 @@ export function Reports() {
   const viewMonth = selectedMonth ?? lockStatus?.recordablePeriodMonths[0];
   const [columns, setColumns] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
+  const [exportingYearly, setExportingYearly] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -58,6 +59,23 @@ export function Reports() {
       toast.add({ title: toErrorPresentation(raw).message, type: "danger" });
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleExportYearlyAverage() {
+    const outputPath = await saveFileDialog({
+      defaultPath: "member-rewards-yearly-average.xlsx",
+      filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }],
+    });
+    if (!outputPath) return;
+    setExportingYearly(true);
+    try {
+      await exportYearlyAverage(outputPath);
+      toast.add({ title: "Yearly average exported", type: "success" });
+    } catch (raw) {
+      toast.add({ title: toErrorPresentation(raw).message, type: "danger" });
+    } finally {
+      setExportingYearly(false);
     }
   }
 
@@ -110,6 +128,26 @@ export function Reports() {
             </label>
           ))}
         </div>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <div>
+            <CardTitle>Yearly average</CardTitle>
+            <CardDescription>
+              Divides by each member&apos;s own count of closed months — never a fixed twelve
+              (Rule-23)
+            </CardDescription>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={exportingYearly}
+            onClick={handleExportYearlyAverage}
+          >
+            Export .xlsx
+          </Button>
+        </CardHeader>
       </Card>
     </>
   );

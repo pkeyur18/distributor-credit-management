@@ -19,9 +19,11 @@ export function exportMonthly(input: ExportMonthlyInput): Promise<ExportResult> 
   return invokeCommand("export_monthly", { ...input });
 }
 
-// API-17 — snapshot-count denominator, displayed alongside the average (Rule-23).
-export function exportYearlyAverage(): Promise<ExportResult> {
-  return invokeCommand("export_yearly_average");
+// API-17 — snapshot-count denominator, displayed alongside the average
+// (Rule-23), divided per member so a late joiner's average isn't dragged
+// down by periods before they existed (T-M6.2-1).
+export function exportYearlyAverage(outputPath: string): Promise<ExportResult> {
+  return invokeCommand("export_yearly_average", { outputPath });
 }
 
 export interface ExportLowContributionInput {
