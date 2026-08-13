@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input, InputHint } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import { AlertNote } from "@/components/ui/alert-note";
+import {
+  TableWrap,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 import { SearchResultsList } from "@/components/search-results-list";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { PageHeader } from "@/components/page-header";
@@ -17,6 +26,28 @@ import type { SearchResult } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { useToast } from "@/components/ui/toast";
 import { centsToDisplay, displayToCents, monthLabel } from "@/lib/utils";
+
+const PAGE_SIZES = [10, 25, 50] as const;
+
+// Frontend-only pairing of a recorded entry with the member name shown
+// against it — `BusinessVolumeEntry` itself carries no name (see
+// entities.ts), and this session-scoped list is the only feed available
+// (no command in the closed 40-command surface lists a member's past
+// entries yet — same gap the file's header comment already documents).
+type SessionEntry = Entry & { memberName: string };
+
+// Strips anything that isn't a digit or decimal point as the operator
+// types, and collapses a second "." rather than let it through — a
+// keystroke-level guard only. The actual amount validation stays in
+// displayToCents (Rule-16/Rule-16a) below, untouched.
+function stripNonNumeric(raw: string): string {
+  const digitsAndDots = raw.replace(/[^\d.]/g, "");
+  const firstDot = digitsAndDots.indexOf(".");
+  if (firstDot === -1) return digitsAndDots;
+  return (
+    digitsAndDots.slice(0, firstDot + 1) + digitsAndDots.slice(firstDot + 1).replace(/\./g, "")
+  );
+}
 
 function isoDate(d: Date) {
   const y = d.getFullYear();
@@ -61,7 +92,9 @@ export function BusinessVolumeEntry() {
   const [amountError, setAmountError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [sessionEntries, setSessionEntries] = useState<Entry[]>([]);
+  const [sessionEntries, setSessionEntries] = useState<SessionEntry[]>([]);
+  const [entriesPage, setEntriesPage] = useState(0);
+  const [entriesPageSize, setEntriesPageSize] = useState<number>(PAGE_SIZES[0]);
   const toast = useToast();
   const bounds = monthBounds(recordingMonth);
   const [searchParams] = useSearchParams();
@@ -106,7 +139,8 @@ export function BusinessVolumeEntry() {
     setDateError(null);
     try {
       const entry = await recordEntry({ memberId: selected.id, amount: cents, entryDate: date });
-      setSessionEntries((prev) => [entry, ...prev]);
+      setSessionEntries((prev) => [{ ...entry, memberName: selected.name }, ...prev]);
+      setEntriesPage(0);
       setAmountInput("");
       toast.add({
         title: `Recorded ${centsToDisplay(entry.amount)} for ${selected.name}`,
@@ -142,154 +176,224 @@ export function BusinessVolumeEntry() {
     }
   }
 
+  const sortedEntries = [...sessionEntries].sort(
+    (a, b) => b.entryDate.localeCompare(a.entryDate) || b.id - a.id,
+  );
+  const totalEntriesPages = Math.max(1, Math.ceil(sortedEntries.length / entriesPageSize));
+  const currentEntriesPage = Math.min(entriesPage, totalEntriesPages - 1);
+  const entriesRangeStart = currentEntriesPage * entriesPageSize;
+  const entriesPageRows = sortedEntries.slice(
+    entriesRangeStart,
+    entriesRangeStart + entriesPageSize,
+  );
+
   return (
     <>
-      <PageHeader title="Business Volume Entry" />
+      <PageHeader title="Volume Entry" />
 
-      {lockStatus && (
-        <AlertNote variant="warn" className="mt-3.5 max-w-md">
-          Recording into <strong>{monthLabel(recordingMonth)}</strong>.{" "}
-          {lockStatus.blockingMonth
-            ? `${monthLabel(currentYm())} entries can be recorded once ${monthLabel(
-                lockStatus.blockingMonth,
-              )} is closed.`
-            : "Dates are limited to this month."}
-        </AlertNote>
-      )}
+      <div className="mx-auto max-w-200">
+        {lockStatus && (
+          <AlertNote variant="warn" className="mt-3.5">
+            Recording into <strong>{monthLabel(recordingMonth)}</strong>.{" "}
+            {lockStatus.blockingMonth
+              ? `${monthLabel(currentYm())} entries can be recorded once ${monthLabel(
+                  lockStatus.blockingMonth,
+                )} is closed.`
+              : "Dates are limited to this month."}
+          </AlertNote>
+        )}
 
-      {lockStatus && (
-        <MonthSwitcher
-          className="max-w-md"
-          months={lockStatus.recordablePeriodMonths}
-          value={recordingMonth}
-          onChange={handleMonthChange}
-        />
-      )}
+        {lockStatus && (
+          <MonthSwitcher
+            months={lockStatus.recordablePeriodMonths}
+            value={recordingMonth}
+            onChange={handleMonthChange}
+          />
+        )}
 
-      <div className="mt-5 max-w-md rounded-lg border border-border bg-surface p-4.5">
-        {selected ? (
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-1.5 text-title-sm">
-                {selected.name}
-                {!selected.isActive && <Pill variant="inactive">Inactive</Pill>}
-              </div>
-              <div className="mono text-[11px] text-muted-text">
-                #{selected.id} · {selected.phone}
-              </div>
-              <div className="mt-1 flex items-center gap-2 text-caption">
-                <span>
-                  {/* SearchResult.totalBusinessVolume is already a real-unit
+        <div className="mt-5 rounded-lg border border-border bg-surface p-4.5">
+          {selected ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-1.5 text-title-sm">
+                  {selected.name}
+                  {!selected.isActive && <Pill variant="inactive">Inactive</Pill>}
+                </div>
+                <div className="mono text-[11px] text-muted-text">
+                  #{selected.id} · {selected.phone}
+                </div>
+                <div className="mt-1 flex items-center gap-2 text-caption">
+                  <span>
+                    {/* SearchResult.totalBusinessVolume is already a real-unit
                       decimal (search_members converts server-side), unlike
                       BusinessVolumeEntry.amount/MemberPeriodFigures below,
                       which stay ×100 integers per ADR-004 — two different,
                       pre-existing conventions live on the wire today. */}
-                  TBV <span className="num">{selected.totalBusinessVolume.toFixed(2)}</span>
-                </span>
-                <Pill variant="slab">{selected.slabPct}%</Pill>
+                    TBV <span className="num">{selected.totalBusinessVolume.toFixed(2)}</span>
+                  </span>
+                  <Pill variant="slab">{selected.slabPct}%</Pill>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
+                Change
+              </Button>
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="entry-search" className="text-label mb-1 block">
+                Member
+              </label>
+              <Input
+                id="entry-search"
+                placeholder="Search by name, 6-digit member number or phone"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <div className="mt-1.5">
+                <SearchResultsList
+                  results={results}
+                  query={query}
+                  onSelect={(r) => {
+                    setSelected(r);
+                    setQuery("");
+                  }}
+                />
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
-              Change
-            </Button>
-          </div>
-        ) : (
-          <div>
-            <label htmlFor="entry-search" className="text-label mb-1 block">
-              Member
+          )}
+
+          <div className="mt-3.5">
+            <label htmlFor="entry-date" className="text-label mb-1 block">
+              Date <span className="text-danger">*</span>
             </label>
             <Input
-              id="entry-search"
-              placeholder="Search by name, 6-digit member number or phone"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              id="entry-date"
+              type="date"
+              min={bounds.min}
+              max={bounds.max}
+              value={date}
+              disabled={!selected}
+              aria-invalid={!!dateError}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setDateError(null);
+              }}
             />
-            <div className="mt-1.5">
-              <SearchResultsList
-                results={results}
-                query={query}
-                onSelect={(r) => {
-                  setSelected(r);
-                  setQuery("");
-                }}
-              />
+            {dateError && <InputHint error>{dateError}</InputHint>}
+          </div>
+
+          <div className="mt-3.5">
+            <label htmlFor="entry-amount" className="text-label mb-1 block">
+              Business Volume <span className="text-danger">*</span>
+            </label>
+            <Input
+              id="entry-amount"
+              className="num text-numeric-lg h-14.5"
+              type="text"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={amountInput}
+              disabled={!selected}
+              aria-invalid={!!amountError}
+              onChange={(e) => {
+                setAmountInput(stripNonNumeric(e.target.value));
+                setAmountError(null);
+              }}
+            />
+            <InputHint error={!!amountError}>
+              {amountError ?? "Numbers only · up to two decimals"}
+            </InputHint>
+          </div>
+
+          <Button
+            variant="primary"
+            className="mt-3.5 w-full"
+            disabled={!canSave}
+            onClick={handleSave}
+          >
+            Save entry
+          </Button>
+        </div>
+
+        <p className="mt-3.5 text-caption">
+          <Link to="/entry/correct" className="inline-flex items-center gap-1 text-accent">
+            Correct a closed month instead <ArrowRight className="size-3.5" />
+          </Link>
+        </p>
+
+        {sessionEntries.length > 0 && (
+          <div className="mt-4.5">
+            <div className="text-title-sm mb-1.5">Recorded this session</div>
+            <TableWrap>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Member #</TableHead>
+                    <TableHead>Recorded Date</TableHead>
+                    <TableHead numeric>Business Volume</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {entriesPageRows.map((e) => (
+                    <TableRow key={`${e.id}-${e.updatedAt ?? e.createdAt}`}>
+                      <TableCell primary>{e.memberName}</TableCell>
+                      <TableCell className="mono">{e.memberId}</TableCell>
+                      <TableCell>{e.entryDate}</TableCell>
+                      <TableCell numeric>
+                        <span className="num">{centsToDisplay(e.amount)}</span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableWrap>
+            <div className="mt-2.5 flex items-center justify-between">
+              <span className="text-caption">
+                Showing {entriesRangeStart + 1}–
+                {Math.min(entriesRangeStart + entriesPageSize, sortedEntries.length)} of{" "}
+                {sortedEntries.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <label htmlFor="entries-page-size" className="text-caption">
+                  Rows per page
+                </label>
+                <select
+                  id="entries-page-size"
+                  className="h-7.5 w-auto rounded-sm border border-border bg-surface px-2 text-body text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
+                  value={entriesPageSize}
+                  onChange={(e) => {
+                    setEntriesPageSize(Number(e.target.value));
+                    setEntriesPage(0);
+                  }}
+                >
+                  {PAGE_SIZES.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={currentEntriesPage === 0}
+                  onClick={() => setEntriesPage((p) => p - 1)}
+                >
+                  Prev
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={currentEntriesPage >= totalEntriesPages - 1}
+                  onClick={() => setEntriesPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           </div>
         )}
-
-        <div className="mt-3.5">
-          <label htmlFor="entry-date" className="text-label mb-1 block">
-            Date *
-          </label>
-          <Input
-            id="entry-date"
-            type="date"
-            min={bounds.min}
-            max={bounds.max}
-            value={date}
-            disabled={!selected}
-            aria-invalid={!!dateError}
-            onChange={(e) => {
-              setDate(e.target.value);
-              setDateError(null);
-            }}
-          />
-          {dateError && <InputHint error>{dateError}</InputHint>}
-        </div>
-
-        <div className="mt-3.5">
-          <label htmlFor="entry-amount" className="text-label mb-1 block">
-            Business Volume *
-          </label>
-          <Input
-            id="entry-amount"
-            className="num"
-            type="text"
-            inputMode="decimal"
-            placeholder="0.00"
-            value={amountInput}
-            disabled={!selected}
-            aria-invalid={!!amountError}
-            onChange={(e) => {
-              setAmountInput(e.target.value);
-              setAmountError(null);
-            }}
-          />
-          <InputHint error={!!amountError}>
-            {amountError ?? "Up to two decimals · no currency field"}
-          </InputHint>
-        </div>
-
-        <Button
-          variant="primary"
-          className="mt-3.5 w-full"
-          disabled={!canSave}
-          onClick={handleSave}
-        >
-          Save entry
-        </Button>
       </div>
-
-      <p className="mt-3.5 max-w-md text-caption">
-        <Link to="/entry/correct" className="inline-flex items-center gap-1 text-accent">
-          Correct a closed month instead <ArrowRight className="size-3.5" />
-        </Link>
-      </p>
-
-      {sessionEntries.length > 0 && (
-        <div className="mt-4.5 max-w-md">
-          <div className="text-title-sm mb-1.5">Recorded this session</div>
-          {sessionEntries.map((e) => (
-            <div
-              key={`${e.id}-${e.updatedAt ?? e.createdAt}`}
-              className="flex items-center justify-between border-b border-border py-2 text-body last:border-b-0"
-            >
-              <span>{e.entryDate}</span>
-              <span className="num">{centsToDisplay(e.amount)}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </>
   );
 }
