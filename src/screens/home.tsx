@@ -8,11 +8,13 @@ import { MemberModal } from "@/components/member-modal";
 import { SearchResultsList } from "@/components/search-results-list";
 import { BarListChart, type BarListRow } from "@/components/bar-list-chart";
 import { EmptyState } from "@/components/empty-state";
+import { MonthSwitcher } from "@/components/month-switcher";
 import { useMemberSearch } from "@/lib/use-member-search";
 import { getDirectChildrenChart } from "@/lib/ipc/m4-search";
+import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
 import type { ChartNode, SlabRow } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
-import { centsToDisplay } from "@/lib/utils";
+import { centsToDisplay, monthLabel } from "@/lib/utils";
 
 // US-M1.1 (T-M1.1-7), US-M4.4 (§5.1). Search now navigates straight to
 // Member Detail (US-M4.1, S8) rather than the inline edit/deactivate card
@@ -34,8 +36,18 @@ export function Home() {
   const [noRootYet, setNoRootYet] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // T-M2.5-3: this figure screen defaults to the oldest recordable month,
+  // switchable when more than one is outstanding (CR-2).
+  const [lockStatus, setLockStatus] = useState<PeriodLockStatus | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const viewMonth = selectedMonth ?? lockStatus?.recordablePeriodMonths[0];
+
   useEffect(() => {
-    getDirectChildrenChart({ fullTree: true })
+    getPeriodLockStatus().then(setLockStatus);
+  }, []);
+
+  useEffect(() => {
+    getDirectChildrenChart({ fullTree: true, periodMonth: viewMonth })
       .then((result) => {
         setNodes(result.nodes);
         setSlabTable(result.slabTable);
@@ -44,7 +56,7 @@ export function Home() {
       .catch((raw) => {
         if (toErrorPresentation(raw).kind === "not_found") setNoRootYet(true);
       });
-  }, [refreshKey]);
+  }, [refreshKey, viewMonth]);
 
   return (
     <>
@@ -66,7 +78,17 @@ export function Home() {
         </div>
       )}
 
-      {nodes && slabTable && <StatRow nodes={nodes} slabTable={slabTable} />}
+      {nodes && slabTable && viewMonth && (
+        <StatRow nodes={nodes} slabTable={slabTable} viewMonth={viewMonth} />
+      )}
+
+      {lockStatus && (
+        <MonthSwitcher
+          months={lockStatus.recordablePeriodMonths}
+          value={viewMonth ?? lockStatus.recordablePeriodMonths[0]}
+          onChange={setSelectedMonth}
+        />
+      )}
 
       <div className="mt-4 rounded-lg border border-border bg-surface p-4.5">
         <div className="relative">
@@ -81,7 +103,11 @@ export function Home() {
         </div>
         <div className="mt-3">
           {query.trim() ? (
-            <SearchResultsList results={results} query={query} onSelect={(r) => navigate(`/member/${r.id}`)} />
+            <SearchResultsList
+              results={results}
+              query={query}
+              onSelect={(r) => navigate(`/member/${r.id}`)}
+            />
           ) : (
             <EmptyState
               icon={<Search className="size-8" />}
@@ -95,8 +121,18 @@ export function Home() {
 
       {nodes && slabTable && (
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <SlabDistributionChart title="Members by slab" nodes={nodes} slabTable={slabTable} metric="count" />
-          <SlabDistributionChart title="Rewards by slab" nodes={nodes} slabTable={slabTable} metric="rewards" />
+          <SlabDistributionChart
+            title="Members by slab"
+            nodes={nodes}
+            slabTable={slabTable}
+            metric="count"
+          />
+          <SlabDistributionChart
+            title="Rewards by slab"
+            nodes={nodes}
+            slabTable={slabTable}
+            metric="rewards"
+          />
         </div>
       )}
 
@@ -111,18 +147,33 @@ export function Home() {
   );
 }
 
-function StatRow({ nodes, slabTable }: { nodes: ChartNode[]; slabTable: SlabRow[] }) {
+function StatRow({
+  nodes,
+  slabTable,
+  viewMonth,
+}: {
+  nodes: ChartNode[];
+  slabTable: SlabRow[];
+  viewMonth: string;
+}) {
   const inactiveCount = nodes.filter((n) => !n.isActive).length;
   const entriesThisPeriod = nodes.filter((n) => n.ownBusinessVolume > 0).length;
   const topSlabPct = Math.max(0, ...slabTable.map((s) => s.percentage));
   const topSlabCount = nodes.filter((n) => n.slabPct === topSlabPct).length;
-  const now = new Date().toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   return (
     <div className="mt-4 grid grid-cols-3 gap-3">
       <StatCard label="Members" value={String(nodes.length)} footer={`${inactiveCount} inactive`} />
-      <StatCard label="Entries this period" value={String(entriesThisPeriod)} footer={now} />
-      <StatCard label="On top slab" value={String(topSlabCount)} footer={`${topSlabPct}% and above`} />
+      <StatCard
+        label="Entries this period"
+        value={String(entriesThisPeriod)}
+        footer={monthLabel(viewMonth)}
+      />
+      <StatCard
+        label="On top slab"
+        value={String(topSlabCount)}
+        footer={`${topSlabPct}% and above`}
+      />
     </div>
   );
 }

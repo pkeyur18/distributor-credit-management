@@ -7,6 +7,7 @@ import { Input, InputHint } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import { AlertNote } from "@/components/ui/alert-note";
 import { SearchResultsList } from "@/components/search-results-list";
+import { MonthSwitcher } from "@/components/month-switcher";
 import { useMemberSearch } from "@/lib/use-member-search";
 import { searchMembers } from "@/lib/ipc/m1-members";
 import { recordEntry, getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
@@ -50,7 +51,10 @@ export function BusinessVolumeEntry() {
   const { results } = useMemberSearch(query);
   const [selected, setSelected] = useState<SearchResult | null>(null);
   const [lockStatus, setLockStatus] = useState<PeriodLockStatus | null>(null);
-  const recordingMonth = lockStatus?.recordablePeriodMonths[0] ?? currentYm();
+  // T-M2.5-2: selectable when more than one month is recordable — null
+  // until the operator picks one, which defers to the oldest (index 0).
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const recordingMonth = selectedMonth ?? lockStatus?.recordablePeriodMonths[0] ?? currentYm();
   const [date, setDate] = useState(() => monthBounds(recordingMonth).max);
   const [amountInput, setAmountInput] = useState("");
   const [amountError, setAmountError] = useState<string | null>(null);
@@ -72,15 +76,24 @@ export function BusinessVolumeEntry() {
     });
   }, [searchParams]);
 
-  // T-M2.3-2/T-M2.3-4: the recording month is whichever month is oldest
-  // recordable — an outstanding month while one exists, otherwise the
-  // current month — and the date field re-bounds to it.
+  // T-M2.3-2/T-M2.3-4: the recording month defaults to whichever month is
+  // oldest recordable — an outstanding month while one exists, otherwise
+  // the current month. The date field re-bounds to it here, at the source
+  // of the change, rather than reactively in a second effect.
   useEffect(() => {
     getPeriodLockStatus().then((status) => {
       setLockStatus(status);
-      setDate(monthBounds(status.recordablePeriodMonths[0]).max);
+      if (selectedMonth === null) setDate(monthBounds(status.recordablePeriodMonths[0]).max);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // T-M2.5-2: switching months re-bounds the date field to the newly
+  // selected one.
+  function handleMonthChange(month: string) {
+    setSelectedMonth(month);
+    setDate(monthBounds(month).max);
+  }
 
   const cents = displayToCents(amountInput);
   const canSave = !!selected && cents !== null && !saving;
@@ -94,7 +107,10 @@ export function BusinessVolumeEntry() {
       const entry = await recordEntry({ memberId: selected.id, amount: cents, entryDate: date });
       setSessionEntries((prev) => [entry, ...prev]);
       setAmountInput("");
-      toast.add({ title: `Recorded ${centsToDisplay(entry.amount)} for ${selected.name}`, type: "success" });
+      toast.add({
+        title: `Recorded ${centsToDisplay(entry.amount)} for ${selected.name}`,
+        type: "success",
+      });
 
       // T-M2.1-5: immediate on-screen update of the affected figures, no
       // recalculate control anywhere (Rule-26). `record_entry`'s own
@@ -138,6 +154,15 @@ export function BusinessVolumeEntry() {
               )} is closed.`
             : "Dates are limited to this month."}
         </AlertNote>
+      )}
+
+      {lockStatus && (
+        <MonthSwitcher
+          className="max-w-md"
+          months={lockStatus.recordablePeriodMonths}
+          value={recordingMonth}
+          onChange={handleMonthChange}
+        />
       )}
 
       <div className="mt-5 max-w-md rounded-lg border border-border bg-surface p-4.5">
@@ -234,7 +259,12 @@ export function BusinessVolumeEntry() {
           </InputHint>
         </div>
 
-        <Button variant="primary" className="mt-3.5 w-full" disabled={!canSave} onClick={handleSave}>
+        <Button
+          variant="primary"
+          className="mt-3.5 w-full"
+          disabled={!canSave}
+          onClick={handleSave}
+        >
           Save entry
         </Button>
       </div>

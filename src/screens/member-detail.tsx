@@ -3,14 +3,24 @@ import { useNavigate, useParams } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableWrap } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableWrap,
+} from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingState } from "@/components/loading-state";
 import { MemberModal } from "@/components/member-modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { MonthSwitcher } from "@/components/month-switcher";
 import { useToast } from "@/components/ui/toast";
 import { getMemberDetail } from "@/lib/ipc/m4-search";
 import { deactivateMember, reactivateMember } from "@/lib/ipc/m1-members";
+import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
 import type { MemberDetail as MemberDetailData } from "@/lib/ipc/m4-search";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { centsToDisplay } from "@/lib/utils";
@@ -33,9 +43,19 @@ export function MemberDetail() {
   const [confirmAction, setConfirmAction] = useState<"deactivate" | "reactivate" | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // T-M2.5-3: this figure screen defaults to the oldest recordable month,
+  // switchable when more than one is outstanding (CR-2).
+  const [lockStatus, setLockStatus] = useState<PeriodLockStatus | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const viewMonth = selectedMonth ?? lockStatus?.recordablePeriodMonths[0];
+
+  useEffect(() => {
+    getPeriodLockStatus().then(setLockStatus);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    getMemberDetail(id)
+    getMemberDetail(id, viewMonth)
       .then((d) => {
         if (!cancelled) {
           setDetail(d);
@@ -48,7 +68,7 @@ export function MemberDetail() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, viewMonth]);
 
   async function handleConfirm() {
     if (!detail || !confirmAction) return;
@@ -110,7 +130,11 @@ export function MemberDetail() {
                 Reactivate
               </Button>
             )}
-            <Button variant="primary" size="sm" onClick={() => navigate(`/entry?member=${member.id}`)}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => navigate(`/entry?member=${member.id}`)}
+            >
               Record volume
             </Button>
           </div>
@@ -118,18 +142,32 @@ export function MemberDetail() {
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Business Volume" value={centsToDisplay(rewards.ownReward.ownBusinessVolume)} />
-        <StatCard label="Total Business Volume" value={centsToDisplay(detail.totalBusinessVolume)} />
+        <StatCard
+          label="Business Volume"
+          value={centsToDisplay(rewards.ownReward.ownBusinessVolume)}
+        />
+        <StatCard
+          label="Total Business Volume"
+          value={centsToDisplay(detail.totalBusinessVolume)}
+        />
         <StatCard label="Slab" value={`${detail.slabPct}%`} />
         <StatCard label="Rewards this period" value={centsToDisplay(rewards.rewardsTotal)} />
       </div>
+
+      {lockStatus && (
+        <MonthSwitcher
+          months={lockStatus.recordablePeriodMonths}
+          value={viewMonth ?? lockStatus.recordablePeriodMonths[0]}
+          onChange={setSelectedMonth}
+        />
+      )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <div className="rounded-lg border border-border bg-surface p-4.5">
           <div className="text-title-sm">Rewards detail</div>
           <p className="text-caption mt-0.5 mb-3">
-            Own Business Volume, differential and royalty — differential and royalty never pay on the
-            same leg.
+            Own Business Volume, differential and royalty — differential and royalty never pay on
+            the same leg.
           </p>
           <TableWrap>
             <Table>
@@ -175,7 +213,9 @@ export function MemberDetail() {
                         onClick={() => navigate(`/member/${line.childId}`)}
                       >
                         <TableCell primary>{line.childName}</TableCell>
-                        <TableCell numeric>{centsToDisplay(line.childTotalBusinessVolume)}</TableCell>
+                        <TableCell numeric>
+                          {centsToDisplay(line.childTotalBusinessVolume)}
+                        </TableCell>
                         <TableCell>
                           <Pill variant="slab">{line.childSlabPct}%</Pill>
                         </TableCell>
@@ -238,7 +278,11 @@ export function MemberDetail() {
             <DetailRow label="Consent captured" value={member.consentDate} />
           </div>
           <hr className="my-3.5 border-border" />
-          <Button variant="secondary" className="w-full" onClick={() => navigate(`/structure/${member.id}`)}>
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => navigate(`/structure/${member.id}`)}
+          >
             View in structure
           </Button>
         </div>
@@ -260,7 +304,11 @@ export function MemberDetail() {
               </TableHeader>
               <TableBody>
                 {detail.directChildren.map((child) => (
-                  <TableRow key={child.memberId} clickable onClick={() => navigate(`/member/${child.memberId}`)}>
+                  <TableRow
+                    key={child.memberId}
+                    clickable
+                    onClick={() => navigate(`/member/${child.memberId}`)}
+                  >
                     <TableCell primary>{child.name}</TableCell>
                     <TableCell className="mono">{child.memberId}</TableCell>
                     <TableCell numeric>{centsToDisplay(child.totalBusinessVolume)}</TableCell>
@@ -288,7 +336,13 @@ export function MemberDetail() {
         onSaved={(m) =>
           setDetail({
             ...detail,
-            member: { ...detail.member, name: m.name, phone: m.phone, email: m.email, address: m.address },
+            member: {
+              ...detail.member,
+              name: m.name,
+              phone: m.phone,
+              email: m.email,
+              address: m.address,
+            },
           })
         }
       />
@@ -297,7 +351,11 @@ export function MemberDetail() {
         <ConfirmDialog
           open
           onOpenChange={(open) => !open && setConfirmAction(null)}
-          title={confirmAction === "deactivate" ? `Deactivate ${member.name}?` : `Reactivate ${member.name}?`}
+          title={
+            confirmAction === "deactivate"
+              ? `Deactivate ${member.name}?`
+              : `Reactivate ${member.name}?`
+          }
           body={
             confirmAction === "deactivate"
               ? "This marks the member inactive everywhere they appear. It has no effect on any calculation — their Business Volume continues to roll up exactly as if they were active."

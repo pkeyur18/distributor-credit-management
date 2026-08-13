@@ -40,4 +40,25 @@ describe("Business Volume Entry", () => {
     await sessionList.waitForExist({ timeout: 3000 });
     await expect($("span=1000.00")).toExist();
   });
+
+  // T-M2.5-4's negative case: a fresh console has exactly one recordable
+  // month (the current one), so the month switcher (T-M2.5-1) must render
+  // nowhere on screen — no control, no "Showing figures for" text. The
+  // positive two-outstanding-months case has no equivalent E2E coverage:
+  // producing it requires the login catch-up (US-M5.5) to observe a real
+  // calendar-month boundary, which nothing in `e2e/helpers/seed.js` can
+  // manufacture inside a single test run — that path is covered instead by
+  // `m4_search`'s and `m5_close`'s own Rust unit tests against a seeded
+  // multi-period database.
+  it("shows no month switcher when only one month is recordable", async () => {
+    await completeFirstRunSetup("482913");
+    await addRootMember({
+      name: "Root Member",
+      phone: "9876500003",
+      address: "1 Main Street",
+    });
+
+    await navigateTo("Business Volume Entry");
+    await expect($("*=Showing figures for")).not.toExist();
+  });
 });

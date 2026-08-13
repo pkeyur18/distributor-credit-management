@@ -37,9 +37,10 @@ export interface MemberDetail {
   directChildren: MemberDetailChild[];
 }
 
-// API-10
-export function getMemberDetail(memberId: number): Promise<MemberDetail> {
-  return invokeCommand("get_member_detail", { memberId });
+// API-10. `periodMonth`: T-M2.5-3's month switcher — omit to default to the
+// oldest recordable period, never "whatever's newest."
+export function getMemberDetail(memberId: number, periodMonth?: string): Promise<MemberDetail> {
+  return invokeCommand("get_member_detail", { memberId, periodMonth });
 }
 
 export interface DirectChildrenChartRequest {
@@ -47,6 +48,9 @@ export interface DirectChildrenChartRequest {
   memberId?: number;
   /** false: member + direct children (FR-2). true: entire subtree (FR-10). */
   fullTree: boolean;
+  /** T-M2.5-3's month switcher — omit to default to the oldest recordable
+   *  period, same default as `getMemberDetail`. */
+  periodMonth?: string;
 }
 
 export interface DirectChildrenChartResult {
