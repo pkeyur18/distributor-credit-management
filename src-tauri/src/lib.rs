@@ -12,6 +12,7 @@ pub mod m2_entries;
 pub mod m3_calc;
 pub mod m4_search;
 pub mod m5_close;
+pub mod m6_reports;
 pub mod m7_settings;
 pub mod m8_auth;
 pub mod paths;

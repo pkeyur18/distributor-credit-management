@@ -82,8 +82,8 @@ Identifier schemes in use. **One namespace was added on 7 August 2026 — `CR-N`
 | `TR-N` | TR-1 … TR-7 | 7 | A technical risk | [04](04-technical-architecture.md) §11 |
 | `BA-N` | BA-1 … BA-11 | 11 | A business assumption (all resolved) | [01](01-product-and-scope.md) §9 |
 | `INC-N` | INC-1 … INC-5 | 5 | A source-document contradiction (all closed) | [06](06-decision-log-and-open-items.md) §4 |
-| `C-N` | C1 … C8 | 8 | A conflict resolved by this set | [06](06-decision-log-and-open-items.md) §2 |
-| `O-N` | O1 … O5 | 5 | An item genuinely still open | [06](06-decision-log-and-open-items.md) §3 |
+| `C-N` | C1 … C9 | 9 | A conflict resolved by this set | [06](06-decision-log-and-open-items.md) §2 |
+| `O-N` | O2 … O5 | 4 | An item genuinely still open | [06](06-decision-log-and-open-items.md) §3 |
 
 `Rule-16a` is not a typo. It was inserted between Rule-16 and Rule-17 rather than renumbering 17–43, because those numbers are referenced across every other document.
 

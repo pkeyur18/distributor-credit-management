@@ -222,7 +222,7 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 
 **US-M6.1 — Monthly data export.**
 *Requirement refs:* Rule-19, Rule-33.
-*Acceptance criteria:* Given any column selection, when exported, then the mandatory columns are always present regardless of selection. *(See [06](06-decision-log-and-open-items.md) O1 for whether that mandatory set is four or five columns.)*
+*Acceptance criteria:* Given any column selection, when exported, then the five mandatory columns (name, member number, phone, Business Volume, Total Business Volume) are always present regardless of selection ([06](06-decision-log-and-open-items.md) C9, D-1).
 
 **US-M6.2 — Yearly average export.**
 *Requirement refs:* Rule-23.

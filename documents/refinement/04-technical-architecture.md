@@ -555,7 +555,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-16 | `export_monthly` | Export current/selected month's data | Auth | Always includes 4 mandatory columns (Rule-19) regardless of selection | Read-only | Not audited |
+| API-16 | `export_monthly` | Export current/selected month's data | Auth | Always includes 5 mandatory columns (Rule-19, [06](06-decision-log-and-open-items.md) C9/D-1) regardless of selection | Read-only | Not audited |
 | API-17 | `export_yearly_average` | Export yearly average with snapshot-count denominator | Auth | — | Read-only | Not audited |
 | API-18 | `export_low_contribution` | Export members below own-BV yearly-average threshold | Auth | — | Read-only | Not audited |
 | API-19 | `list_backups` | List all retained backups | Auth | — | Read-only | Not audited |

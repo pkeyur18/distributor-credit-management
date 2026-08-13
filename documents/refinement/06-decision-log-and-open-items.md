@@ -4,8 +4,8 @@ The place to look when something in this specification appears wrong, contradict
 
 Three kinds of thing live here:
 
-- **§2 — Conflicts (C1–C8):** places where two source documents disagree, and which one wins. All resolved. The resolution is already applied throughout the rest of this set; §2 records *why*, so nobody re-litigates it.
-- **§3 — Open items (O1–O5):** genuinely undecided. **No default has been invented for any of them.**
+- **§2 — Conflicts (C1–C9):** places where two source documents disagree, and which one wins. All resolved. The resolution is already applied throughout the rest of this set; §2 records *why*, so nobody re-litigates it.
+- **§3 — Open items (O2–O5):** genuinely undecided. **No default has been invented for any of them.**
 - **§6 — Do not re-raise:** decisions that look like oversights and are not.
 
 **Change requests are recorded in §5, by date.** The most recent are **CR-4 and CR-5 of 8 August 2026**, which add Rule-46 and amend Rule-12. CR-4 in particular **reverses the 3 August 2026 decision that a member earns nothing on their own Business Volume** — if you find a document still describing that as an absolute rule, or citing the pre-CR-4 golden totals (35/22/450/1,000/980), that document is stale and §5 is right. CR-1, CR-2 and CR-3 of 7 August 2026 (amending Rule-36, adding Rule-44 and Rule-45) remain in force alongside CR-4/CR-5.
@@ -24,7 +24,7 @@ A conflict that precedence does not settle belongs in §3, not in code.
 
 ---
 
-## 2. Conflicts resolved — C1 to C8
+## 2. Conflicts resolved — C1 to C9
 
 ### C1 — Settings count: 13 or 16?
 
@@ -105,21 +105,21 @@ A conflict that precedence does not settle belongs in §3, not in code.
 | **Authority** | Client requirement confirmed via the architect, 6 Aug 2026; recorded in `06-security-authorization-matrix.md` §6 and `03-business-rules.md` Rule-42. |
 | **Build consequence** | No delete path in the schema, the API, or the UI. No "erasure requested" flag. No export filter that would omit a member. HIGH-2 is marked **"not to be re-raised in future analysis"** — see §6 below. |
 
----
-
-## 3. Open items — O1 to O5
-
-**Nothing below has a default invented for it.** Each states the question, why it matters, what the closest available evidence is, and who has to answer.
-
-### O1 — Is Total Business Volume a fifth mandatory export column? ⚠️ *needs a client answer*
+### C9 — Is Total Business Volume a fifth mandatory export column?
 
 | | |
 |---|---|
-| **The question** | Rule-19 says every extract carries "the member's basic details, contact number, **volume** and Business Volume, regardless of which optional columns are chosen" — which reads as five things, with *volume* meaning Total Business Volume. AC-29 repeats the same five. But Rule-33, V6.1, and US-M6.1's acceptance criteria all name only **four** mandatory columns: name, ID, phone, Business Volume. Total Business Volume appears in Rule-33's *optional* list. |
-| **Why it matters** | It changes the fixed column set of all three extracts. If Total Business Volume is mandatory, it can never be unticked — and V6.1's "the four default columns are always present and cannot be removed" is wrong by one. |
-| **Closest evidence** | The approved prototype's default export column set is `['name', 'id', 'phone', 'bv']` — four, consistent with Rule-33/V6.1. But a *default* is not the same thing as a *mandatory* column: Rule-19 is about what cannot be removed, Rule-33 about what starts ticked. The prototype does not distinguish the two, so it does not settle this. |
-| **Who answers** | **The client.** One question: "on every extract, is Total Business Volume always present, or is it an optional column that happens to be untickable-by-default?" |
-| **Until answered** | Build the four-column mandatory set (name, ID, phone, Business Volume) and keep Total Business Volume optional, which is what the prototype and three of the four sources say — but do not close this item on that basis. |
+| **Disagreement** | Rule-19 says every extract carries "the member's basic details, contact number, **volume** and Business Volume, regardless of which optional columns are chosen" — which reads as five things, with *volume* meaning Total Business Volume. AC-29 repeats the same five. But Rule-33, V6.1, and US-M6.1's acceptance criteria all named only **four** mandatory columns: name, ID, phone, Business Volume, with Total Business Volume in Rule-33's *optional* list. |
+| **Cause** | Rule-33/V6.1 conflated *what starts ticked* (a default) with *what can never be unticked* (mandatory) — the approved prototype's default column set (`['name', 'id', 'phone', 'bv']`) settles the former, not the latter, but the two subsequent documents copied it as though it settled both. |
+| **Resolution** | **Five mandatory columns: name, member number, phone, Business Volume, Total Business Volume.** Untickable on all three extracts. Resolved toward Rule-19's own wording, the client's own statement of what an extract must always carry. |
+| **Authority** | Architect, 8 Aug 2026 (`PI/05-decisions-and-gaps.md` D-1) — resolved *toward* Rule-19's client-sourced wording, not client-confirmed directly. Worth a client conversation to confirm; if the client wants four, this reverses in under a day. |
+| **Build consequence** | V6.1's "the four default columns are always present and cannot be removed" is corrected to five. Total Business Volume leaves the optional list entirely. The seeded default column set changes from four entries to five (US-M6.5, S13). |
+
+---
+
+## 3. Open items — O2 to O5
+
+**Nothing below has a default invented for it.** Each states the question, why it matters, what the closest available evidence is, and who has to answer.
 
 ### O2 — Hierarchy depth setting has no stated default
 
@@ -370,9 +370,9 @@ Each of these looks like an oversight on first encounter and is not. Each was co
 | | |
 |---|---|
 | **Blocking issues** | **None.** No item, at any point in this analysis, met the bar of "implementation should not begin until resolved" |
-| **Conflicts** | 8, all resolved by precedence and applied throughout this set |
-| **Open items** | 5 — O1 needs a client answer; O2–O5 are build decisions to be taken deliberately rather than by default |
+| **Conflicts** | 9, all resolved by precedence and applied throughout this set (C9 added 8 Aug 2026 — see `PI/05-decisions-and-gaps.md` D-1) |
+| **Open items** | 4 — O2–O5 are build decisions to be taken deliberately rather than by default |
 | **Modules gated** | None. No open item blocks any module from starting |
 | **Prototype behaviours awaiting port** | 5 — the settings recalculation warning, the last-slab-row refusal, the data-recovery screen, the whole-console backup schedule/retention, and the restore flows. All are **approved reference behaviour**, to be ported like any other approved design |
 
-O1 is worth asking about in the same conversation as anything else outstanding, but it gates only M6's export column set — build M1, M2, M3, M4, M5, M7, M8 and M9 without waiting on it.
+C9's mandatory-column resolution is architect-resolved, not client-confirmed — worth raising in the next client conversation, but it does not block M6, which is already built against it.

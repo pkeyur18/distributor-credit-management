@@ -140,8 +140,8 @@ Direct children only, both for counting and for paying.
 **Implementation:** Backup write-then-verify (existence + checksum + readability) happens inside the same transactional boundary as the abort decision.
 
 ### Rule-19 — Every export carries basic fields
-**Rule:** Every exported report includes name, ID, phone number, volume, and Business Volume, regardless of which optional columns are selected.
-**⚠️ See [06](06-decision-log-and-open-items.md) O1** — this rule names five always-present fields including *volume* (Total Business Volume); Rule-33/V6.1 name only four. Not yet reconciled — client answer needed.
+**Rule:** Every exported report includes name, ID, phone number, Business Volume, and Total Business Volume, regardless of which optional columns are selected.
+**Resolved 8 Aug 2026** ([06](06-decision-log-and-open-items.md) C9, D-1): five mandatory columns, matching this rule's own wording. Rule-33 is amended below to match.
 
 ### Rule-20 — Persistent reset alert
 **Rule:** Raised as soon as the month being closed has ended. Appears as **both** an undismissable banner on every screen and a notification-list entry. Clears **only** on successful completion of the reset — no snooze, no dismiss. Multiple outstanding months are all listed; only the oldest can be closed; each closes separately with its own backup and snapshot.
@@ -206,7 +206,8 @@ Direct children only, both for counting and for paying.
 **Rule:** If onboarding would exceed the configured maximum depth, the system **warns but allows**. Consistent with Rule-1's advisory-only pattern.
 
 ### Rule-33 — Configurable export columns
-**Rule:** Every field is offered as an export column, with the client's four defaults (name, ID, phone, Business Volume) pre-ticked. Full optional list: email, address, reference number, introducer name, hierarchy level, direct legs count, Total Business Volume, slab %, Rewards, royalty earned, joining date, active/inactive status.
+**Rule:** Every field is offered as an export column. The five mandatory columns (Rule-19: name, ID, phone, Business Volume, Total Business Volume) are pre-ticked and untickable. Full optional list: email, address, reference number, introducer name, hierarchy level, direct legs count, slab %, Rewards, royalty earned, joining date, active/inactive status.
+**Amended 8 Aug 2026** ([06](06-decision-log-and-open-items.md) C9, D-1): Total Business Volume moves from this optional list to Rule-19's mandatory set.
 
 ### Rule-34 — Phone number uniqueness
 **Rule:** A phone number identifies exactly one member, **unique across active and inactive members alike**. A match on an inactive member offers **reactivation** instead of erroring — preserving the original 6-digit ID, hierarchy position, and full history. A duplicate record is never created.
@@ -522,7 +523,7 @@ All six totals reconcile: **65 / 62 / 510 / 1,000 / 980 / 10**, matching the cli
 | 9 | Royalty rate | 1% | Rule-10 |
 | 10 | Yearly cycle start/end | 1 Jan – 31 Dec | Rule-23 |
 | 11 | Low-contribution threshold | 100 | Rule-24 |
-| 12 | Default export columns | name, ID, phone, Business Volume | Rule-33 |
+| 12 | Default export columns | name, ID, phone, Business Volume, Total Business Volume | Rule-33 |
 | 13 | Session inactivity timeout | **15 minutes** *(no source default — see O3)* | §11.3 |
 | 14 | Whole-console backup schedule | Off | Rule-43 |
 | 15 | Whole-console backup retention count | 10 | Rule-43 |
