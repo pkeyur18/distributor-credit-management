@@ -1,5 +1,12 @@
 import { completeFirstRunSetup, addRootMember, addMember, navigateTo } from "../helpers/seed.js";
 
+// Specs in this directory share one running app instance and one login
+// session (see helpers/seed.js's own doc comment) — first-run setup can
+// only ever happen once per instance, so every test after the first one
+// in this describe block must build on the state earlier tests already
+// left behind rather than calling completeFirstRunSetup/addRootMember a
+// second time.
+
 // US-M2.1 (S7) — the golden path this whole harness exists to catch:
 // record a Business Volume entry through the real UI and confirm the
 // affected figure updates with no "recalculate" control anywhere on
@@ -51,13 +58,9 @@ describe("Business Volume Entry", () => {
   // `m4_search`'s and `m5_close`'s own Rust unit tests against a seeded
   // multi-period database.
   it("shows no month switcher when only one month is recordable", async () => {
-    await completeFirstRunSetup("482913");
-    await addRootMember({
-      name: "Root Member",
-      phone: "9876500003",
-      address: "1 Main Street",
-    });
-
+    // Reuses the session the previous test already set up — nothing here
+    // has touched a second period, so exactly one month (the current one)
+    // is still recordable.
     await navigateTo("Business Volume Entry");
     await expect($("*=Showing figures for")).not.toExist();
   });
