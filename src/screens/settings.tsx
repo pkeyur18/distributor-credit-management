@@ -23,41 +23,16 @@ import {
   updateSlabRow,
   type ConsoleBackupSettings,
 } from "@/lib/ipc/m7-settings";
-import { previewSettingsImpact, type CandidateSettings, type SettingsImpactPreview } from "@/lib/ipc/m3-calc";
+import {
+  previewSettingsImpact,
+  type CandidateSettings,
+  type SettingsImpactPreview,
+} from "@/lib/ipc/m3-calc";
 import { runConsoleBackupNow } from "@/lib/ipc/m8-auth";
 import { listRestorePoints, restoreFromBackup, restoreFromBackupFile } from "@/lib/ipc/preflight";
 import type { BackupRecord, Settings as SettingsData, SlabRow } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
-
-// T-M7.2-4's "default export columns" has no picker anywhere in the
-// approved prototype (Reports/M6 doesn't exist until S13) and no key
-// convention has been established yet — this list and its keys are this
-// sprint's own naming, following the seeded mandatory five's style
-// (`db/seed.rs`). M6 should align with these rather than inventing a
-// second set.
-const MANDATORY_EXPORT_COLUMNS: { key: string; label: string }[] = [
-  { key: "name", label: "Name" },
-  { key: "member_number", label: "Member number" },
-  { key: "phone", label: "Phone" },
-  { key: "business_volume", label: "Business Volume" },
-  { key: "total_business_volume", label: "Total Business Volume" },
-];
-
-// Rule-33's optional list, minus Total Business Volume — D-1 already moved
-// that into the mandatory five above.
-const OPTIONAL_EXPORT_COLUMNS: { key: string; label: string }[] = [
-  { key: "email", label: "Email" },
-  { key: "address", label: "Address" },
-  { key: "reference_number", label: "Reference number" },
-  { key: "introducer_name", label: "Introducer name" },
-  { key: "hierarchy_level", label: "Hierarchy level" },
-  { key: "direct_legs_count", label: "Direct legs count" },
-  { key: "slab_pct", label: "Slab %" },
-  { key: "rewards", label: "Rewards" },
-  { key: "royalty_earned", label: "Royalty earned" },
-  { key: "joining_date", label: "Joining date" },
-  { key: "active_status", label: "Active/inactive status" },
-];
+import { MANDATORY_EXPORT_COLUMNS, OPTIONAL_EXPORT_COLUMNS } from "@/lib/export-columns";
 
 function SectionCard({
   id,
@@ -148,7 +123,9 @@ function useRecalcWarning() {
 
 // --- Slab table (US-M7.1) ---
 
-function candidateFromSlabRows(pairs: { threshold: number; percentage: number }[]): CandidateSettings {
+function candidateFromSlabRows(
+  pairs: { threshold: number; percentage: number }[],
+): CandidateSettings {
   return {
     slabThresholds: pairs.map((p) => p.threshold),
     slabPercentages: pairs.map((p) => p.percentage),
@@ -171,11 +148,19 @@ function SlabTableCard({
   const [saving, setSaving] = useState<number | "new" | null>(null);
 
   function draftFor(row: SlabRow) {
-    return drafts[row.id] ?? { threshold: centsToDisplay(row.threshold), percentage: String(row.percentage) };
+    return (
+      drafts[row.id] ?? {
+        threshold: centsToDisplay(row.threshold),
+        percentage: String(row.percentage),
+      }
+    );
   }
 
   function setDraft(id: number, patch: Partial<{ threshold: string; percentage: string }>) {
-    setDrafts((prev) => ({ ...prev, [id]: { ...draftFor({ id } as SlabRow), ...prev[id], ...patch } }));
+    setDrafts((prev) => ({
+      ...prev,
+      [id]: { ...draftFor({ id } as SlabRow), ...prev[id], ...patch },
+    }));
   }
 
   async function saveRow(row: SlabRow) {
@@ -187,7 +172,11 @@ function SlabTableCard({
       return;
     }
     const candidate = candidateFromSlabRows(
-      rows.map((r) => (r.id === row.id ? { threshold, percentage } : { threshold: r.threshold, percentage: r.percentage })),
+      rows.map((r) =>
+        r.id === row.id
+          ? { threshold, percentage }
+          : { threshold: r.threshold, percentage: r.percentage },
+      ),
     );
     await recalcWarning.request("slab", candidate, async () => {
       setSaving(row.id);
@@ -208,7 +197,9 @@ function SlabTableCard({
 
   async function removeRow(row: SlabRow) {
     const candidate = candidateFromSlabRows(
-      rows.filter((r) => r.id !== row.id).map((r) => ({ threshold: r.threshold, percentage: r.percentage })),
+      rows
+        .filter((r) => r.id !== row.id)
+        .map((r) => ({ threshold: r.threshold, percentage: r.percentage })),
     );
     await recalcWarning.request("slab", candidate, async () => {
       setSaving(row.id);
@@ -333,7 +324,13 @@ function SlabTableCard({
                 />
               </td>
               <td className="py-1.5" colSpan={2}>
-                <Button id="slab-add-row" size="sm" variant="secondary" disabled={saving === "new"} onClick={addRow}>
+                <Button
+                  id="slab-add-row"
+                  size="sm"
+                  variant="secondary"
+                  disabled={saving === "new"}
+                  onClick={addRow}
+                >
                   Add row
                 </Button>
               </td>
@@ -342,8 +339,8 @@ function SlabTableCard({
         </table>
       </div>
       <InputHint className="mt-3">
-        Rows are not checked for consistency against each other — this is deliberate.
-        Misconfiguring the table can produce unexpected Rewards.
+        Rows are not checked for consistency against each other — this is deliberate. Misconfiguring
+        the table can produce unexpected Rewards.
       </InputHint>
       {onlyRow && (
         <InputHint className="mt-1.5">
@@ -419,9 +416,9 @@ function RoyaltyCard({
         </div>
       </div>
       <InputHint className="mt-2">
-        A member with {minChildren || settings.royaltyQualifyingCount}+ direct legs on the top
-        slab earns {rate || settings.royaltyRatePercent}% royalty on each qualifying leg&apos;s
-        Total Business Volume.
+        A member with {minChildren || settings.royaltyQualifyingCount}+ direct legs on the top slab
+        earns {rate || settings.royaltyRatePercent}% royalty on each qualifying leg&apos;s Total
+        Business Volume.
       </InputHint>
       <Button className="mt-3.5" disabled={saving} onClick={save}>
         Save royalty settings
@@ -446,7 +443,12 @@ function StructureGuidanceCard({
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    const values = { hierarchyDepth: Number(depth), level2Width: Number(l2), level3Width: Number(l3), level4Width: Number(l4) };
+    const values = {
+      hierarchyDepth: Number(depth),
+      level2Width: Number(l2),
+      level3Width: Number(l3),
+      level4Width: Number(l4),
+    };
     if (Object.values(values).some((v) => !Number.isFinite(v))) {
       toast.add({ title: "Enter valid numbers", type: "danger" });
       return;
@@ -565,13 +567,23 @@ function ReportingCard({
           <label htmlFor="cycle-start" className="text-label mb-1 block">
             Yearly cycle starts
           </label>
-          <Input id="cycle-start" placeholder="MM-DD" value={start} onChange={(e) => setStart(e.target.value)} />
+          <Input
+            id="cycle-start"
+            placeholder="MM-DD"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+          />
         </div>
         <div>
           <label htmlFor="cycle-end" className="text-label mb-1 block">
             Yearly cycle ends
           </label>
-          <Input id="cycle-end" placeholder="MM-DD" value={end} onChange={(e) => setEnd(e.target.value)} />
+          <Input
+            id="cycle-end"
+            placeholder="MM-DD"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+          />
         </div>
         <div>
           <label htmlFor="low-threshold-setting" className="text-label mb-1 block">
@@ -801,11 +813,15 @@ function BackupScheduleCard({
         <label htmlFor="backup-retention" className="text-label mb-1 block">
           Keep the most recent
         </label>
-        <Input id="backup-retention" value={retention} onChange={(e) => setRetention(e.target.value)} />
+        <Input
+          id="backup-retention"
+          value={retention}
+          onChange={(e) => setRetention(e.target.value)}
+        />
       </div>
       <InputHint className="mt-1.5">
-        Older backups beyond this count are removed automatically — closed-month backups are
-        never affected.
+        Older backups beyond this count are removed automatically — closed-month backups are never
+        affected.
       </InputHint>
       <div className="mt-3.5 max-w-55">
         <label htmlFor="backup-folder" className="text-label mb-1 block">
@@ -814,8 +830,8 @@ function BackupScheduleCard({
         <Input id="backup-folder" value={folder} onChange={(e) => setFolder(e.target.value)} />
       </div>
       <InputHint className="mt-1.5">
-        A single folder name inside the app's data directory — not a path. Changing it only
-        affects backups written from now on; existing ones stay where they are.
+        A single folder name inside the app's data directory — not a path. Changing it only affects
+        backups written from now on; existing ones stay where they are.
       </InputHint>
       <div className="mt-3.5 flex gap-2">
         <Button variant="secondary" onClick={saveRetention}>
@@ -841,7 +857,9 @@ function backupPrimaryLabel(record: BackupRecord): string {
   if (record.kind === "period_close") return `Closed month — ${date}`;
   if (record.kind === "pre_restore_safety") return `Safety copy — ${date}`;
   if (record.kind === "scheduled") {
-    const cadence = record.scheduleKind ? record.scheduleKind[0].toUpperCase() + record.scheduleKind.slice(1) : "Scheduled";
+    const cadence = record.scheduleKind
+      ? record.scheduleKind[0].toUpperCase() + record.scheduleKind.slice(1)
+      : "Scheduled";
     return `${cadence} — ${date}`;
   }
   return `Manual — ${date}`;
@@ -858,7 +876,9 @@ function RestoreCard({
   const [selectedId, setSelectedId] = useState<string | null>(
     restorePoints[0] ? String(restorePoints[0].id) : null,
   );
-  const [confirmTarget, setConfirmTarget] = useState<{ kind: "retained"; id: number; label: string } | { kind: "file"; path: string } | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<
+    { kind: "retained"; id: number; label: string } | { kind: "file"; path: string } | null
+  >(null);
   const [restoring, setRestoring] = useState(false);
 
   const selected = restorePoints.find((r) => String(r.id) === selectedId) ?? null;
@@ -914,7 +934,11 @@ function RestoreCard({
             disabled={!selected}
             onClick={() =>
               selected &&
-              setConfirmTarget({ kind: "retained", id: selected.id, label: backupPrimaryLabel(selected) })
+              setConfirmTarget({
+                kind: "retained",
+                id: selected.id,
+                label: backupPrimaryLabel(selected),
+              })
             }
           >
             Restore from {selected ? backupPrimaryLabel(selected) : "selected backup"}
@@ -935,9 +959,9 @@ function RestoreCard({
         title="Restore from backup"
         warning={
           <span>
-            <strong>This replaces everything</strong> currently in the console with the backup
-            from <strong>{namedTarget}</strong>. Anything recorded after that moment will be lost
-            unless it is in a newer backup.
+            <strong>This replaces everything</strong> currently in the console with the backup from{" "}
+            <strong>{namedTarget}</strong>. Anything recorded after that moment will be lost unless
+            it is in a newer backup.
           </span>
         }
         checklistLabel="I understand this overwrites all current data and cannot be undone."

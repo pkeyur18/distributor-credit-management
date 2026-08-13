@@ -9,6 +9,9 @@ export interface ExportMonthlyInput {
   periodMonth: string;
   /** Optional columns beyond the five mandatory ones (D-1). */
   optionalColumns?: string[];
+  /** Destination path chosen through the native save dialog (ADR-007) — the
+   *  WebView never handles raw file content, only the path string itself. */
+  outputPath: string;
 }
 
 // API-16 — the five mandatory columns (D-1) are always included regardless of selection.

@@ -12,6 +12,7 @@ use crate::m2_entries;
 use crate::m3_calc;
 use crate::m4_search;
 use crate::m5_close;
+use crate::m6_reports;
 use crate::m7_settings;
 use crate::m8_auth;
 use crate::paths::AppPaths;
@@ -295,7 +296,22 @@ pub fn manual_backup_current_period(
 }
 
 // M6 — US-M6.1..M6.5, S13.
-auth_stub!(export_monthly);
+
+/// API-16.
+#[tauri::command]
+pub fn export_monthly(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    input: m6_reports::ExportMonthlyInput,
+) -> Result<m6_reports::ExportResult, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m6_reports::export_monthly(conn, input)
+}
+
 auth_stub!(export_yearly_average);
 auth_stub!(export_low_contribution);
 auth_stub!(list_backups);
@@ -677,7 +693,6 @@ pub fn call_stub_by_name(
     session: tauri::State<'_, SessionState>,
 ) -> Result<serde_json::Value, AppError> {
     match name {
-        "export_monthly" => export_monthly(session),
         "export_yearly_average" => export_yearly_average(session),
         "export_low_contribution" => export_low_contribution(session),
         "list_backups" => list_backups(session),
@@ -733,13 +748,15 @@ mod tests {
             // US-M5.2/M5.3/M2.3/M2.4, S12.
             "get_period_lock_status",
             "get_outstanding_alert",
+            // US-M6.5/M6.1, S13.
+            "export_monthly",
         ];
         let stub_names: Vec<&str> = ALL_COMMAND_NAMES
             .iter()
             .copied()
             .filter(|n| !HAS_REAL_LOGIC.contains(n))
             .collect();
-        assert_eq!(stub_names.len(), 6);
+        assert_eq!(stub_names.len(), 5);
         // Exercised properly (with real State fixtures) in tests/contract.rs;
         // this just proves the dispatcher doesn't panic on any known name.
     }
