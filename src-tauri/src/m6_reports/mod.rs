@@ -165,6 +165,22 @@ fn resolve_period(conn: &Connection, period_month: &str) -> Result<(i64, String)
     })
 }
 
+/// 07-design-system.md's Colour-Plus-Label Rule (NFR-8, explicitly naming
+/// M6.5): a deactivated row's distinct colour is never allowed to stand
+/// alone without a text label. Rule-33 lists Active/inactive status as
+/// merely optional, but that optional-ness only governs whether the
+/// *picker* starts it ticked — this accessibility requirement means the
+/// column itself is effectively always present once any row is
+/// colour-coded, so it's forced in here rather than trusting every caller
+/// to remember it.
+fn with_forced_active_status(optional: &[OptionalColumn]) -> Vec<OptionalColumn> {
+    let mut optional = optional.to_vec();
+    if !optional.contains(&OptionalColumn::ActiveStatus) {
+        optional.push(OptionalColumn::ActiveStatus);
+    }
+    optional
+}
+
 /// Rule-19/D-1: the five mandatory columns first, in this fixed order,
 /// then whichever optional columns were selected — matching header order
 /// and cell order exactly, since a picker checkbox that reordered columns
@@ -174,6 +190,9 @@ fn write_export_xlsx(
     optional: &[OptionalColumn],
     output_path: &str,
 ) -> Result<(), AppError> {
+    let optional = with_forced_active_status(optional);
+    let optional = optional.as_slice();
+
     let mut workbook = Workbook::new();
     let worksheet = workbook.add_worksheet();
 
@@ -812,6 +831,28 @@ mod tests {
 
         let rows = load_snapshot_export_rows(&conn, period).unwrap();
         assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn with_forced_active_status_adds_it_when_the_caller_never_selected_it() {
+        // NFR-8/07-design-system.md's Colour-Plus-Label Rule: the inactive
+        // row's tint is never allowed to appear with no text label, so this
+        // must hold even when the picker's checkbox was left unticked.
+        let result = with_forced_active_status(&[OptionalColumn::Email]);
+        assert_eq!(
+            result,
+            vec![OptionalColumn::Email, OptionalColumn::ActiveStatus]
+        );
+    }
+
+    #[test]
+    fn with_forced_active_status_does_not_duplicate_an_explicit_selection() {
+        let result =
+            with_forced_active_status(&[OptionalColumn::ActiveStatus, OptionalColumn::Email]);
+        assert_eq!(
+            result,
+            vec![OptionalColumn::ActiveStatus, OptionalColumn::Email]
+        );
     }
 
     #[test]
