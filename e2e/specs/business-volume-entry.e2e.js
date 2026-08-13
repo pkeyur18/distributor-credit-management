@@ -1,5 +1,12 @@
 import { completeFirstRunSetup, addRootMember, addMember, navigateTo } from "../helpers/seed.js";
 
+// Specs in this directory share one running app instance and one login
+// session (see helpers/seed.js's own doc comment) — first-run setup can
+// only ever happen once per instance, so every test after the first one
+// in this describe block must build on the state earlier tests already
+// left behind rather than calling completeFirstRunSetup/addRootMember a
+// second time.
+
 // US-M2.1 (S7) — the golden path this whole harness exists to catch:
 // record a Business Volume entry through the real UI and confirm the
 // affected figure updates with no "recalculate" control anywhere on
@@ -39,5 +46,22 @@ describe("Business Volume Entry", () => {
     const sessionList = $("div=Recorded this session");
     await sessionList.waitForExist({ timeout: 3000 });
     await expect($("span=1000.00")).toExist();
+  });
+
+  // T-M2.5-4's negative case: a fresh console has exactly one recordable
+  // month (the current one), so the month switcher (T-M2.5-1) must render
+  // nowhere on screen — no control, no "Showing figures for" text. The
+  // positive two-outstanding-months case has no equivalent E2E coverage:
+  // producing it requires the login catch-up (US-M5.5) to observe a real
+  // calendar-month boundary, which nothing in `e2e/helpers/seed.js` can
+  // manufacture inside a single test run — that path is covered instead by
+  // `m4_search`'s and `m5_close`'s own Rust unit tests against a seeded
+  // multi-period database.
+  it("shows no month switcher when only one month is recordable", async () => {
+    // Reuses the session the previous test already set up — nothing here
+    // has touched a second period, so exactly one month (the current one)
+    // is still recordable.
+    await navigateTo("Business Volume Entry");
+    await expect($("*=Showing figures for")).not.toExist();
   });
 });

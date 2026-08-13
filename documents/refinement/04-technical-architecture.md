@@ -537,10 +537,12 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-10 | `get_member_detail` | Full detail: contact, Rewards breakdown (own-Business-Volume reward first, then per-leg differential, then royalty — Rule-46), direct children, TBV, leg count | Auth | member_id must exist | Read-only | Not audited |
-| API-11 | `get_direct_children_chart` | Chart node data. Request: `member_id`, `full_tree: bool`. With `full_tree: false` — the member and its direct children (FR-2). With `full_tree: true` — **the entire subtree**, which is what the full hierarchy window draws (FR-10, Rule-45) | Auth | member_id must exist | Read-only | Not audited |
+| API-10 | `get_member_detail` | Full detail: contact, Rewards breakdown (own-Business-Volume reward first, then per-leg differential, then royalty — Rule-46), direct children, TBV, leg count. Request: `member_id`, `period_month: string \| null` | Auth | member_id must exist | Read-only | Not audited |
+| API-11 | `get_direct_children_chart` | Chart node data. Request: `member_id`, `full_tree: bool`, `period_month: string \| null`. With `full_tree: false` — the member and its direct children (FR-2). With `full_tree: true` — **the entire subtree**, which is what the full hierarchy window draws (FR-10, Rule-45) | Auth | member_id must exist | Read-only | Not audited |
 
 **On API-11's `full_tree` flag.** The parameter was always in the command's contract; it is now put to work by FR-10 and no new command is introduced for the full hierarchy view. Either value returns the same node shape — name, ID, own Business Volume, active flag, introducer link — so FR-2's three-field constraint holds identically in both modes. The main window calls it once to obtain the count for the size gate (V4.5); the full hierarchy window calls it once more to draw. Both are cheap local reads against SQLite; the cost of the full view is in *rendering*, not in fetching, which is exactly why the render happens in a separate window.
+
+**On API-10/API-11's `period_month` parameter (added S13, T-M2.5-3).** `null` resolves to the oldest recordable period (`get_period_lock_status`'s own ordering) — never "whichever period has the highest `period_id`," which is what both commands did before this parameter existed and is wrong once Rule-36/CR-2 allows two periods to be simultaneously `open`/`awaiting_close`. An explicit value selects any other recordable month via the month switcher (US-M2.5).
 
 ### Module M5 — Monthly Close
 
@@ -555,10 +557,10 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-16 | `export_monthly` | Export current/selected month's data | Auth | Always includes 4 mandatory columns (Rule-19) regardless of selection | Read-only | Not audited |
+| API-16 | `export_monthly` | Export current/selected month's data | Auth | Always includes 5 mandatory columns (Rule-19, [06](06-decision-log-and-open-items.md) C9/D-1) regardless of selection | Read-only | Not audited |
 | API-17 | `export_yearly_average` | Export yearly average with snapshot-count denominator | Auth | — | Read-only | Not audited |
 | API-18 | `export_low_contribution` | Export members below own-BV yearly-average threshold | Auth | — | Read-only | Not audited |
-| API-19 | `list_backups` | List all retained backups | Auth | — | Read-only | Not audited |
+| API-19 | `list_backups` | List closed *periods* that have a snapshot, for the Reports screen's re-download card — not the same listing as API-35's whole-console backup rows | Auth | — | Read-only | Not audited |
 | API-20 | `redownload_backup` | Re-download a past backup, always latest version | Auth | period_id must have ≥1 backup | Read-only | Not audited. This is the command backing "Closed month snapshot" — see [06](06-decision-log-and-open-items.md) C-history HIGH-1 |
 
 ### Module M7 — Settings

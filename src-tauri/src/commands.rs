@@ -12,6 +12,7 @@ use crate::m2_entries;
 use crate::m3_calc;
 use crate::m4_search;
 use crate::m5_close;
+use crate::m6_reports;
 use crate::m7_settings;
 use crate::m8_auth;
 use crate::paths::AppPaths;
@@ -194,36 +195,43 @@ pub fn preview_settings_impact(
 
 // M4 — US-M4.1/M4.2, S8; US-M4.3, S9.
 
+/// `period_month`: T-M2.5-3's month switcher. `None` resolves to the
+/// oldest recordable period (never "whatever period_id is highest") — see
+/// `m4_search::resolve_view_period_id`.
 #[tauri::command]
 pub fn get_member_detail(
     session: tauri::State<'_, SessionState>,
     db: tauri::State<'_, DbState>,
     member_id: i64,
+    period_month: Option<String>,
 ) -> Result<m4_search::MemberDetail, AppError> {
     require_session(&session)?;
     let guard = locked_conn(&db);
     let conn = guard.as_ref().expect(
         "an authenticated session implies an open database connection — see S5's login flow",
     );
-    m4_search::get_member_detail(conn, member_id)
+    m4_search::get_member_detail(conn, member_id, period_month.as_deref())
 }
 
 /// API-11. `full_tree: true` is US-M4.3's parameter, implemented here
 /// because Home's slab-distribution charts (US-M4.4, same sprint) are the
 /// first caller that needs it — see `m4_search`'s own doc comment.
+/// `period_month`: T-M2.5-3's month switcher, same default as
+/// `get_member_detail` above.
 #[tauri::command]
 pub fn get_direct_children_chart(
     session: tauri::State<'_, SessionState>,
     db: tauri::State<'_, DbState>,
     member_id: Option<i64>,
     full_tree: bool,
+    period_month: Option<String>,
 ) -> Result<m4_search::DirectChildrenChartResult, AppError> {
     require_session(&session)?;
     let guard = locked_conn(&db);
     let conn = guard.as_ref().expect(
         "an authenticated session implies an open database connection — see S5's login flow",
     );
-    m4_search::get_direct_children_chart(conn, member_id, full_tree)
+    m4_search::get_direct_children_chart(conn, member_id, full_tree, period_month.as_deref())
 }
 
 // M5 — US-M5.1, S11; US-M5.2/M5.3/M5.5, S12 (US-M5.4 is S13 and stays a stub).
@@ -288,11 +296,81 @@ pub fn manual_backup_current_period(
 }
 
 // M6 — US-M6.1..M6.5, S13.
-auth_stub!(export_monthly);
-auth_stub!(export_yearly_average);
-auth_stub!(export_low_contribution);
-auth_stub!(list_backups);
-auth_stub!(redownload_backup);
+
+/// API-16.
+#[tauri::command]
+pub fn export_monthly(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    input: m6_reports::ExportMonthlyInput,
+) -> Result<m6_reports::ExportResult, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m6_reports::export_monthly(conn, input)
+}
+
+/// API-17.
+#[tauri::command]
+pub fn export_yearly_average(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    output_path: String,
+) -> Result<m6_reports::ExportResult, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m6_reports::export_yearly_average(conn, &output_path)
+}
+
+/// API-18.
+#[tauri::command]
+pub fn export_low_contribution(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    input: m6_reports::ExportLowContributionInput,
+) -> Result<m6_reports::ExportResult, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m6_reports::export_low_contribution(conn, input)
+}
+
+/// API-19.
+#[tauri::command]
+pub fn list_backups(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<Vec<m6_reports::ClosedMonthBackup>, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m6_reports::list_backups(conn)
+}
+
+/// API-20.
+#[tauri::command]
+pub fn redownload_backup(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    period_id: i64,
+    output_path: String,
+) -> Result<m6_reports::ExportResult, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m6_reports::redownload_backup(conn, period_id, &output_path)
+}
 
 // M7 — US-M7.1/M7.2/M7.4, S10 (the mid-period recalculation warning,
 // US-M7.3/API-33's `preview_settings_impact`, stays a stub — S11).
@@ -670,11 +748,6 @@ pub fn call_stub_by_name(
     session: tauri::State<'_, SessionState>,
 ) -> Result<serde_json::Value, AppError> {
     match name {
-        "export_monthly" => export_monthly(session),
-        "export_yearly_average" => export_yearly_average(session),
-        "export_low_contribution" => export_low_contribution(session),
-        "list_backups" => list_backups(session),
-        "redownload_backup" => redownload_backup(session),
         "get_audit_log" => get_audit_log(session),
         other => panic!("unknown command in ALL_COMMAND_NAMES: {other}"),
     }
@@ -726,13 +799,19 @@ mod tests {
             // US-M5.2/M5.3/M2.3/M2.4, S12.
             "get_period_lock_status",
             "get_outstanding_alert",
+            // US-M6.5/M6.1/M6.2/M6.3/M6.4, S13.
+            "export_monthly",
+            "export_yearly_average",
+            "export_low_contribution",
+            "list_backups",
+            "redownload_backup",
         ];
         let stub_names: Vec<&str> = ALL_COMMAND_NAMES
             .iter()
             .copied()
             .filter(|n| !HAS_REAL_LOGIC.contains(n))
             .collect();
-        assert_eq!(stub_names.len(), 6);
+        assert_eq!(stub_names.len(), 1);
         // Exercised properly (with real State fixtures) in tests/contract.rs;
         // this just proves the dispatcher doesn't panic on any known name.
     }

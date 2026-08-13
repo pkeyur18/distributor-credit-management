@@ -150,7 +150,7 @@ Each traces to a source document or to a decision above; none needed a judgement
 | 1 | ⚠️ **`03-functional-specification.md` §6 says "the complete set of 49" validation rules. The actual count is 50** — V4.6 was appended by CR-5 and the count was never bumped. `00-master-index.md` §4 already says 50 | P-11 |
 | 2 | **Six validation rules had no task**: V1.1 (name required), V1.4 (email valid if given), V6.3 and V7.1 (positive thresholds), **V7.2 (percentages 0–100)**, V7.4 (royalty count a positive whole number) | `T-M1.1-10`, `T-M7.1-7`, `T-M7.2-8` |
 | 3 | **No task for the deactivate confirmation modal** — `confirmDeactivate` exists in the approved prototype | `T-M1.3-7` |
-| 4 | **P-1 did not clear Rule-19's own ⚠️ marker**, which still reads "client answer needed" and is resolved by D-1 | P-1, amended |
+| 4 | ~~P-1 did not clear Rule-19's own ⚠️ marker~~ — **executed in full during S13** (`T-M6.5-3`), including Rule-19's marker and the `04-technical-architecture.md` API-16 row P-1's original file list omitted | P-1, done |
 | 5 | **`PI/06-traceability.md` omitted four namespaces** — V-rules, module functions, RQ, error matrix | [06-traceability.md](06-traceability.md) §§6–9 |
 
 ⚠️ **On correction 2:** V7.1 and V7.2 are **per-field range checks** and are *not* the cross-row monotonicity check Rule-41 forbids. Refusing a percentage of 400 is not the same as refusing a table whose percentages fall as thresholds rise. Do not let one be removed in the belief it violates the other.
@@ -163,7 +163,7 @@ Each traces to a source document or to a decision above; none needed a judgement
 
 | ID | Task | Files | Owner | Due before |
 |---|---|---|---|---|
-| **P-1** | Record D-1 and amend the four-column statements to five. ⚠️ **Includes clearing Rule-19's own ⚠️ marker**, which still reads "client answer needed" | `06-decision-log-and-open-items.md` (move O1 §3 → §2), `02-business-rules.md` **Rule-19's warning line**, Rule-33 and §6 row 12, `03-functional-specification.md` V6.1 and §5.8, `delivery-plan.md` US-M6.1 AC | Architect | **S13** (`T-M6.5-3`) |
+| **P-1** | ✅ **Done, S13.** Recorded D-1 (as C9) and amended the four-column statements to five, including Rule-19's own ⚠️ marker. Also amended `04-technical-architecture.md`'s API-16 row and `05-quality-and-acceptance.md`'s AC-26/AC-29, which the original file list below omitted — see correction 4 above | `06-decision-log-and-open-items.md` (moved O1 §3 → §2 as C9), `02-business-rules.md` **Rule-19's warning line**, Rule-33 and §6 row 12, `03-functional-specification.md` V6.1 and §5.8, `delivery-plan.md` US-M6.1 AC, `04-technical-architecture.md` API-16 row, `05-quality-and-acceptance.md` AC-26/AC-29 | Architect | **S13** (`T-M6.5-3`) |
 | **P-2** | Record D-2 and the ladder | `06-decision-log` (O4 §3 → §2), `05-quality-and-acceptance.md` §2 M8 row, `03-functional-specification.md` §5.10 Login | Architect | **S5** |
 | **P-3** | Record D-3, D-4, D-5 | `06-decision-log` (O2/O3/O5 §3 → §2), `02-business-rules.md` §6 rows 4 and 13 (drop the "no source default" annotations) | Architect | **S1** (D-3, D-4 are seed values), **S4** (D-5) |
 | **P-4** | Record D-6, D-7, D-8 as deviations | `04-technical-architecture.md` §10, `05-quality-and-acceptance.md` §6.3 | Architect | **S15** |

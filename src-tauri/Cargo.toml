@@ -40,6 +40,11 @@ aes-gcm = "0.10.3"
 sha2 = "0.10.9"
 # T-M7.4-5: the native file picker behind Settings' "Restore from a file…".
 tauri-plugin-dialog = "2.7.2"
+# US-M6.1 (S13)/ADR-007: all .xlsx generation happens Rust-side — the
+# WebView only ever hands back a destination path chosen through the same
+# native save dialog restore already uses for source paths, never raw file
+# content.
+rust_xlsxwriter = "0.90.1"
 
 [dev-dependencies]
 proptest = "1.8.0"

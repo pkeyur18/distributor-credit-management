@@ -111,6 +111,19 @@ pub struct ConfirmBackupAndCloseInput {
     pub external_medium_path: Option<String>,
 }
 
+/// RQ-16/Rule-23: true only when nothing was ever recorded anywhere in the
+/// hierarchy during this calendar month. `business_volume_entries.amount`
+/// has a `CHECK (amount > 0)` constraint, so row-existence alone is a
+/// correct emptiness check — there is no such thing as a zero-amount entry
+/// to filter out.
+fn period_has_any_activity(conn: &Connection, period_month: &str) -> Result<bool, AppError> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM business_volume_entries WHERE period_month = ?1)",
+        [period_month],
+        |r| r.get(0),
+    )?)
+}
+
 /// Rule-38: an immutable snapshot at version 1 for **every** member, not
 /// only those with activity this period — a member with no row yet in
 /// `member_period_totals` (nothing entered under them this period) still
@@ -118,6 +131,14 @@ pub struct ConfirmBackupAndCloseInput {
 /// already uses for the same reason. `pub`, not `pub(crate)`: `generate_dataset`
 /// (T-QA.5-3) is its own binary crate and reuses this rather than
 /// re-deriving the same snapshot shape a second way.
+///
+/// Callers must check `period_has_any_activity` first (RQ-16/T-M5.4-1): a
+/// calendar month that elapses with zero entries anywhere in the hierarchy
+/// gets no snapshot at all, not a snapshot of zeroes. This function itself
+/// still writes unconditionally for every member of a genuinely active
+/// period — the emptiness check is the caller's job, not this one's, since
+/// `generate_dataset` never produces an empty period and must keep calling
+/// this directly.
 pub fn write_period_close_snapshots(
     conn: &Connection,
     period_id: i64,
@@ -226,7 +247,14 @@ fn write_period_close_backup_and_snapshots(
         };
     }
 
-    write_period_close_snapshots(conn, period_id, today)?;
+    let period_month: String = conn.query_row(
+        "SELECT period_month FROM periods WHERE id = ?1",
+        [period_id],
+        |r| r.get(0),
+    )?;
+    if period_has_any_activity(conn, &period_month)? {
+        write_period_close_snapshots(conn, period_id, today)?;
+    }
     zero_period_totals(conn, period_id)?;
     conn.execute(
         "UPDATE periods SET status = 'closed', closed_at = ?2 WHERE id = ?1",
@@ -577,6 +605,21 @@ mod tests {
         .unwrap();
     }
 
+    // T-M5.4-1/3: `period_has_any_activity` reads `business_volume_entries`
+    // directly, not `member_period_totals` — `insert_totals` above seeds
+    // the rollup table only, which real entry recording never does without
+    // also writing an entries row, so any test exercising the empty-month
+    // gate needs this instead.
+    fn insert_entry(conn: &Connection, member_id: i64, period_month: &str, amount: i64) {
+        conn.execute(
+            "INSERT INTO business_volume_entries
+                (member_id, amount, entry_date, period_month, created_at)
+             VALUES (?1, ?2, ?3 || '-15', ?3, ?3 || '-15')",
+            rusqlite::params![member_id, amount, period_month],
+        )
+        .unwrap();
+    }
+
     fn ym_offset(months: i64) -> String {
         let today = chrono::Local::now().date_naive();
         let shifted = if months >= 0 {
@@ -864,6 +907,7 @@ mod tests {
         let with_activity = insert_member(&conn, None);
         let without_activity = insert_member(&conn, Some(with_activity));
         insert_totals(&conn, with_activity, period, 100_000, 4);
+        insert_entry(&conn, with_activity, "2026-05", 100_000);
 
         confirm_backup_and_close(
             &conn,
@@ -931,6 +975,62 @@ mod tests {
             )
             .unwrap();
         assert_eq!(backup_count, 1);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn confirm_backup_and_close_writes_no_snapshot_for_a_wholly_empty_month() {
+        // T-M5.4-1/RQ-16: a calendar month elapsing with zero entries
+        // anywhere in the hierarchy produces no snapshot at all — not a
+        // zero snapshot — while the backup gate and close still complete
+        // exactly as for any other month (T-M5.5-5).
+        let (conn, dir) = seeded_with_temp_db();
+        let period = insert_period(&conn, "2026-05", "awaiting_close");
+        // A member exists but nothing was ever entered for them this
+        // period — no insert_entry call, and (matching real usage, where
+        // member_period_totals is only ever populated by recalculation off
+        // an actual entry) no insert_totals call either.
+        insert_member(&conn, None);
+
+        confirm_backup_and_close(
+            &conn,
+            &dir.join("console.db"),
+            &dir,
+            ConfirmBackupAndCloseInput {
+                period_id: period,
+                external_medium_path: None,
+            },
+        )
+        .unwrap();
+
+        let status: String = conn
+            .query_row("SELECT status FROM periods WHERE id = ?1", [period], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(status, "closed", "the close itself still completes");
+
+        let snapshot_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM monthly_snapshots WHERE period_id = ?1",
+                [period],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(snapshot_count, 0, "no snapshot at all, not a zero snapshot");
+
+        let backup_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM backups WHERE period_id = ?1 AND kind = 'period_close'",
+                [period],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            backup_count, 1,
+            "the whole-database backup gate still runs regardless of emptiness"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

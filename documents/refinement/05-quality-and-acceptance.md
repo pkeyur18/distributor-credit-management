@@ -282,10 +282,10 @@ Re-run all six scenarios through the actual built UI (not just the isolated engi
 
 | # | Criterion |
 |---|---|
-| **AC-26** | The monthly extract carries the four defaults and any chosen columns |
+| **AC-26** | The monthly extract carries the five mandatory columns and any chosen optional columns |
 | **AC-27** | The yearly average divides by the count of months holding a record, and displays that count next to every average |
 | **AC-28** | The low-contribution report filters on the yearly average of the member's **own** Business Volume |
-| **AC-29** | Every extract carries the member's basic details, contact number, volume, and Business Volume regardless of selection *(see [06](06-decision-log-and-open-items.md) O1 — this is Rule-19's five-field wording, awaiting reconciliation against V6.1's four)* |
+| **AC-29** | Every extract carries the member's basic details, contact number, Business Volume, and Total Business Volume regardless of selection ([06](06-decision-log-and-open-items.md) C9, D-1) |
 | **AC-30** | All extracts open correctly in a standard spreadsheet application |
 
 ### 4.6 Settings, access and language
@@ -373,7 +373,7 @@ A story is **Done** only when all of the following are true:
 A module is **Done** only when, in addition to every story within it meeting the per-story bar:
 
 - Every rule attributed to that module ([02](02-business-rules.md) §7's map) shows a passing test, not just "documented."
-- Any open item in [06](06-decision-log-and-open-items.md) §3 attributed to that module is resolved — not merely noted and deferred. As of this consolidation, **O1 gates only M6**; O2–O5 are build decisions that should be taken deliberately before the module ships, not defaults slipped in silently.
+- Any open item in [06](06-decision-log-and-open-items.md) §3 attributed to that module is resolved — not merely noted and deferred. As of this consolidation, **O2–O5 are build decisions** that should be taken deliberately before the module ships, not defaults slipped in silently — M6's own former open item (O1, the mandatory export column count) was resolved 8 Aug 2026 as C9/D-1.
 - The prototype-approved behaviours ported into that module — the settings recalculation warning, the last-slab-row refusal, the data-recovery screen, the console backup schedule/restore flows — match their approved reference behaviour exactly, not a re-interpretation.
 - The six worked scenarios still reproduce their golden totals through the real UI (not just a unit test) once M2/M3/M4 are all Done together.
 

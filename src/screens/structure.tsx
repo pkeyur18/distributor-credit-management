@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/empty-state";
 import { LoadingState } from "@/components/loading-state";
 import { SearchResultsList } from "@/components/search-results-list";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { MonthSwitcher } from "@/components/month-switcher";
 import { useToast } from "@/components/ui/toast";
 import {
   StructureTreeNode,
@@ -17,6 +18,7 @@ import {
 } from "@/components/structure-tree-node";
 import { useMemberSearch } from "@/lib/use-member-search";
 import { getDirectChildrenChart } from "@/lib/ipc/m4-search";
+import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
 import type { ChartNode } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { centsToDisplay } from "@/lib/utils";
@@ -29,9 +31,7 @@ const ZOOM_STEP = 0.1;
 // US-M4.2 (§5.3). One branch open at a time — `openPath` is the single
 // chain of expanded node ids from the screen's root down; opening a
 // different node at an already-open depth replaces that branch rather than
-// adding a second one. `full_tree: true` (the Full Hierarchy Window,
-// US-M4.3) doesn't ship until S9 — "View full hierarchy" is disabled here,
-// same reduction as Sprint 7's month-switcher.
+// adding a second one.
 export function Structure() {
   const { memberId: routeMemberId } = useParams<{ memberId?: string }>();
   const navigate = useNavigate();
@@ -45,6 +45,16 @@ export function Structure() {
   const [query, setQuery] = useState("");
   const { results } = useMemberSearch(query);
   const toast = useToast();
+
+  // T-M2.5-3: this figure screen defaults to the oldest recordable month,
+  // switchable when more than one is outstanding (CR-2).
+  const [lockStatus, setLockStatus] = useState<PeriodLockStatus | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const viewMonth = selectedMonth ?? lockStatus?.recordablePeriodMonths[0];
+
+  useEffect(() => {
+    getPeriodLockStatus().then(setLockStatus);
+  }, []);
 
   // US-M4.3 (§5.3a/Rule-45). The gate's count and the eventual draw are two
   // separate reads of the same cheap query (04-technical-architecture.md
@@ -60,10 +70,12 @@ export function Structure() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const nodeRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
-  // Re-root the whole view when the route's member changes.
+  // Re-root the whole view when the route's member or the viewed month
+  // changes — a month switch invalidates every cached generation, since
+  // each one was fetched against the previous month's figures.
   useEffect(() => {
     let cancelled = false;
-    getDirectChildrenChart({ memberId: requestedId, fullTree: false })
+    getDirectChildrenChart({ memberId: requestedId, fullTree: false, periodMonth: viewMonth })
       .then((result) => {
         if (cancelled) return;
         // Backend contract: the requested (or resolved-root) member is
@@ -82,18 +94,18 @@ export function Structure() {
     return () => {
       cancelled = true;
     };
-  }, [requestedId]);
+  }, [requestedId, viewMonth]);
 
   // Fetch children for whichever node just opened.
   useEffect(() => {
     const openId = openPath[openPath.length - 1];
     if (openId === undefined || levels[openId]) return;
-    getDirectChildrenChart({ memberId: openId, fullTree: false })
+    getDirectChildrenChart({ memberId: openId, fullTree: false, periodMonth: viewMonth })
       .then((result) => {
         setLevels((prev) => ({ ...prev, [openId]: result.nodes.slice(1) }));
       })
       .catch((raw) => setError(toErrorPresentation(raw).message));
-  }, [openPath, levels]);
+  }, [openPath, levels, viewMonth]);
 
   // Root has no ancestor in this view (its own introducer, if any, was
   // never fetched), so it toggles as a special full collapse/expand rather
@@ -236,7 +248,9 @@ export function Structure() {
             size="sm"
             disabled={zoom <= ZOOM_MIN + 1e-6}
             aria-label="Zoom out"
-            onClick={() => setZoom((z) => Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100))}
+            onClick={() =>
+              setZoom((z) => Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100))
+            }
           >
             −
           </Button>
@@ -246,7 +260,9 @@ export function Structure() {
             size="sm"
             disabled={zoom >= ZOOM_MAX - 1e-6}
             aria-label="Zoom in"
-            onClick={() => setZoom((z) => Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100))}
+            onClick={() =>
+              setZoom((z) => Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100))
+            }
           >
             +
           </Button>
@@ -254,13 +270,31 @@ export function Structure() {
             Fit width
           </Button>
         </div>
-        <Button variant="secondary" size="sm" disabled={openPath.length === 0} onClick={() => setOpenPath([])}>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={openPath.length === 0}
+          onClick={() => setOpenPath([])}
+        >
           Collapse all
         </Button>
-        <Button variant="secondary" size="sm" disabled={fullHierarchyBusy} onClick={viewFullHierarchy}>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={fullHierarchyBusy}
+          onClick={viewFullHierarchy}
+        >
           View full hierarchy
         </Button>
       </div>
+
+      {lockStatus && (
+        <MonthSwitcher
+          months={lockStatus.recordablePeriodMonths}
+          value={viewMonth ?? lockStatus.recordablePeriodMonths[0]}
+          onChange={setSelectedMonth}
+        />
+      )}
 
       <div ref={wrapRef} className="mt-4 overflow-x-auto rounded-lg border border-border bg-bg p-6">
         <div

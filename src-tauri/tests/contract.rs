@@ -12,6 +12,7 @@ use bvconsole_lib::db_state::DbState;
 use bvconsole_lib::error::AppError;
 use bvconsole_lib::m1_members::{AddMemberInput, AddMemberOutcome, CreateRootMemberInput};
 use bvconsole_lib::m2_entries::{EditEntryInput, RecordEntryInput};
+use bvconsole_lib::m6_reports::{ExportLowContributionInput, ExportMonthlyInput};
 use bvconsole_lib::m8_auth::{CredentialInput, SetupFirstRunInput};
 use bvconsole_lib::paths::AppPaths;
 use bvconsole_lib::session::SessionState;
@@ -221,6 +222,12 @@ fn every_authenticated_command_refuses_without_a_session_and_only_those() {
         // US-M5.2/M5.3/M2.3/M2.4, S12.
         "get_period_lock_status",
         "get_outstanding_alert",
+        // US-M6.5/M6.1/M6.2/M6.3/M6.4, S13.
+        "export_monthly",
+        "export_yearly_average",
+        "export_low_contribution",
+        "list_backups",
+        "redownload_backup",
     ];
     for &name in ALL_COMMAND_NAMES
         .iter()
@@ -443,7 +450,7 @@ fn search_members_end_to_end_through_the_command_layer() {
 fn get_member_detail_requires_a_session() {
     let app = app_with_seeded_db();
     let result =
-        commands::get_member_detail(app.state::<SessionState>(), app.state::<DbState>(), 1);
+        commands::get_member_detail(app.state::<SessionState>(), app.state::<DbState>(), 1, None);
     assert!(matches!(result, Err(AppError::AuthRequired)));
 }
 
@@ -455,6 +462,7 @@ fn get_direct_children_chart_requires_a_session() {
         app.state::<DbState>(),
         None,
         false,
+        None,
     );
     assert!(matches!(result, Err(AppError::AuthRequired)));
 }
@@ -470,9 +478,13 @@ fn get_member_detail_and_get_direct_children_chart_end_to_end_through_the_comman
     )
     .unwrap();
 
-    let detail =
-        commands::get_member_detail(app.state::<SessionState>(), app.state::<DbState>(), root.id)
-            .unwrap();
+    let detail = commands::get_member_detail(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root.id,
+        None,
+    )
+    .unwrap();
     assert_eq!(detail.member.id, root.id);
     assert_eq!(detail.leg_count, 0);
 
@@ -482,6 +494,7 @@ fn get_member_detail_and_get_direct_children_chart_end_to_end_through_the_comman
         app.state::<DbState>(),
         None,
         false,
+        None,
     )
     .unwrap();
     assert_eq!(chart.nodes[0].member_id, root.id);
@@ -1134,6 +1147,198 @@ fn get_period_lock_status_and_get_outstanding_alert_require_a_session() {
         commands::get_outstanding_alert(app.state::<SessionState>(), app.state::<DbState>()),
         Err(AppError::AuthRequired)
     ));
+}
+
+#[test]
+fn export_monthly_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::export_monthly(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        ExportMonthlyInput {
+            period_month: "2026-08".into(),
+            optional_columns: vec![],
+            output_path: "unused.xlsx".into(),
+        },
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn export_monthly_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876599906"),
+    )
+    .unwrap();
+    // No period row exists until one is created — `record_entry` auto-
+    // creates the current month's (same fallback `the_full_close_flow_*`
+    // above relies on), which is the simplest way to reach a real,
+    // recordable period without reaching into the DB directly.
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let current_month = chrono::Local::now().format("%Y-%m").to_string();
+    commands::record_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        RecordEntryInput {
+            member_id: root.id,
+            amount: 100_000,
+            entry_date: today,
+        },
+    )
+    .unwrap();
+
+    let output_dir = TempAppDir::new("export-monthly-output");
+    let output_path = output_dir.0.join("monthly.xlsx");
+    let result = commands::export_monthly(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        ExportMonthlyInput {
+            period_month: current_month,
+            optional_columns: vec!["active_status".into()],
+            output_path: output_path.to_string_lossy().into_owned(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(result.file_path, output_path.to_string_lossy());
+    assert!(output_path.exists());
+}
+
+#[test]
+fn export_yearly_average_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::export_yearly_average(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        "unused.xlsx".into(),
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn export_yearly_average_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+
+    let output_dir = TempAppDir::new("export-yearly-average-output");
+    let output_path = output_dir.0.join("yearly.xlsx");
+    let result = commands::export_yearly_average(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        output_path.to_string_lossy().into_owned(),
+    )
+    .unwrap();
+
+    assert_eq!(result.file_path, output_path.to_string_lossy());
+    assert!(output_path.exists());
+}
+
+#[test]
+fn export_low_contribution_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::export_low_contribution(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        ExportLowContributionInput {
+            threshold: None,
+            output_path: "unused.xlsx".into(),
+        },
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn export_low_contribution_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+
+    let output_dir = TempAppDir::new("export-low-contribution-output");
+    let output_path = output_dir.0.join("low-contribution.xlsx");
+    let result = commands::export_low_contribution(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        ExportLowContributionInput {
+            threshold: Some(10_000),
+            output_path: output_path.to_string_lossy().into_owned(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(result.file_path, output_path.to_string_lossy());
+    assert!(output_path.exists());
+}
+
+#[test]
+fn list_backups_and_redownload_backup_require_a_session() {
+    let app = app_with_seeded_db();
+    assert!(matches!(
+        commands::list_backups(app.state::<SessionState>(), app.state::<DbState>()),
+        Err(AppError::AuthRequired)
+    ));
+    assert!(matches!(
+        commands::redownload_backup(
+            app.state::<SessionState>(),
+            app.state::<DbState>(),
+            1,
+            "unused.xlsx".into(),
+        ),
+        Err(AppError::AuthRequired)
+    ));
+}
+
+#[test]
+fn list_backups_and_redownload_backup_end_to_end_through_the_command_layer() {
+    let (app, _dir) = app_with_seeded_db_on_disk("list-and-redownload-backups");
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876599907"),
+    )
+    .unwrap();
+    commands::record_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        RecordEntryInput {
+            member_id: root.id,
+            amount: 100_000,
+            entry_date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        },
+    )
+    .unwrap();
+    let period_id = mark_current_month_awaiting_close(&app);
+    commands::confirm_backup_and_close(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        app.state::<AppPaths>(),
+        bvconsole_lib::m5_close::ConfirmBackupAndCloseInput {
+            period_id,
+            external_medium_path: None,
+        },
+    )
+    .unwrap();
+
+    let backups =
+        commands::list_backups(app.state::<SessionState>(), app.state::<DbState>()).unwrap();
+    assert_eq!(backups.len(), 1);
+    assert_eq!(backups[0].period_id, period_id);
+    assert!(!backups[0].is_corrected);
+
+    let output_dir = TempAppDir::new("redownload-backup-output");
+    let output_path = output_dir.0.join("closed-snapshot.xlsx");
+    let result = commands::redownload_backup(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        period_id,
+        output_path.to_string_lossy().into_owned(),
+    )
+    .unwrap();
+    assert_eq!(result.file_path, output_path.to_string_lossy());
+    assert!(output_path.exists());
 }
 
 #[test]

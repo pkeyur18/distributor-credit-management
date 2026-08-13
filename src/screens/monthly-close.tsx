@@ -249,7 +249,10 @@ export function MonthlyClose() {
   }
 
   useEffect(() => {
-    refresh();
+    getOutstandingPeriods()
+      .then(setOutstanding)
+      .catch((raw) => toast.add({ title: errorMessage(raw), type: "danger" }));
+    refreshAlert();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

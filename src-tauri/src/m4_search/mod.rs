@@ -9,12 +9,67 @@ use serde::Serialize;
 use crate::error::AppError;
 use crate::m1_members::Member;
 use crate::m3_calc::engine::round_half_up_div100;
+use crate::m5_close::get_period_lock_status;
 
-/// A member's own latest `member_period_totals` row — the same "read
-/// whatever's there, COALESCE to 0" convention `search_members` already
-/// established (S5/S7), reused here rather than re-derived: no dedicated
-/// current-period concept exists yet (that's US-M2.3/US-M5.5, S12).
-struct LatestTotals {
+/// T-M2.5-3: figure screens default to the **oldest recordable** period,
+/// never "whatever period_id happens to be highest." Before US-M2.5 every
+/// query here picked its period independently per member (`ORDER BY
+/// period_id DESC LIMIT 1` against that member's own rows), which is wrong
+/// once CR-2 allows two periods to be simultaneously open/awaiting_close —
+/// two members touched at different times could each resolve to a
+/// different period, and the screen would show a blend of two months at
+/// once. Resolving a single `period_id` up front and threading it through
+/// every query is what makes the screen show one consistent month.
+pub fn resolve_view_period_id(
+    conn: &Connection,
+    period_month: Option<&str>,
+) -> Result<i64, AppError> {
+    match period_month {
+        // An explicit month names a real switcher option, so a miss here
+        // is a genuine caller error worth surfacing.
+        Some(month) => conn
+            .query_row(
+                "SELECT id FROM periods WHERE period_month = ?1",
+                [month],
+                |r| r.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| AppError::NotFound {
+                message: "Period not found.".into(),
+            }),
+        // No month named: default to the oldest recordable one. Its
+        // `periods` row may not exist yet on a fresh install or in a test
+        // fixture that never ran the login catch-up (US-M5.5) — that's not
+        // an error, it just means nothing has happened yet. `0` never
+        // matches a real `period_id` (SQLite's INTEGER PRIMARY KEY starts
+        // at 1), so every downstream LEFT JOIN against it degrades to the
+        // same all-zero COALESCE result this code already produced before
+        // period-awareness existed.
+        None => {
+            let status = get_period_lock_status(conn)?;
+            let month = status
+                .recordable_period_months
+                .first()
+                .cloned()
+                .expect("get_period_lock_status always names at least the current month");
+            Ok(conn
+                .query_row(
+                    "SELECT id FROM periods WHERE period_month = ?1",
+                    [&month],
+                    |r| r.get(0),
+                )
+                .optional()?
+                .unwrap_or(0))
+        }
+    }
+}
+
+/// A member's `member_period_totals` row for one explicit period — the
+/// same "read whatever's there, COALESCE to 0" convention `search_members`
+/// already established (S5/S7), just scoped to a caller-resolved
+/// `period_id` (`resolve_view_period_id`) rather than each member picking
+/// their own latest row independently.
+struct PeriodTotals {
     business_volume: i64,
     total_business_volume: i64,
     slab_pct: i64,
@@ -23,21 +78,21 @@ struct LatestTotals {
     rewards: i64,
 }
 
-fn latest_totals(conn: &Connection, member_id: i64) -> Result<LatestTotals, AppError> {
+fn totals_for_period(
+    conn: &Connection,
+    member_id: i64,
+    period_id: i64,
+) -> Result<PeriodTotals, AppError> {
     Ok(conn.query_row(
         "SELECT COALESCE(t.business_volume, 0), COALESCE(t.total_business_volume, 0),
                 COALESCE(t.slab_pct, 0),
                 COALESCE(t.royalty, 0), COALESCE(t.own_reward, 0), COALESCE(t.rewards, 0)
          FROM (SELECT 1) dummy
          LEFT JOIN member_period_totals t
-                ON t.member_id = ?1
-               AND t.period_id = (
-                    SELECT period_id FROM member_period_totals
-                    WHERE member_id = ?1 ORDER BY period_id DESC LIMIT 1
-                   )",
-        [member_id],
+                ON t.member_id = ?1 AND t.period_id = ?2",
+        rusqlite::params![member_id, period_id],
         |r| {
-            Ok(LatestTotals {
+            Ok(PeriodTotals {
                 business_volume: r.get(0)?,
                 total_business_volume: r.get(1)?,
                 slab_pct: r.get(2)?,
@@ -143,22 +198,19 @@ pub struct MemberDetail {
 fn direct_children_for_detail(
     conn: &Connection,
     member_id: i64,
+    period_id: i64,
 ) -> Result<Vec<MemberDetailChild>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT m.id, m.name, m.is_active,
                 COALESCE(t.total_business_volume, 0), COALESCE(t.slab_pct, 0)
          FROM members m
          LEFT JOIN member_period_totals t
-                ON t.member_id = m.id
-               AND t.period_id = (
-                    SELECT period_id FROM member_period_totals
-                    WHERE member_id = m.id ORDER BY period_id DESC LIMIT 1
-                   )
+                ON t.member_id = m.id AND t.period_id = ?2
          WHERE m.introducer_member_id = ?1
          ORDER BY m.id",
     )?;
     let rows = stmt
-        .query_map([member_id], |r| {
+        .query_map(rusqlite::params![member_id, period_id], |r| {
             Ok(MemberDetailChild {
                 member_id: r.get(0)?,
                 name: r.get(1)?,
@@ -178,17 +230,22 @@ fn direct_children_for_detail(
 /// differential and royalty never both pay on the same leg — falls out of
 /// the formulas themselves; nothing here special-cases a leg out of one
 /// term because it qualified for the other.
-pub fn get_member_detail(conn: &Connection, member_id: i64) -> Result<MemberDetail, AppError> {
+pub fn get_member_detail(
+    conn: &Connection,
+    member_id: i64,
+    period_month: Option<&str>,
+) -> Result<MemberDetail, AppError> {
     if !member_exists(conn, member_id)? {
         return Err(AppError::NotFound {
             message: "Member not found.".into(),
         });
     }
+    let period_id = resolve_view_period_id(conn, period_month)?;
     let member = conn.query_row("SELECT * FROM members WHERE id = ?1", [member_id], |r| {
         Member::from_row(r)
     })?;
-    let totals = latest_totals(conn, member_id)?;
-    let children = direct_children_for_detail(conn, member_id)?;
+    let totals = totals_for_period(conn, member_id, period_id)?;
+    let children = direct_children_for_detail(conn, member_id, period_id)?;
 
     let differentials: Vec<DifferentialLine> = children
         .iter()
@@ -308,6 +365,7 @@ fn chart_nodes(
     conn: &Connection,
     member_id: i64,
     max_depth: i64,
+    period_id: i64,
 ) -> Result<Vec<ChartNode>, AppError> {
     let mut stmt = conn.prepare(
         "WITH RECURSIVE subtree(id, depth) AS (
@@ -324,15 +382,11 @@ fn chart_nodes(
          FROM subtree
          JOIN members m ON m.id = subtree.id
          LEFT JOIN member_period_totals t
-                ON t.member_id = m.id
-               AND t.period_id = (
-                    SELECT period_id FROM member_period_totals
-                    WHERE member_id = m.id ORDER BY period_id DESC LIMIT 1
-                   )
+                ON t.member_id = m.id AND t.period_id = ?3
          ORDER BY subtree.depth, m.id",
     )?;
     let rows = stmt
-        .query_map(rusqlite::params![member_id, max_depth], |r| {
+        .query_map(rusqlite::params![member_id, max_depth, period_id], |r| {
             Ok(ChartNode {
                 member_id: r.get(0)?,
                 name: r.get(1)?,
@@ -369,6 +423,7 @@ pub fn get_direct_children_chart(
     conn: &Connection,
     member_id: Option<i64>,
     full_tree: bool,
+    period_month: Option<&str>,
 ) -> Result<DirectChildrenChartResult, AppError> {
     let member_id = match member_id {
         Some(id) => id,
@@ -379,9 +434,10 @@ pub fn get_direct_children_chart(
             message: "Member not found.".into(),
         });
     }
+    let period_id = resolve_view_period_id(conn, period_month)?;
     let max_depth = if full_tree { i64::MAX } else { 1 };
     Ok(DirectChildrenChartResult {
-        nodes: chart_nodes(conn, member_id, max_depth)?,
+        nodes: chart_nodes(conn, member_id, max_depth, period_id)?,
         slab_table: slab_table_rows(conn)?,
     })
 }
@@ -441,7 +497,7 @@ mod tests {
     #[test]
     fn get_member_detail_refuses_an_unknown_member() {
         let conn = seeded();
-        let err = get_member_detail(&conn, 999_999).unwrap_err();
+        let err = get_member_detail(&conn, 999_999, None).unwrap_err();
         assert!(matches!(err, AppError::NotFound { .. }));
     }
 
@@ -449,7 +505,7 @@ mod tests {
     fn get_member_detail_defaults_to_zero_with_no_activity_yet() {
         let conn = seeded();
         let root = insert_member(&conn, "Root", None);
-        let detail = get_member_detail(&conn, root).unwrap();
+        let detail = get_member_detail(&conn, root, None).unwrap();
         assert_eq!(detail.total_business_volume, 0);
         assert_eq!(detail.leg_count, 0);
         assert_eq!(detail.rewards.rewards_total, 0);
@@ -477,7 +533,12 @@ mod tests {
             recalculate_chain(&conn, m, period).unwrap();
         }
 
-        let detail = get_member_detail(&conn, d).unwrap();
+        // Explicit month, not the `None` default: the default resolves via
+        // `get_period_lock_status`'s real-calendar-month fallback, which
+        // this fixture's hardcoded "2026-08" period won't match once the
+        // real date moves on — the test's premise is reading back this
+        // specific period, regardless of what day it happens to run.
+        let detail = get_member_detail(&conn, d, Some("2026-08")).unwrap();
         assert_eq!(detail.slab_pct, 6);
         assert_eq!(detail.leg_count, 3);
         let by_child: std::collections::HashMap<i64, i64> = detail
@@ -515,7 +576,7 @@ mod tests {
         let child = insert_member(&conn, "Child", Some(root));
         let _grandchild = insert_member(&conn, "Grandchild", Some(child));
 
-        let result = get_direct_children_chart(&conn, Some(root), false).unwrap();
+        let result = get_direct_children_chart(&conn, Some(root), false, None).unwrap();
         let ids: Vec<i64> = result.nodes.iter().map(|n| n.member_id).collect();
         assert_eq!(ids, vec![root, child], "root + direct children only");
         assert_eq!(result.nodes[0].leg_count, 1, "root has one direct leg");
@@ -532,7 +593,7 @@ mod tests {
         let child = insert_member(&conn, "Child", Some(root));
         let grandchild = insert_member(&conn, "Grandchild", Some(child));
 
-        let result = get_direct_children_chart(&conn, Some(root), true).unwrap();
+        let result = get_direct_children_chart(&conn, Some(root), true, None).unwrap();
         let ids: std::collections::HashSet<i64> =
             result.nodes.iter().map(|n| n.member_id).collect();
         assert_eq!(ids.len(), 3);
@@ -543,7 +604,7 @@ mod tests {
     fn chart_result_carries_slab_table_ordered_by_sort_order() {
         let conn = seeded();
         let root = insert_member(&conn, "Root", None);
-        let result = get_direct_children_chart(&conn, Some(root), false).unwrap();
+        let result = get_direct_children_chart(&conn, Some(root), false, None).unwrap();
         assert_eq!(result.slab_table.len(), 7, "the 7 default seeded rows");
         let orders: Vec<i64> = result.slab_table.iter().map(|s| s.sort_order).collect();
         let mut sorted = orders.clone();
@@ -554,7 +615,7 @@ mod tests {
     #[test]
     fn get_direct_children_chart_refuses_an_unknown_member() {
         let conn = seeded();
-        let err = get_direct_children_chart(&conn, Some(999_999), false).unwrap_err();
+        let err = get_direct_children_chart(&conn, Some(999_999), false, None).unwrap_err();
         assert!(matches!(err, AppError::NotFound { .. }));
     }
 
@@ -564,15 +625,49 @@ mod tests {
         let root = insert_member(&conn, "Root", None);
         let child = insert_member(&conn, "Child", Some(root));
 
-        let result = get_direct_children_chart(&conn, None, false).unwrap();
+        let result = get_direct_children_chart(&conn, None, false, None).unwrap();
         let ids: Vec<i64> = result.nodes.iter().map(|n| n.member_id).collect();
         assert_eq!(ids, vec![root, child]);
     }
 
     #[test]
+    fn view_period_defaults_to_the_oldest_outstanding_month_not_the_highest_period_id() {
+        // T-M2.5-3 (Gap 2): once CR-2 allows two periods to sit
+        // open/awaiting_close simultaneously, the figure screens must
+        // default to the OLDER, still-outstanding one — never "whichever
+        // period row happens to have the highest id," which before US-M2.5
+        // is what every query here picked instead.
+        let conn = seeded();
+        let root = insert_member(&conn, "Root", None);
+        let older = insert_period(&conn, "2026-06");
+        conn.execute(
+            "UPDATE periods SET status = 'awaiting_close' WHERE id = ?1",
+            [older],
+        )
+        .unwrap();
+        let newer = insert_period(&conn, "2026-07"); // higher period_id, status stays 'open'
+        insert_entry(&conn, root, "2026-06", 10_000);
+        insert_entry(&conn, root, "2026-07", 99_000);
+        recalculate_chain(&conn, root, older).unwrap();
+        recalculate_chain(&conn, root, newer).unwrap();
+
+        let default_view = get_member_detail(&conn, root, None).unwrap();
+        assert_eq!(
+            default_view.total_business_volume, 10_000,
+            "defaults to the older, outstanding month, not the newer higher-id one"
+        );
+
+        let explicit_newer = get_member_detail(&conn, root, Some("2026-07")).unwrap();
+        assert_eq!(explicit_newer.total_business_volume, 99_000);
+
+        let default_chart = get_direct_children_chart(&conn, Some(root), false, None).unwrap();
+        assert_eq!(default_chart.nodes[0].own_business_volume, 10_000);
+    }
+
+    #[test]
     fn get_direct_children_chart_refuses_when_no_root_exists_yet() {
         let conn = seeded();
-        let err = get_direct_children_chart(&conn, None, false).unwrap_err();
+        let err = get_direct_children_chart(&conn, None, false, None).unwrap_err();
         assert!(matches!(err, AppError::NotFound { .. }));
     }
 }

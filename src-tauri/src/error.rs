@@ -57,6 +57,12 @@ pub enum AppError {
     /// `record_entry`, only via `edit_entry`'s correction path (Rule-39).
     #[error("{month} is closed — use the correction panel instead")]
     PeriodClosed { month: String },
+    /// M6 (S13): `rust_xlsxwriter`'s `XlsxError` doesn't implement
+    /// `std::error::Error` in a way `#[from]` can lean on cleanly, and
+    /// wrapping it as `Io` would misreport a formatting/limit failure as a
+    /// filesystem one.
+    #[error("export error: {0}")]
+    Export(String),
 }
 
 // Tauri commands return errors to the WebView as JSON, never as an opaque
@@ -78,6 +84,7 @@ impl Serialize for AppError {
             AppError::AccountLocked { .. } => "account_locked",
             AppError::PeriodNotAcceptingEntries { .. } => "period_not_accepting_entries",
             AppError::PeriodClosed { .. } => "period_closed",
+            AppError::Export(_) => "export",
         };
         let mut state = serializer.serialize_struct("AppError", 7)?;
         state.serialize_field("kind", kind)?;
