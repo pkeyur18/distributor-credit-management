@@ -347,8 +347,55 @@ fn main() {
         import_closed_month(&conn, period_month, &closed_entries[period_month]);
     }
 
+    // `setup_first_run` already inserted a `periods` row for the real current
+    // calendar month (open) before this import ever ran — so
+    // `m5_close::run_period_catchup`'s own "have I caught up?" check
+    // (MAX(period_month) >= current_month) sees that row and concludes
+    // there's nothing to backfill, even when an earlier month (e.g. the one
+    // right before whatever --closed-months covered) still has no row at
+    // all. That gap only exists because this tool inserts historical months
+    // out of real-time order — production code never hits it, since periods
+    // are only ever created forward as time actually passes. So: fill every
+    // month any open-path entry needs (plus today's, in case it's somehow
+    // still missing) directly, then elapse anything now-past to
+    // awaiting_close — the same two phases run_period_catchup does, just
+    // driven by "which months do we need" instead of a MAX comparison.
+    let current_month = chrono::Local::now().format("%Y-%m").to_string();
+    let mut needed_months: std::collections::BTreeSet<String> = open_entries
+        .iter()
+        .map(|e| e.entry_date[..7].to_string())
+        .collect();
+    needed_months.insert(current_month.clone());
+    for month in &needed_months {
+        conn.execute(
+            "INSERT OR IGNORE INTO periods (period_month, status) VALUES (?1, 'open')",
+            [month],
+        )
+        .unwrap_or_else(|e| panic!("ensuring period row for {month}: {e}"));
+    }
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, period_month FROM periods WHERE status = 'open' AND period_month < ?1")
+            .unwrap();
+        let elapsed: Vec<(i64, String)> = stmt
+            .query_map([&current_month], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        drop(stmt);
+        for (id, period_month) in elapsed {
+            let ended_at = last_day_of_month(&period_month);
+            conn.execute(
+                "UPDATE periods SET status = 'awaiting_close', ended_at = ?2 WHERE id = ?1",
+                rusqlite::params![id, ended_at],
+            )
+            .unwrap_or_else(|e| panic!("elapsing period {period_month}: {e}"));
+        }
+    }
+
     let open_count = open_entries.len();
     for entry in open_entries {
+        let entry_date = entry.entry_date.clone();
         m2_entries::record_entry(
             &conn,
             m2_entries::RecordEntryInput {
@@ -357,7 +404,7 @@ fn main() {
                 entry_date: entry.entry_date,
             },
         )
-        .unwrap_or_else(|e| panic!("recording open-period entry: {e}"));
+        .unwrap_or_else(|e| panic!("recording open-period entry dated {entry_date}: {e}"));
     }
 
     println!(

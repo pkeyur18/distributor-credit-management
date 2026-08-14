@@ -42,6 +42,7 @@ export function exportLowContribution(input: ExportLowContributionInput): Promis
 export interface ClosedMonthBackup {
   periodId: number;
   periodMonth: string;
+  closedAt: string | null;
   latestVersion: number;
   isCorrected: boolean;
 }
