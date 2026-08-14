@@ -225,7 +225,7 @@ export function Reports() {
           />
         )}
 
-        <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+        <div className="grid gap-4 lg:grid-cols-[1fr_1.5fr]">
           <div>
             <div className="text-caption text-muted-text mb-3">
               Always included: {MANDATORY_EXPORT_COLUMNS.map((c) => c.label).join(", ")},
