@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as ipc from "./index";
 
 describe("IPC command wrappers", () => {
-  it("expose exactly 42 command functions, API-01 to API-42 with no gaps", () => {
+  it("expose exactly 44 command functions, API-01 to API-44 with no gaps", () => {
     const modules = [
       ipc.m1Members,
       ipc.m2Entries,
@@ -20,7 +20,7 @@ describe("IPC command wrappers", () => {
         return typeof value === "function";
       }),
     );
-    expect(commandFns).toHaveLength(42);
+    expect(commandFns).toHaveLength(44);
   });
 
   it("m1 exposes 6 commands (API-01–06), matching the module table", () => {

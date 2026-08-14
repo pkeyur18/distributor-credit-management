@@ -61,6 +61,8 @@ pub fn run() {
             commands::export_low_contribution,
             commands::list_backups,
             commands::redownload_backup,
+            commands::preview_monthly_data,
+            commands::preview_yearly_average,
             commands::get_settings,
             commands::update_settings,
             commands::add_slab_row,

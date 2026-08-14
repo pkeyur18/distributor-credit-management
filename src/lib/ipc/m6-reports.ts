@@ -55,3 +55,36 @@ export function listBackups(): Promise<ClosedMonthBackup[]> {
 export function redownloadBackup(periodId: number, outputPath: string): Promise<ExportResult> {
   return invokeCommand("redownload_backup", { periodId, outputPath });
 }
+
+export interface MonthlyPreviewRow {
+  id: number;
+  name: string;
+  businessVolume: number;
+  totalBusinessVolume: number;
+  slabPct: number;
+}
+
+// API-43 — read-only, sorted by Total Business Volume descending. Backs the
+// Reports screen's on-screen "Monthly data" preview table; never touches
+// the filesystem (ADR-007's boundary is unaffected by a plain data return).
+export function previewMonthlyData(periodMonth: string): Promise<MonthlyPreviewRow[]> {
+  return invokeCommand("preview_monthly_data", { periodMonth });
+}
+
+export interface YearlyAveragePreviewRow {
+  id: number;
+  name: string;
+  avgBusinessVolume: number;
+  avgTotalBusinessVolume: number;
+  periodCount: number;
+}
+
+// API-44 — read-only, sorted by average Total Business Volume descending.
+// Backs both the "Yearly average" preview table and the "Low-contribution
+// report" stat-card/table, which filter this same list on own Business
+// Volume client-side as the threshold input changes (no round-trip per
+// keystroke) — Rule-24's "own BV, not Total BV" filter itself stays
+// authoritative only in `export_low_contribution`.
+export function previewYearlyAverage(): Promise<YearlyAveragePreviewRow[]> {
+  return invokeCommand("preview_yearly_average");
+}

@@ -391,6 +391,35 @@ pub fn redownload_backup(
     m6_reports::redownload_backup(conn, period_id, &output_path)
 }
 
+/// API-43.
+#[tauri::command]
+pub fn preview_monthly_data(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    period_month: String,
+) -> Result<Vec<m6_reports::MonthlyPreviewRow>, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m6_reports::preview_monthly_data(conn, &period_month)
+}
+
+/// API-44.
+#[tauri::command]
+pub fn preview_yearly_average(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+) -> Result<Vec<m6_reports::YearlyAveragePreviewRow>, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m6_reports::preview_yearly_average(conn)
+}
+
 // M7 — US-M7.1/M7.2/M7.4, S10 (the mid-period recalculation warning,
 // US-M7.3/API-33's `preview_settings_impact`, stays a stub — S11).
 
@@ -905,6 +934,8 @@ mod tests {
             "export_low_contribution",
             "list_backups",
             "redownload_backup",
+            "preview_monthly_data",
+            "preview_yearly_average",
         ];
         let stub_names: Vec<&str> = ALL_COMMAND_NAMES
             .iter()

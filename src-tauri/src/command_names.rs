@@ -3,8 +3,8 @@
 // and the runtime `generate_handler!`/contract-test list can never drift
 // apart. See `commands.rs` for the command implementations themselves.
 
-/// The complete, closed list — API-01 to API-41, no gaps (C2, amended for
-/// API-41's addition — see 06-decision-log-and-open-items.md).
+/// The complete, closed list — API-01 to API-44, no gaps (C2, amended for
+/// API-43/44's addition — see 06-decision-log-and-open-items.md).
 pub const ALL_COMMAND_NAMES: &[&str] = &[
     "create_root_member",
     "add_member",
@@ -29,6 +29,8 @@ pub const ALL_COMMAND_NAMES: &[&str] = &[
     "export_low_contribution",
     "list_backups",
     "redownload_backup",
+    "preview_monthly_data",
+    "preview_yearly_average",
     "get_settings",
     "update_settings",
     "add_slab_row",

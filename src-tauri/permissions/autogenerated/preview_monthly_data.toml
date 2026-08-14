@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preview-monthly-data"
+description = "Enables the preview_monthly_data command without any pre-configured scope."
+commands.allow = ["preview_monthly_data"]
+
+[[permission]]
+identifier = "deny-preview-monthly-data"
+description = "Denies the preview_monthly_data command without any pre-configured scope."
+commands.deny = ["preview_monthly_data"]

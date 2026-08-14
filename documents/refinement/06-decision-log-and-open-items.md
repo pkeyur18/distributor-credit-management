@@ -42,9 +42,9 @@ A conflict that precedence does not settle belongs in §3, not in code.
 |---|---|
 | **Disagreement** | `12-implementation-context.md` §4 says "32-command IPC surface"; §7 of the same file says "36 Tauri IPC commands"; `08-testing-strategy.md` says "there are 36 commands"; `04-api-specification.md` enumerates **API-01 … API-40**. |
 | **Cause** | Three additions in sequence: the original 26 in `architecture.md` Appendix C, minus `reverse_entry` (dropped), plus API-33 and API-34–36 on 6 August, plus API-37–40 on 7 August. Each document froze at a different point. |
-| **Resolution** | **42 commands**, API-01 to API-42, with no gaps (amended 14 Aug 2026 — `get_ancestor_chain`, API-42 — see "14 August 2026" below). Full contracts in [04](04-technical-architecture.md) §6. |
+| **Resolution** | **44 commands**, API-01 to API-44, with no gaps (amended 14 Aug 2026 — `get_ancestor_chain`, API-42, then `preview_monthly_data`/`preview_yearly_average`, API-43/44, same day, for the Reports screen's prototype-parity preview tables). Full contracts in [04](04-technical-architecture.md) §6. |
 | **Authority** | `04-api-specification.md` command-surface summary, 14 Aug 2026 (tier 3, later date, and the document that owns the surface). |
-| **Build consequence** | The Tauri capability allowlist has 42 entries. The contract-test suite has 42 tests, not 36. |
+| **Build consequence** | The Tauri capability allowlist has 44 entries. The contract-test suite has 44 command-surface assertions. |
 
 ### C3 — Unauthenticated commands: six or seven?
 

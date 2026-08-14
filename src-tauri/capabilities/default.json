@@ -29,6 +29,8 @@
     "allow-export-low-contribution",
     "allow-list-backups",
     "allow-redownload-backup",
+    "allow-preview-monthly-data",
+    "allow-preview-yearly-average",
     "allow-get-settings",
     "allow-update-settings",
     "allow-add-slab-row",
