@@ -22,7 +22,7 @@ export function Breadcrumb({
   if (!backLabel && crumbs.length === 0) return null;
 
   return (
-    <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-caption text-muted-text">
+    <div className="mb-4 flex flex-wrap items-center gap-1.5 text-caption text-muted-text">
       {backLabel && (
         <>
           <button

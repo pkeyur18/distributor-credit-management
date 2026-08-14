@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { Plus } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,18 +42,23 @@ function SectionCard({
   id,
   title,
   description,
+  action,
   children,
 }: {
   id: string;
   title: string;
   description?: string;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <Card id={id}>
-      <CardHeader className="block">
-        <CardTitle>{title}</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
+      <CardHeader className={action ? undefined : "block"}>
+        <div>
+          <CardTitle>{title}</CardTitle>
+          {description && <CardDescription>{description}</CardDescription>}
+        </div>
+        {action}
       </CardHeader>
       {children}
     </Card>
@@ -135,6 +141,22 @@ function candidateFromSlabRows(
   };
 }
 
+type SlabDraftRow = { key: string; id: number | null; threshold: string; percentage: string };
+
+function draftFromRows(rows: SlabRow[]): SlabDraftRow[] {
+  return rows.map((r) => ({
+    key: String(r.id),
+    id: r.id,
+    threshold: centsToDisplay(r.threshold),
+    percentage: String(r.percentage),
+  }));
+}
+
+// T-M7.1 restyle: the approved prototype stages add/edit/remove locally and
+// commits the whole table with one "Save slab table" button, instead of a
+// save per row. Same per-row IPC calls (add/update/remove) and the same
+// server-side rules (duplicate threshold, last-row refusal) — only the
+// moment they fire moves from per-action to the single confirmed save.
 function SlabTableCard({
   rows,
   onRowsChange,
@@ -144,109 +166,88 @@ function SlabTableCard({
 }) {
   const toast = useToast();
   const recalcWarning = useRecalcWarning();
-  const [drafts, setDrafts] = useState<Record<number, { threshold: string; percentage: string }>>(
-    {},
-  );
-  const [newRow, setNewRow] = useState({ threshold: "", percentage: "" });
-  const [saving, setSaving] = useState<number | "new" | null>(null);
+  const [draft, setDraft] = useState<SlabDraftRow[]>(() => draftFromRows(rows));
+  const [nextTempId, setNextTempId] = useState(0);
+  const [saving, setSaving] = useState(false);
 
-  function draftFor(row: SlabRow) {
-    return (
-      drafts[row.id] ?? {
-        threshold: centsToDisplay(row.threshold),
-        percentage: String(row.percentage),
-      }
-    );
+  function updateDraftRow(
+    key: string,
+    patch: Partial<Pick<SlabDraftRow, "threshold" | "percentage">>,
+  ) {
+    setDraft((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   }
 
-  function setDraft(id: number, patch: Partial<{ threshold: string; percentage: string }>) {
-    setDrafts((prev) => ({
-      ...prev,
-      [id]: { ...draftFor({ id } as SlabRow), ...prev[id], ...patch },
+  function addRow() {
+    setDraft((prev) => [...prev, { key: `new-${nextTempId}`, id: null, threshold: "", percentage: "" }]);
+    setNextTempId((n) => n + 1);
+  }
+
+  function removeRow(key: string) {
+    setDraft((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.key !== key)));
+  }
+
+  async function save() {
+    const parsed = draft.map((r) => ({
+      key: r.key,
+      id: r.id,
+      threshold: displayToCents(r.threshold),
+      percentage: Number(r.percentage),
     }));
-  }
-
-  async function saveRow(row: SlabRow) {
-    const draft = draftFor(row);
-    const threshold = displayToCents(draft.threshold);
-    const percentage = Number(draft.percentage);
-    if (threshold === null || !Number.isFinite(percentage)) {
+    if (parsed.some((r) => r.threshold === null || !Number.isFinite(r.percentage))) {
       toast.add({ title: "Enter a valid threshold and percentage", type: "danger" });
       return;
     }
-    const candidate = candidateFromSlabRows(
-      rows.map((r) =>
-        r.id === row.id
-          ? { threshold, percentage }
-          : { threshold: r.threshold, percentage: r.percentage },
-      ),
-    );
-    await recalcWarning.request("slab", candidate, async () => {
-      setSaving(row.id);
-      try {
-        const updated = await updateSlabRow(row.id, { threshold, percentage });
-        onRowsChange(rows.map((r) => (r.id === row.id ? updated : r)));
-        setDrafts((prev) => {
-          const next = { ...prev };
-          delete next[row.id];
-          return next;
-        });
-        toast.add({ title: "Slab row saved", type: "success" });
-      } finally {
-        setSaving(null);
-      }
-    });
-  }
-
-  async function removeRow(row: SlabRow) {
-    const candidate = candidateFromSlabRows(
-      rows
-        .filter((r) => r.id !== row.id)
-        .map((r) => ({ threshold: r.threshold, percentage: r.percentage })),
-    );
-    await recalcWarning.request("slab", candidate, async () => {
-      setSaving(row.id);
-      try {
-        await removeSlabRow(row.id);
-        onRowsChange(rows.filter((r) => r.id !== row.id));
-        toast.add({ title: "Slab row removed", type: "success" });
-      } finally {
-        setSaving(null);
-      }
-    });
-  }
-
-  async function addRow() {
-    const threshold = displayToCents(newRow.threshold);
-    const percentage = Number(newRow.percentage);
-    if (threshold === null || !Number.isFinite(percentage)) {
-      toast.add({ title: "Enter a valid threshold and percentage", type: "danger" });
+    const thresholds = parsed.map((r) => r.threshold as number);
+    if (new Set(thresholds).size !== thresholds.length) {
+      toast.add({ title: "Two rows share the same threshold — adjust before saving", type: "danger" });
       return;
     }
-    const candidate = candidateFromSlabRows([
-      ...rows.map((r) => ({ threshold: r.threshold, percentage: r.percentage })),
-      { threshold, percentage },
-    ]);
+    const candidate = candidateFromSlabRows(
+      parsed.map((r) => ({ threshold: r.threshold as number, percentage: r.percentage })),
+    );
     await recalcWarning.request("slab", candidate, async () => {
-      setSaving("new");
+      setSaving(true);
       try {
-        const created = await addSlabRow({ threshold, percentage });
-        onRowsChange([...rows, created]);
-        setNewRow({ threshold: "", percentage: "" });
-        toast.add({ title: "Slab row added", type: "success" });
+        const draftIds = new Set(parsed.filter((r) => r.id !== null).map((r) => r.id));
+        for (const row of rows) {
+          if (!draftIds.has(row.id)) await removeSlabRow(row.id);
+        }
+        const saved: SlabRow[] = [];
+        for (const r of parsed) {
+          const input = { threshold: r.threshold as number, percentage: r.percentage };
+          if (r.id === null) {
+            saved.push(await addSlabRow(input));
+          } else {
+            const original = rows.find((row) => row.id === r.id);
+            const changed =
+              !original ||
+              original.threshold !== input.threshold ||
+              original.percentage !== input.percentage;
+            saved.push(changed ? await updateSlabRow(r.id, input) : (original as SlabRow));
+          }
+        }
+        onRowsChange(saved);
+        setDraft(draftFromRows(saved));
+        toast.add({ title: "Slab table saved", type: "success" });
       } finally {
-        setSaving(null);
+        setSaving(false);
       }
     });
   }
 
-  const onlyRow = rows.length <= 1;
+  const onlyRow = draft.length <= 1;
 
   return (
     <SectionCard
       id="settings-card-slab"
       title="Slab table"
       description="The band looked up from Total Business Volume. Top slab recalculates automatically."
+      action={
+        <Button size="sm" variant="secondary" disabled={saving} onClick={addRow}>
+          <Plus />
+          Add row
+        </Button>
+      }
     >
       <div className="overflow-x-auto">
         <table className="w-full text-body">
@@ -258,86 +259,46 @@ function SlabTableCard({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
-              const draft = draftFor(row);
-              return (
-                <tr key={row.id} className="border-t border-border">
-                  <td className="py-1.5 pr-2">
-                    <Input
-                      id={`slab-threshold-${row.id}`}
-                      className="num"
-                      value={draft.threshold}
-                      onChange={(e) => setDraft(row.id, { threshold: e.target.value })}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <Input
-                      id={`slab-percentage-${row.id}`}
-                      className="num"
-                      value={draft.percentage}
-                      onChange={(e) => setDraft(row.id, { percentage: e.target.value })}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <Button
-                      id={`slab-save-${row.id}`}
-                      size="sm"
-                      variant="secondary"
-                      disabled={saving === row.id}
-                      onClick={() => saveRow(row)}
-                    >
-                      Save
-                    </Button>
-                  </td>
-                  <td className="py-1.5">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={onlyRow || saving === row.id}
-                      aria-label={
-                        onlyRow
-                          ? "Remove row — the table must keep at least one slab"
-                          : "Remove this slab row"
-                      }
-                      onClick={() => removeRow(row)}
-                    >
-                      ✕
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
-            <tr className="border-t border-border">
-              <td className="py-1.5 pr-2">
-                <Input
-                  id="slab-new-threshold"
-                  className="num"
-                  placeholder="0.00"
-                  value={newRow.threshold}
-                  onChange={(e) => setNewRow((prev) => ({ ...prev, threshold: e.target.value }))}
-                />
-              </td>
-              <td className="py-1.5 pr-2">
-                <Input
-                  id="slab-new-percentage"
-                  className="num"
-                  placeholder="0"
-                  value={newRow.percentage}
-                  onChange={(e) => setNewRow((prev) => ({ ...prev, percentage: e.target.value }))}
-                />
-              </td>
-              <td className="py-1.5" colSpan={2}>
-                <Button
-                  id="slab-add-row"
-                  size="sm"
-                  variant="secondary"
-                  disabled={saving === "new"}
-                  onClick={addRow}
-                >
-                  Add row
-                </Button>
-              </td>
-            </tr>
+            {draft.map((row) => (
+              <tr key={row.key} className="border-t border-border">
+                <td className="py-1.5 pr-2">
+                  <Input
+                    id={`slab-threshold-${row.key}`}
+                    className="num"
+                    placeholder="0.00"
+                    disabled={saving}
+                    value={row.threshold}
+                    onChange={(e) => updateDraftRow(row.key, { threshold: e.target.value })}
+                  />
+                </td>
+                <td className="py-1.5 pr-2">
+                  <Input
+                    id={`slab-percentage-${row.key}`}
+                    className="num"
+                    placeholder="0"
+                    disabled={saving}
+                    value={row.percentage}
+                    onChange={(e) => updateDraftRow(row.key, { percentage: e.target.value })}
+                  />
+                </td>
+                <td className="py-1.5" style={{ width: "1%" }}>
+                  <Button
+                    id={`slab-remove-${row.key}`}
+                    variant="secondary"
+                    className="h-7.5 w-7.5 justify-center p-0 hover:not-disabled:border-danger hover:not-disabled:text-danger"
+                    disabled={onlyRow || saving}
+                    aria-label={
+                      onlyRow
+                        ? "Remove row — the table must keep at least one slab"
+                        : "Remove this slab row"
+                    }
+                    onClick={() => removeRow(row.key)}
+                  >
+                    ✕
+                  </Button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -351,6 +312,9 @@ function SlabTableCard({
           member&apos;s slab.
         </InputHint>
       )}
+      <Button id="slab-save-table" className="mt-3.5" disabled={saving} onClick={save}>
+        Save slab table
+      </Button>
       {recalcWarning.dialog}
     </SectionCard>
   );
@@ -476,12 +440,6 @@ function StructureGuidanceCard({
     >
       <div className="grid grid-cols-4 gap-3">
         <div>
-          <label htmlFor="depth-guidance" className="text-label mb-1 block">
-            Depth guidance
-          </label>
-          <Input id="depth-guidance" value={depth} onChange={(e) => setDepth(e.target.value)} />
-        </div>
-        <div>
           <label htmlFor="width-l2" className="text-label mb-1 block">
             Level 2 width
           </label>
@@ -499,6 +457,12 @@ function StructureGuidanceCard({
           </label>
           <Input id="width-l4" value={l4} onChange={(e) => setL4(e.target.value)} />
         </div>
+        <div>
+          <label htmlFor="depth-guidance" className="text-label mb-1 block">
+            Depth guidance
+          </label>
+          <Input id="depth-guidance" value={depth} onChange={(e) => setDepth(e.target.value)} />
+        </div>
       </div>
       <InputHint className="mt-2">
         These numbers only produce an advisory note on the Structure screen — entry is never
@@ -510,6 +474,11 @@ function StructureGuidanceCard({
     </SectionCard>
   );
 }
+
+const MONTH_START_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
+  value: `${String(i + 1).padStart(2, "0")}-01`,
+  label: new Date(2000, i, 1).toLocaleDateString(undefined, { month: "long" }),
+}));
 
 function ReportingCard({
   settings,
@@ -570,12 +539,18 @@ function ReportingCard({
           <label htmlFor="cycle-start" className="text-label mb-1 block">
             Yearly cycle starts
           </label>
-          <Input
+          <select
             id="cycle-start"
-            placeholder="MM-DD"
+            className="h-8.5 w-full rounded-sm border border-border bg-surface px-2.5 text-body text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
             value={start}
             onChange={(e) => setStart(e.target.value)}
-          />
+          >
+            {MONTH_START_OPTIONS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label htmlFor="cycle-end" className="text-label mb-1 block">
@@ -623,54 +598,6 @@ function ReportingCard({
       </div>
       <Button className="mt-3.5" disabled={saving} onClick={save}>
         Save reporting settings
-      </Button>
-    </SectionCard>
-  );
-}
-
-function ReferenceUnitValueCard({
-  settings,
-  onSettingsChange,
-}: {
-  settings: SettingsData;
-  onSettingsChange: (next: SettingsData) => void;
-}) {
-  const toast = useToast();
-  const [value, setValue] = useState(String(settings.referenceUnitValue));
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    const referenceUnitValue = Number(value);
-    if (!Number.isFinite(referenceUnitValue)) {
-      toast.add({ title: "Enter a valid number", type: "danger" });
-      return;
-    }
-    setSaving(true);
-    try {
-      const updated = await updateSettings({ referenceUnitValue });
-      onSettingsChange(updated);
-      toast.add({ title: "Reference unit value saved", type: "success" });
-    } catch (raw) {
-      toast.add({ title: errorMessage(raw), type: "danger" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <SectionCard
-      id="settings-card-reference"
-      title="Reference unit value"
-      description="Reference only — never shown on any screen, report, or export, and used in no calculation"
-    >
-      <div className="max-w-55">
-        <label htmlFor="reference-unit-value" className="text-label mb-1 block">
-          1 unit =
-        </label>
-        <Input id="reference-unit-value" value={value} onChange={(e) => setValue(e.target.value)} />
-      </div>
-      <Button className="mt-3.5" disabled={saving} onClick={save}>
-        Save
       </Button>
     </SectionCard>
   );
@@ -737,10 +664,12 @@ function BackupScheduleCard({
   backupSettings,
   onBackupSettingsChange,
   onBackedUp,
+  lastBackupLabel,
 }: {
   backupSettings: ConsoleBackupSettings;
   onBackupSettingsChange: (next: ConsoleBackupSettings) => void;
   onBackedUp: (record: BackupRecord) => void;
+  lastBackupLabel: string | null;
 }) {
   const toast = useToast();
   const [retention, setRetention] = useState(String(backupSettings.retentionCount));
@@ -823,8 +752,8 @@ function BackupScheduleCard({
         />
       </div>
       <InputHint className="mt-1.5">
-        Older backups beyond this count are removed automatically — closed-month backups are never
-        affected.
+        {lastBackupLabel && `Last backup: ${lastBackupLabel}. `}Older backups beyond this count are
+        removed automatically — closed-month backups are never affected.
       </InputHint>
       <div className="mt-3.5 max-w-55">
         <label htmlFor="backup-folder" className="text-label mb-1 block">
@@ -967,6 +896,32 @@ function RestoreCard({
 
 // --- Screen ---
 
+const SETTINGS_NAV_ITEMS = [
+  { id: "settings-card-slab", label: "Slab table" },
+  { id: "settings-card-royalty", label: "Royalty" },
+  { id: "settings-card-structure", label: "Structure" },
+  { id: "settings-card-reporting", label: "Reporting" },
+  { id: "settings-card-session", label: "Session" },
+  { id: "settings-card-backup", label: "Backup schedule" },
+  { id: "settings-card-restore", label: "Restore" },
+];
+
+function SettingsNav() {
+  return (
+    <nav className="sticky top-20 flex flex-col gap-0.5">
+      {SETTINGS_NAV_ITEMS.map((item) => (
+        <a
+          key={item.id}
+          href={`#${item.id}`}
+          className="flex h-8 items-center rounded-sm px-2.5 text-[13.5px] text-ink hover:bg-bg"
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
 export function Settings() {
   const toast = useToast();
   const [settings, setSettings] = useState<SettingsData | null>(null);
@@ -1016,23 +971,40 @@ export function Settings() {
     );
   }
 
+  const lastBackup = restorePoints
+    .filter((r) => r.kind === "scheduled" || r.kind === "manual")
+    .reduce<BackupRecord | null>(
+      (latest, r) => (!latest || r.createdAt > latest.createdAt ? r : latest),
+      null,
+    );
+  const lastBackupLabel = lastBackup
+    ? new Date(lastBackup.createdAt).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : null;
+
   return (
     <>
       <PageHeader title="Settings" subtitle="Each section saves independently" />
 
-      <div className="mt-5 flex flex-col gap-4">
-        <SlabTableCard rows={slabRows} onRowsChange={setSlabRows} />
-        <RoyaltyCard settings={settings} onSettingsChange={setSettings} />
-        <StructureGuidanceCard settings={settings} onSettingsChange={setSettings} />
-        <ReportingCard settings={settings} onSettingsChange={setSettings} />
-        <ReferenceUnitValueCard settings={settings} onSettingsChange={setSettings} />
-        <SessionCard settings={settings} onSettingsChange={setSettings} />
-        <BackupScheduleCard
-          backupSettings={backupSettings}
-          onBackupSettingsChange={setBackupSettings}
-          onBackedUp={(record) => setRestorePoints((prev) => [record, ...prev])}
-        />
-        <RestoreCard restorePoints={restorePoints} onRestored={refreshRestorePoints} />
+      <div className="mt-5 grid grid-cols-[190px_1fr] items-start gap-6">
+        <SettingsNav />
+        <div className="flex flex-col gap-4">
+          <SlabTableCard rows={slabRows} onRowsChange={setSlabRows} />
+          <RoyaltyCard settings={settings} onSettingsChange={setSettings} />
+          <StructureGuidanceCard settings={settings} onSettingsChange={setSettings} />
+          <ReportingCard settings={settings} onSettingsChange={setSettings} />
+          <SessionCard settings={settings} onSettingsChange={setSettings} />
+          <BackupScheduleCard
+            backupSettings={backupSettings}
+            onBackupSettingsChange={setBackupSettings}
+            onBackedUp={(record) => setRestorePoints((prev) => [record, ...prev])}
+            lastBackupLabel={lastBackupLabel}
+          />
+          <RestoreCard restorePoints={restorePoints} onRestored={refreshRestorePoints} />
+        </div>
       </div>
     </>
   );
