@@ -37,7 +37,7 @@ describe("OutstandingMonthBanner", () => {
 
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(1);
-    expect(links[0]).toHaveTextContent("Close 2026-06");
+    expect(links[0]).toHaveTextContent("Close June 2026");
   });
 
   it("names every outstanding month, not only the oldest", () => {
@@ -49,7 +49,7 @@ describe("OutstandingMonthBanner", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/2026-05 has ended and is awaiting close\./)).toBeInTheDocument();
+    expect(screen.getByText(/May 2026 has ended and is awaiting close\./)).toBeInTheDocument();
     expect(screen.getByText(/2 more months are outstanding after that\./)).toBeInTheDocument();
   });
 });
