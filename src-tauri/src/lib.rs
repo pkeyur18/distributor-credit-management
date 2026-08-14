@@ -51,6 +51,7 @@ pub fn run() {
             commands::preview_settings_impact,
             commands::get_member_detail,
             commands::get_direct_children_chart,
+            commands::get_ancestor_chain,
             commands::get_outstanding_periods,
             commands::begin_close,
             commands::confirm_backup_and_close,

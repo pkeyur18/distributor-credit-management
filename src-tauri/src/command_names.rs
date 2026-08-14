@@ -19,6 +19,7 @@ pub const ALL_COMMAND_NAMES: &[&str] = &[
     "preview_settings_impact",
     "get_member_detail",
     "get_direct_children_chart",
+    "get_ancestor_chain",
     "get_outstanding_periods",
     "begin_close",
     "confirm_backup_and_close",

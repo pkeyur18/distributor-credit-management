@@ -70,7 +70,7 @@ Identifier schemes in use. **One namespace was added on 7 August 2026 — `CR-N`
 | `CR-N` | CR-1 … CR-5 | 5 | A client change request raised after this set was approved | [06](06-decision-log-and-open-items.md) §5 |
 | `NFR-N` | NFR-1 … NFR-16 | 16 | A non-functional requirement | [01](01-product-and-scope.md) §7 |
 | `ADR-NNN` | ADR-001 … ADR-012 | 12 | An architecture decision | [04](04-technical-architecture.md) §2 |
-| `API-NN` | API-01 … API-41 | **41** | A Tauri IPC command | [04](04-technical-architecture.md) §6 |
+| `API-NN` | API-01 … API-42 | **42** | A Tauri IPC command | [04](04-technical-architecture.md) §6 |
 | `M-N` | M1 … M9 | 9 | An application module | [04](04-technical-architecture.md) §3 |
 | `M-N.N` | M1.1 … M8.7 | 57 | A module function | [03](03-functional-specification.md) §1 |
 | `V-N.N` | V1.1 … V8.5 | 50 | A validation rule | [03](03-functional-specification.md) §6 |
