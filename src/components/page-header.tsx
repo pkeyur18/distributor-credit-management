@@ -15,13 +15,16 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  breadcrumb,
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
+  breadcrumb?: ReactNode;
 }) {
   return (
     <div className="sticky -top-5 z-10 -mx-8 -mt-5 mb-10 bg-background px-8 pb-2 pt-8">
+      {breadcrumb}
       <div className="flex items-center justify-between">
         <h1 className="text-headline">{title}</h1>
         {actions}
