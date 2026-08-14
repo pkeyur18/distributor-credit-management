@@ -1,9 +1,21 @@
 import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Pill } from "@/components/ui/pill";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableWrap,
+} from "@/components/ui/table";
+import { EmptyState } from "@/components/empty-state";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/components/ui/toast";
@@ -14,19 +26,29 @@ import {
   exportLowContribution,
   listBackups,
   redownloadBackup,
+  previewMonthlyData,
+  previewYearlyAverage,
   type ClosedMonthBackup,
+  type MonthlyPreviewRow,
+  type YearlyAveragePreviewRow,
 } from "@/lib/ipc/m6-reports";
 import { getSettings } from "@/lib/ipc/m7-settings";
 import { MANDATORY_EXPORT_COLUMNS, OPTIONAL_EXPORT_COLUMNS } from "@/lib/export-columns";
 import { toErrorPresentation } from "@/lib/ipc/errors";
-import { centsToDisplay, displayToCents, monthLabel } from "@/lib/utils";
+import { centsToDisplay, cn, displayToCents, monthLabel } from "@/lib/utils";
+
+const MONTHLY_PREVIEW_LIMIT = 6;
+const YEARLY_PREVIEW_LIMIT = 6;
+const LOW_CONTRIBUTION_PREVIEW_LIMIT = 8;
 
 // US-M6.1 (§5.8). Rule-19/D-1's five mandatory columns are always included
 // (T-M6.1-2) — the picker below only ever offers Rule-33's optional list,
 // reusing settings.tsx's own MANDATORY_EXPORT_COLUMNS/OPTIONAL_EXPORT_COLUMNS
 // so the two screens can never name a column differently. ADR-007: the
 // destination path comes from the same native save dialog the restore flow
-// already uses — this screen never touches raw file content.
+// already uses — this screen never touches raw file content. The on-screen
+// preview tables (API-43/44) are a separate read-only path from the
+// exports themselves, matching the approved prototype.
 export function Reports() {
   const [lockStatus, setLockStatus] = useState<PeriodLockStatus | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
@@ -39,13 +61,27 @@ export function Reports() {
   const [backups, setBackups] = useState<ClosedMonthBackup[] | null>(null);
   const [selectedBackupPeriodId, setSelectedBackupPeriodId] = useState<number | null>(null);
   const [exportingBackup, setExportingBackup] = useState(false);
+  const [monthlyPreview, setMonthlyPreview] = useState<MonthlyPreviewRow[]>([]);
+  const [yearlyAverages, setYearlyAverages] = useState<YearlyAveragePreviewRow[] | null>(null);
   const toast = useToast();
 
   useEffect(() => {
     getPeriodLockStatus().then(setLockStatus);
     getSettings().then((s) => setThresholdInput(centsToDisplay(s.lowContributionThreshold)));
     listBackups().then(setBackups);
+    previewYearlyAverage().then(setYearlyAverages);
   }, []);
+
+  useEffect(() => {
+    if (!viewMonth) return;
+    let cancelled = false;
+    previewMonthlyData(viewMonth).then((rows) => {
+      if (!cancelled) setMonthlyPreview(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewMonth]);
 
   function toggleColumn(key: string) {
     setColumns((prev) => {
@@ -141,6 +177,19 @@ export function Reports() {
     }
   }
 
+  // Recomputed on every keystroke rather than refetched (prototype's
+  // `oninput` behaviour) — the authoritative own-BV-not-Total-BV filter
+  // (Rule-24) stays solely in export_low_contribution; this is presentation.
+  const thresholdCents = displayToCents(thresholdInput) ?? 0;
+  const belowThreshold = (yearlyAverages ?? [])
+    .filter((d) => d.avgBusinessVolume < thresholdCents)
+    .sort((a, b) => a.avgBusinessVolume - b.avgBusinessVolume);
+
+  const yearlyTop = (yearlyAverages ?? [])
+    .slice()
+    .sort((a, b) => b.avgTotalBusinessVolume - a.avgTotalBusinessVolume)
+    .slice(0, YEARLY_PREVIEW_LIMIT);
+
   return (
     <>
       <PageHeader
@@ -162,6 +211,7 @@ export function Reports() {
             disabled={!viewMonth || exporting}
             onClick={handleExportMonthly}
           >
+            <Download />
             Export .xlsx
           </Button>
         </CardHeader>
@@ -175,22 +225,52 @@ export function Reports() {
           />
         )}
 
-        <div className="text-caption text-muted-text mb-2">
-          Always included: {MANDATORY_EXPORT_COLUMNS.map((c) => c.label).join(", ")},
-          Active/inactive status (a deactivated row&apos;s colour is never shown without this label
-          — NFR-8)
-        </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-          {OPTIONAL_EXPORT_COLUMNS.filter((c) => c.key !== "active_status").map((c) => (
-            <label key={c.key} className="flex items-center gap-1.5 text-body">
-              <input
-                type="checkbox"
-                checked={columns.has(c.key)}
-                onChange={() => toggleColumn(c.key)}
-              />
-              {c.label}
-            </label>
-          ))}
+        <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+          <div>
+            <div className="text-caption text-muted-text mb-3">
+              Always included: {MANDATORY_EXPORT_COLUMNS.map((c) => c.label).join(", ")},
+              Active/inactive status (a deactivated row&apos;s colour is never shown without this
+              label — NFR-8)
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {OPTIONAL_EXPORT_COLUMNS.filter((c) => c.key !== "active_status").map((c) => (
+                <label key={c.key} className="flex items-center gap-1.5 text-body">
+                  <input
+                    type="checkbox"
+                    checked={columns.has(c.key)}
+                    onChange={() => toggleColumn(c.key)}
+                  />
+                  {c.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <TableWrap>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>#</TableHead>
+                  <TableHead numeric>BV</TableHead>
+                  <TableHead numeric>Total BV</TableHead>
+                  <TableHead>Slab</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthlyPreview.slice(0, MONTHLY_PREVIEW_LIMIT).map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell primary>{row.name}</TableCell>
+                    <TableCell className="mono">{row.id}</TableCell>
+                    <TableCell numeric>{centsToDisplay(row.businessVolume)}</TableCell>
+                    <TableCell numeric>{centsToDisplay(row.totalBusinessVolume)}</TableCell>
+                    <TableCell>
+                      <Pill variant="slab">{row.slabPct}% slab</Pill>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableWrap>
         </div>
       </Card>
 
@@ -199,8 +279,8 @@ export function Reports() {
           <div>
             <CardTitle>Yearly average</CardTitle>
             <CardDescription>
-              Divides by each member&apos;s own count of closed months — never a fixed twelve
-              (Rule-23)
+              Based on {backups?.length ?? 0} closed month{backups?.length === 1 ? "" : "s"} so
+              far, never a fixed twelve
             </CardDescription>
           </div>
           <Button
@@ -209,16 +289,34 @@ export function Reports() {
             disabled={exportingYearly}
             onClick={handleExportYearlyAverage}
           >
+            <Download />
             Export .xlsx
           </Button>
         </CardHeader>
+        <TableWrap>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>#</TableHead>
+                <TableHead numeric>Average Business Volume</TableHead>
+                <TableHead numeric>Average Total Business Volume</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {yearlyTop.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell primary>{row.name}</TableCell>
+                  <TableCell className="mono">{row.id}</TableCell>
+                  <TableCell numeric>{centsToDisplay(row.avgBusinessVolume)}</TableCell>
+                  <TableCell numeric>{centsToDisplay(row.avgTotalBusinessVolume)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableWrap>
       </Card>
 
-      {/* No on-screen preview table, unlike the prototype's client-side
-          mockup — the 41-command API surface has no read-only command for
-          this data separate from the export itself (ADR-007 keeps the
-          WebView from computing it locally), so the reduction is the
-          threshold field and export action only. */}
       <Card className="mt-4">
         <CardHeader>
           <div>
@@ -233,6 +331,7 @@ export function Reports() {
             disabled={exportingLow}
             onClick={handleExportLowContribution}
           >
+            <Download />
             Export .xlsx
           </Button>
         </CardHeader>
@@ -247,6 +346,38 @@ export function Reports() {
           value={thresholdInput}
           onChange={(e) => setThresholdInput(e.target.value)}
         />
+
+        <StatCard
+          className="mt-3"
+          label={`Below ${centsToDisplay(thresholdCents)}`}
+          value={String(belowThreshold.length)}
+          footer={`of ${yearlyAverages?.length ?? 0} members, by yearly average own Business Volume`}
+        />
+
+        {belowThreshold.length > 0 ? (
+          <TableWrap className="mt-3">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Member #</TableHead>
+                  <TableHead numeric>Average Business Volume</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {belowThreshold.slice(0, LOW_CONTRIBUTION_PREVIEW_LIMIT).map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell primary>{row.name}</TableCell>
+                    <TableCell className="mono">{row.id}</TableCell>
+                    <TableCell numeric>{centsToDisplay(row.avgBusinessVolume)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableWrap>
+        ) : (
+          <EmptyState title="No members below this threshold" />
+        )}
       </Card>
 
       {backups && backups.length > 0 && (
@@ -262,6 +393,7 @@ export function Reports() {
               disabled={!selectedBackup || exportingBackup}
               onClick={handleRedownloadBackup}
             >
+              <Download />
               Export .xlsx
             </Button>
           </CardHeader>
@@ -288,5 +420,25 @@ export function Reports() {
         </Card>
       )}
     </>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  footer,
+  className,
+}: {
+  label: string;
+  value: string;
+  footer: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("rounded-lg border border-border bg-surface p-3.5", className)}>
+      <div className="text-label text-muted-text">{label}</div>
+      <div className="num mt-1 text-numeric-lg">{value}</div>
+      <div className="text-caption mt-0.5">{footer}</div>
+    </div>
   );
 }

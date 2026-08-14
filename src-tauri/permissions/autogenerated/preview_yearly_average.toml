@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preview-yearly-average"
+description = "Enables the preview_yearly_average command without any pre-configured scope."
+commands.allow = ["preview_yearly_average"]
+
+[[permission]]
+identifier = "deny-preview-yearly-average"
+description = "Denies the preview_yearly_average command without any pre-configured scope."
+commands.deny = ["preview_yearly_average"]

@@ -340,6 +340,47 @@ struct YearlyAverageRow {
     period_count: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonthlyPreviewRow {
+    pub id: i64,
+    pub name: String,
+    pub business_volume: i64,
+    pub total_business_volume: i64,
+    pub slab_pct: i64,
+}
+
+/// API-43 — the Reports screen's on-screen "Monthly data" preview table
+/// (prototype parity). Read-only: returns numbers already computed by the
+/// same `load_live_export_rows`/`load_snapshot_export_rows` paths
+/// `export_monthly` uses, never raw file content, so ADR-002/ADR-007's
+/// WebView-never-touches-the-filesystem boundary is untouched — this is
+/// the same shape as `get_member_detail` already returning computed
+/// rewards data to the frontend.
+pub fn preview_monthly_data(
+    conn: &Connection,
+    period_month: &str,
+) -> Result<Vec<MonthlyPreviewRow>, AppError> {
+    let (period_id, status) = resolve_period(conn, period_month)?;
+    let rows = if status == "closed" {
+        load_snapshot_export_rows(conn, period_id)?
+    } else {
+        load_live_export_rows(conn, period_id)?
+    };
+    let mut preview: Vec<MonthlyPreviewRow> = rows
+        .into_iter()
+        .map(|r| MonthlyPreviewRow {
+            id: r.id,
+            name: r.name,
+            business_volume: r.business_volume,
+            total_business_volume: r.total_business_volume,
+            slab_pct: r.slab_pct,
+        })
+        .collect();
+    preview.sort_by(|a, b| b.total_business_volume.cmp(&a.total_business_volume));
+    Ok(preview)
+}
+
 /// Rule-23: the divisor is **per member** — the count of periods that
 /// specifically have a snapshot *for that member*, not a single
 /// system-wide count shared by everyone. T-M6.2-1's "protects late
@@ -374,6 +415,44 @@ fn compute_yearly_averages(conn: &Connection) -> Result<Vec<YearlyAverageRow>, A
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct YearlyAveragePreviewRow {
+    pub id: i64,
+    pub name: String,
+    pub avg_business_volume: f64,
+    pub avg_total_business_volume: f64,
+    pub period_count: i64,
+}
+
+/// API-44 — the Reports screen's "Yearly average" preview table and the
+/// "Low-contribution report" stat-card/table (prototype parity), both
+/// sourced from this single list: the frontend filters it on the
+/// threshold input locally, recomputing live as the operator types
+/// (matching the prototype's `oninput` behaviour) rather than round-
+/// tripping per keystroke. Reuses `compute_yearly_averages` — the
+/// low-contribution "own BV, not Total BV" rule (Rule-24) stays the sole
+/// responsibility of `export_low_contribution` when actually exporting;
+/// this list is presentation only.
+pub fn preview_yearly_average(conn: &Connection) -> Result<Vec<YearlyAveragePreviewRow>, AppError> {
+    let mut rows: Vec<YearlyAveragePreviewRow> = compute_yearly_averages(conn)?
+        .into_iter()
+        .map(|r| YearlyAveragePreviewRow {
+            id: r.id,
+            name: r.name,
+            avg_business_volume: r.avg_business_volume,
+            avg_total_business_volume: r.avg_total_business_volume,
+            period_count: r.period_count,
+        })
+        .collect();
+    rows.sort_by(|a, b| {
+        b.avg_total_business_volume
+            .partial_cmp(&a.avg_total_business_volume)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(rows)
 }
 
@@ -943,6 +1022,71 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn preview_monthly_data_sorts_by_total_business_volume_desc() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-08", "open");
+        let low = insert_member(&conn, "Low TBV", true, None);
+        let high = insert_member(&conn, "High TBV", true, None);
+        insert_totals(&conn, low, period, 10_000, 10_000);
+        insert_totals(&conn, high, period, 90_000, 90_000);
+
+        let rows = preview_monthly_data(&conn, "2026-08").unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].id, high, "highest Total Business Volume first");
+        assert_eq!(rows[1].id, low);
+    }
+
+    #[test]
+    fn preview_monthly_data_reads_the_closed_periods_snapshot_not_zeroed_live_totals() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-05", "closed");
+        let member = insert_member(&conn, "Closed Month Member", true, None);
+        insert_totals(&conn, member, period, 0, 0);
+        insert_snapshot(&conn, member, period, 1, 75_000, 75_000, true);
+
+        let rows = preview_monthly_data(&conn, "2026-05").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].total_business_volume, 75_000);
+    }
+
+    #[test]
+    fn preview_monthly_data_refuses_an_unknown_month() {
+        let conn = seeded();
+        let err = preview_monthly_data(&conn, "2099-01").unwrap_err();
+        assert!(matches!(err, AppError::NotFound { .. }));
+    }
+
+    #[test]
+    fn preview_yearly_average_sorts_by_avg_total_business_volume_desc() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-05", "closed");
+        let low = insert_member(&conn, "Low Avg", true, None);
+        let high = insert_member(&conn, "High Avg", true, None);
+        insert_snapshot(&conn, low, period, 1, 10_000, 10_000, true);
+        insert_snapshot(&conn, high, period, 1, 90_000, 90_000, true);
+
+        let rows = preview_yearly_average(&conn).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].id, high, "highest average Total Business Volume first");
+        assert_eq!(rows[1].id, low);
+    }
+
+    #[test]
+    fn preview_yearly_average_matches_compute_yearly_averages() {
+        // Same divisor rule (Rule-23) as the export path — this preview is
+        // just compute_yearly_averages reshaped, not a second calculation.
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-04", "closed");
+        let member = insert_member(&conn, "Late Joiner", true, None);
+        insert_snapshot(&conn, member, period, 1, 90_000, 90_000, true);
+
+        let rows = preview_yearly_average(&conn).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].period_count, 1, "late joiner divides by their own count");
+        assert_eq!(rows[0].avg_business_volume, 90_000.0);
     }
 
     #[test]

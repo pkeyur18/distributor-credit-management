@@ -114,24 +114,24 @@ fn root_input(phone: &str) -> CreateRootMemberInput {
     }
 }
 
-// T-QA.2-3: the surface holds exactly 41 commands, API-01 to API-41, no
-// gaps (amended for API-41 — see 06-decision-log-and-open-items.md) — and
-// this list is the same one `lib.rs` feeds to `generate_handler!` and
+// T-QA.2-3: the surface holds exactly 44 commands, API-01 to API-44, no
+// gaps (amended for API-43/44 — see 06-decision-log-and-open-items.md) —
+// and this list is the same one `lib.rs` feeds to `generate_handler!` and
 // `build.rs` feeds to the ACL generator (via `command_names.rs`), so the
 // three can never quietly drift apart.
 #[test]
-fn the_command_surface_holds_exactly_forty_two_commands() {
+fn the_command_surface_holds_exactly_forty_four_commands() {
     assert_eq!(
         ALL_COMMAND_NAMES.len(),
-        42,
-        "API-01 to API-42, no gaps (C2)"
+        44,
+        "API-01 to API-44, no gaps (C2)"
     );
 
     let capabilities = include_str!("../capabilities/default.json");
     let allow_count = capabilities.matches("\"allow-").count();
     assert_eq!(
-        allow_count, 42,
-        "the Tauri capability allowlist must have exactly 42 allow-* entries"
+        allow_count, 44,
+        "the Tauri capability allowlist must have exactly 44 allow-* entries"
     );
     for name in ALL_COMMAND_NAMES {
         // Tauri's ACL identifiers are hyphen-only (autogenerate_command_permissions
@@ -1407,6 +1407,72 @@ fn export_yearly_average_end_to_end_through_the_command_layer() {
 
     assert_eq!(result.file_path, output_path.to_string_lossy());
     assert!(output_path.exists());
+}
+
+#[test]
+fn preview_monthly_data_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::preview_monthly_data(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        "2026-08".into(),
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn preview_monthly_data_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876599908"),
+    )
+    .unwrap();
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let current_month = chrono::Local::now().format("%Y-%m").to_string();
+    commands::record_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        RecordEntryInput {
+            member_id: root.id,
+            amount: 100_000,
+            entry_date: today,
+        },
+    )
+    .unwrap();
+
+    let rows =
+        commands::preview_monthly_data(app.state::<SessionState>(), app.state::<DbState>(), current_month)
+            .unwrap();
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, root.id);
+    assert_eq!(rows[0].business_volume, 100_000);
+}
+
+#[test]
+fn preview_yearly_average_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result =
+        commands::preview_yearly_average(app.state::<SessionState>(), app.state::<DbState>());
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn preview_yearly_average_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+
+    let rows =
+        commands::preview_yearly_average(app.state::<SessionState>(), app.state::<DbState>())
+            .unwrap();
+
+    // Seeded DB has no closed periods, so nobody has a snapshot yet — an
+    // empty list is the correct, valid result (mirrors
+    // `compute_yearly_averages_excludes_a_member_with_no_snapshot_at_all`).
+    assert!(rows.is_empty());
 }
 
 #[test]
