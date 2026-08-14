@@ -24,6 +24,8 @@ import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries
 import type { MemberDetail as MemberDetailData } from "@/lib/ipc/m4-search";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { centsToDisplay } from "@/lib/utils";
+import { Breadcrumb } from "@/components/breadcrumb";
+import { useBackTarget, useRouteLabel } from "@/lib/navigation-history";
 
 // US-M4.1 (§5.2). Own-Business-Volume reward first (Rule-46/CR-4), then
 // every direct leg's differential term, then royalty — Rule-11's note that
@@ -42,6 +44,9 @@ export function MemberDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"deactivate" | "reactivate" | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const backTarget = useBackTarget();
+  useRouteLabel(detail?.member.name);
 
   // T-M2.5-3: this figure screen defaults to the oldest recordable month,
   // switchable when more than one is outstanding (CR-2).
@@ -99,6 +104,11 @@ export function MemberDetail() {
 
   return (
     <>
+      <Breadcrumb
+        backLabel={backTarget.label}
+        onBack={backTarget.go}
+        crumbs={[{ label: "Home", to: "/" }, { label: member.name }]}
+      />
       <div className="rounded-lg border border-border bg-surface p-4.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
