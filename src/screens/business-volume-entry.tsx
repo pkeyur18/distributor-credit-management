@@ -31,6 +31,8 @@ import type { PeriodEntryRecord, SearchResult } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { useToast } from "@/components/ui/toast";
 import { centsToDisplay, displayToCents, monthLabel } from "@/lib/utils";
+import { Breadcrumb } from "@/components/breadcrumb";
+import { useBackTarget, useRouteLabel } from "@/lib/navigation-history";
 
 const PAGE_SIZES = [10, 25, 50] as const;
 
@@ -98,6 +100,8 @@ export function BusinessVolumeEntry() {
   const toast = useToast();
   const bounds = monthBounds(recordingMonth);
   const [searchParams] = useSearchParams();
+  const backTarget = useBackTarget();
+  useRouteLabel("Volume entry");
 
   // T-M4.1-5: Member Detail's "Record volume" action opens this screen
   // pre-selected on that member (?member=<id>) rather than empty.
@@ -206,7 +210,10 @@ export function BusinessVolumeEntry() {
 
   return (
     <>
-      <PageHeader title="Volume Entry" />
+      <PageHeader
+        title="Volume Entry"
+        breadcrumb={<Breadcrumb backLabel={backTarget.label} onBack={backTarget.go} crumbs={[]} />}
+      />
 
       <div className="mx-auto max-w-200">
         <div className="grid grid-cols-2 gap-3">

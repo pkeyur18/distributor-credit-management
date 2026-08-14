@@ -52,7 +52,7 @@ These six scenarios, plus `client-requirements-validation.md`'s AC-1–AC-47 (§
 - Restore from backup (LOW-3): against a deliberately corrupted database file, confirm the app enters the recovery state rather than crashing; confirm a restore whose checksum fails is refused and leaves the corrupt file untouched; confirm a successful restore leaves the app at sign-in with the credential still required.
 
 ### API / contract tests — IPC command surface
-One test per command in [04-api-specification.md](04-api-specification.md) verifying: request/response shape, validation rules, authorization, and the documented error responses. Given there are 41 commands and no HTTP layer, these are Tauri command-invocation tests run against the Rust application container directly (no browser/network mocking needed).
+One test per command in [04-api-specification.md](04-api-specification.md) verifying: request/response shape, validation rules, authorization, and the documented error responses. Given there are 42 commands and no HTTP layer, these are Tauri command-invocation tests run against the Rust application container directly (no browser/network mocking needed).
 
 **Authorization is tested as a closed set, not per-command.** Exactly seven commands may run unauthenticated — `login`, `setup_first_run`, `use_recovery_code`, `check_data_readable`, `list_restore_points`, `restore_from_backup`, `restore_from_backup_file`. The test asserts that list exactly: every other command must refuse without a session, and no eighth command may join the set without the test failing. That is the point — this is the assertion that catches an unauthenticated command being added by accident.
 

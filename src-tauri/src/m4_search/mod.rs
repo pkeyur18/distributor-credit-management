@@ -402,6 +402,78 @@ fn chart_nodes(
     Ok(rows)
 }
 
+// ---------------------------------------------------------------------
+// API-42 — get_ancestor_chain (Structure screen's breadcrumb trail)
+// ---------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AncestorNode {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AncestorChainResult {
+    /// Root-first, the requested member last — ancestorTrail()'s ordering
+    /// in the prototype (ui-prototype-v2.html:626-630).
+    pub chain: Vec<AncestorNode>,
+}
+
+fn introducer_of(conn: &Connection, member_id: i64) -> Result<Option<i64>, AppError> {
+    conn.query_row(
+        "SELECT introducer_member_id FROM members WHERE id = ?1",
+        [member_id],
+        |r| r.get(0),
+    )
+    .optional()?
+    .ok_or_else(|| AppError::NotFound {
+        message: "Member not found.".into(),
+    })
+}
+
+/// Leaf(the requested member)-to-root walk — same upward-loop idiom as
+/// `m3_calc::chain_to_root`, duplicated locally rather than shared across
+/// the module boundary (this module already keeps its own small
+/// single-row-lookup helpers, e.g. `member_exists`, rather than reaching
+/// into `m3_calc`'s private ones).
+fn ancestor_chain_ids(conn: &Connection, member_id: i64) -> Result<Vec<i64>, AppError> {
+    let mut chain = vec![member_id];
+    let mut current = member_id;
+    while let Some(parent) = introducer_of(conn, current)? {
+        chain.push(parent);
+        current = parent;
+    }
+    Ok(chain)
+}
+
+/// API-42. Cost scales with chain *depth* (indexed primary-key point
+/// lookups, in-process SQLite), not with total member count — see the
+/// design spec §2 for the worst-case analysis.
+pub fn get_ancestor_chain(conn: &Connection, member_id: i64) -> Result<AncestorChainResult, AppError> {
+    let ids = ancestor_chain_ids(conn, member_id)?;
+    let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!("SELECT id, name FROM members WHERE id IN ({placeholders})");
+    let mut stmt = conn.prepare(&sql)?;
+    let mut by_id: std::collections::HashMap<i64, String> = stmt
+        .query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<Result<_, _>>()?;
+    let chain = ids
+        .into_iter()
+        .rev()
+        .map(|id| AncestorNode {
+            name: by_id
+                .remove(&id)
+                .expect("id came from the members table, so a row must exist"),
+            id,
+        })
+        .collect();
+    Ok(AncestorChainResult { chain })
+}
+
 fn root_member_id(conn: &Connection) -> Result<i64, AppError> {
     conn.query_row(
         "SELECT id FROM members WHERE introducer_member_id IS NULL LIMIT 1",
@@ -450,6 +522,50 @@ mod tests {
 
     fn seeded() -> Connection {
         db::open_seeded_in_memory().unwrap()
+    }
+
+    #[test]
+    fn get_ancestor_chain_is_root_first_and_includes_the_member_itself() {
+        let conn = seeded();
+        let root = insert_member(&conn, "Root", None);
+        let child = insert_member(&conn, "Child", Some(root));
+        let grandchild = insert_member(&conn, "Grandchild", Some(child));
+
+        let result = get_ancestor_chain(&conn, grandchild).unwrap();
+        let names: Vec<&str> = result.chain.iter().map(|n| n.name.as_str()).collect();
+        assert_eq!(names, vec!["Root", "Child", "Grandchild"]);
+        assert_eq!(result.chain.last().unwrap().id, grandchild);
+    }
+
+    #[test]
+    fn get_ancestor_chain_for_the_root_member_is_a_single_entry() {
+        let conn = seeded();
+        let root = insert_member(&conn, "Root", None);
+        let result = get_ancestor_chain(&conn, root).unwrap();
+        assert_eq!(result.chain.len(), 1);
+        assert_eq!(result.chain[0].id, root);
+    }
+
+    #[test]
+    fn get_ancestor_chain_refuses_an_unknown_member() {
+        let conn = seeded();
+        let err = get_ancestor_chain(&conn, 999_999).unwrap_err();
+        assert!(matches!(err, AppError::NotFound { .. }));
+    }
+
+    // Rule-32: exceeding the configured max depth only warns, it never
+    // blocks onboarding — the chain walk must not assume any bound.
+    #[test]
+    fn get_ancestor_chain_handles_a_chain_deeper_than_the_advisory_max_depth() {
+        let conn = seeded();
+        let mut parent = insert_member(&conn, "L0", None);
+        for i in 1..=30 {
+            parent = insert_member(&conn, &format!("L{i}"), Some(parent));
+        }
+        let result = get_ancestor_chain(&conn, parent).unwrap();
+        assert_eq!(result.chain.len(), 31);
+        assert_eq!(result.chain[0].name, "L0");
+        assert_eq!(result.chain.last().unwrap().name, "L30");
     }
 
     fn insert_period(conn: &Connection, month: &str) -> i64 {

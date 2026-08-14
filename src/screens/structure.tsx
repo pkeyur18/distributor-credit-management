@@ -17,12 +17,14 @@ import {
   TreeConnectorLine,
 } from "@/components/structure-tree-node";
 import { useMemberSearch } from "@/lib/use-member-search";
-import { getDirectChildrenChart } from "@/lib/ipc/m4-search";
+import { getDirectChildrenChart, getAncestorChain, type AncestorNode } from "@/lib/ipc/m4-search";
 import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
 import type { ChartNode } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { centsToDisplay } from "@/lib/utils";
 import { FULL_TREE_GATE } from "@/windows/full-hierarchy-layout";
+import { Breadcrumb, type BreadcrumbCrumb } from "@/components/breadcrumb";
+import { useBackTarget, useRouteLabel } from "@/lib/navigation-history";
 import {
   computeParentChildConnectorLines,
   type Box,
@@ -60,6 +62,21 @@ export function Structure() {
   useEffect(() => {
     getPeriodLockStatus().then(setLockStatus);
   }, []);
+
+  const [ancestorChain, setAncestorChain] = useState<AncestorNode[]>([]);
+  useEffect(() => {
+    if (!rootNode) return;
+    let cancelled = false;
+    getAncestorChain(rootNode.memberId).then((result) => {
+      if (!cancelled) setAncestorChain(result.chain);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [rootNode]);
+
+  const backTarget = useBackTarget();
+  useRouteLabel(rootNode ? `Structure (${rootNode.name})` : undefined);
 
   // US-M4.3 (§5.3a/Rule-45). The gate's count and the eventual draw are two
   // separate reads of the same cheap query (04-technical-architecture.md
@@ -236,7 +253,22 @@ export function Structure() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageHeader title="Structure" subtitle="Open one branch at a time" />
+      <PageHeader
+        title="Structure"
+        subtitle="Open one branch at a time"
+        breadcrumb={
+          <Breadcrumb
+            backLabel={backTarget.hasHistory ? backTarget.label : undefined}
+            onBack={backTarget.go}
+            crumbs={ancestorChain.map(
+              (a, i): BreadcrumbCrumb =>
+                i === ancestorChain.length - 1
+                  ? { label: a.name }
+                  : { label: a.name, to: `/structure/${a.id}`, replace: true },
+            )}
+          />
+        }
+      />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-70 flex-1">

@@ -237,6 +237,22 @@ pub fn get_direct_children_chart(
     m4_search::get_direct_children_chart(conn, member_id, full_tree, period_month.as_deref())
 }
 
+/// API-42. Root-first ancestor path (member itself last) for the Structure
+/// screen's breadcrumb trail.
+#[tauri::command]
+pub fn get_ancestor_chain(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    member_id: i64,
+) -> Result<m4_search::AncestorChainResult, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m4_search::get_ancestor_chain(conn, member_id)
+}
+
 // M5 — US-M5.1, S11; US-M5.2/M5.3/M5.5, S12 (US-M5.4 is S13 and stays a stub).
 
 /// API-12.
@@ -856,6 +872,7 @@ mod tests {
             "unlock_session",
             "get_member_detail",
             "get_direct_children_chart",
+            "get_ancestor_chain",
             "use_recovery_code",
             // US-M7.1/M7.2/M7.4, S10 (US-M8.5/M8.6's own commands pulled
             // forward — see the "M8 remainder" comment above).

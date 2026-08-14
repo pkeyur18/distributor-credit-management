@@ -4,6 +4,7 @@ import { Sidebar } from "./sidebar";
 import { OutstandingMonthBanner } from "./outstanding-month-banner";
 import { OutstandingAlertProvider, useOutstandingAlert } from "@/lib/outstanding-alert-context";
 import { useInactivityLock } from "@/lib/use-inactivity-lock";
+import { NavigationHistoryProvider } from "@/lib/navigation-history";
 
 /**
  * T-UI.2-1/T-UI.2-2 — fixed 236px sidebar + fluid content column, sticky at
@@ -39,7 +40,9 @@ function AppShellLayout() {
       <div className="flex h-screen flex-col overflow-hidden">
         <OutstandingMonthBanner alert={alert} />
         <main ref={mainRef} className="flex-1 overflow-y-auto px-8 pb-10 pt-5">
-          <Outlet />
+          <NavigationHistoryProvider>
+            <Outlet />
+          </NavigationHistoryProvider>
         </main>
       </div>
     </div>

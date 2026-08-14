@@ -120,18 +120,18 @@ fn root_input(phone: &str) -> CreateRootMemberInput {
 // `build.rs` feeds to the ACL generator (via `command_names.rs`), so the
 // three can never quietly drift apart.
 #[test]
-fn the_command_surface_holds_exactly_forty_one_commands() {
+fn the_command_surface_holds_exactly_forty_two_commands() {
     assert_eq!(
         ALL_COMMAND_NAMES.len(),
-        41,
-        "API-01 to API-41, no gaps (C2)"
+        42,
+        "API-01 to API-42, no gaps (C2)"
     );
 
     let capabilities = include_str!("../capabilities/default.json");
     let allow_count = capabilities.matches("\"allow-").count();
     assert_eq!(
-        allow_count, 41,
-        "the Tauri capability allowlist must have exactly 41 allow-* entries"
+        allow_count, 42,
+        "the Tauri capability allowlist must have exactly 42 allow-* entries"
     );
     for name in ALL_COMMAND_NAMES {
         // Tauri's ACL identifiers are hyphen-only (autogenerate_command_permissions
@@ -396,6 +396,13 @@ fn get_direct_children_chart_requires_a_session() {
 }
 
 #[test]
+fn get_ancestor_chain_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::get_ancestor_chain(app.state::<SessionState>(), app.state::<DbState>(), 1);
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
 fn get_member_detail_and_get_direct_children_chart_end_to_end_through_the_command_layer() {
     let app = app_with_seeded_db();
     app.state::<SessionState>().mark_authenticated();
@@ -427,6 +434,27 @@ fn get_member_detail_and_get_direct_children_chart_end_to_end_through_the_comman
     .unwrap();
     assert_eq!(chart.nodes[0].member_id, root.id);
     assert_eq!(chart.slab_table.len(), 7);
+}
+
+#[test]
+fn get_ancestor_chain_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876599906"),
+    )
+    .unwrap();
+
+    let result = commands::get_ancestor_chain(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root.id,
+    )
+    .unwrap();
+    assert_eq!(result.chain.len(), 1);
+    assert_eq!(result.chain[0].id, root.id);
 }
 
 // US-M8.1/M8.2 (S5) command-layer wiring — the business logic itself

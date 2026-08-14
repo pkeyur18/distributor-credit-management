@@ -498,9 +498,9 @@ Each write touches `O(depth × average_width)` rows — bounded by tree depth (t
 
 ---
 
-## 6. API specification — 41 Tauri IPC commands
+## 6. API specification — 42 Tauri IPC commands
 
-**41 commands total** — API-01 to API-41, no gaps. See [06](06-decision-log-and-open-items.md) C2. `reverse_entry` was removed (dead, confirmed) from the original 26-command count; `list_period_entries` (API-41) was added 13 August 2026.
+**42 commands total** — API-01 to API-42, no gaps. See [06](06-decision-log-and-open-items.md) C2. `reverse_entry` was removed (dead, confirmed) from the original 26-command count; `list_period_entries` (API-41) was added 13 August 2026; `get_ancestor_chain` (API-42) was added 14 August 2026.
 
 **No delete command exists anywhere, for any entity.** Members, entries, snapshots, backups — none are ever removed (Rule-28, Rule-42, Rule-31).
 
@@ -540,6 +540,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 |---|---|---|---|---|---|---|
 | API-10 | `get_member_detail` | Full detail: contact, Rewards breakdown (own-Business-Volume reward first, then per-leg differential, then royalty — Rule-46), direct children, TBV, leg count. Request: `member_id`, `period_month: string \| null` | Auth | member_id must exist | Read-only | Not audited |
 | API-11 | `get_direct_children_chart` | Chart node data. Request: `member_id`, `full_tree: bool`, `period_month: string \| null`. With `full_tree: false` — the member and its direct children (FR-2). With `full_tree: true` — **the entire subtree**, which is what the full hierarchy window draws (FR-10, Rule-45) | Auth | member_id must exist | Read-only | Not audited |
+| API-42 | `get_ancestor_chain` | Root-to-member ancestor path for the Structure screen's breadcrumb trail, root first, member last | Auth | member_id must exist | Read-only | Not audited |
 
 **On API-11's `full_tree` flag.** The parameter was always in the command's contract; it is now put to work by FR-10 and no new command is introduced for the full hierarchy view. Either value returns the same node shape — name, ID, own Business Volume, active flag, introducer link — so FR-2's three-field constraint holds identically in both modes. The main window calls it once to obtain the count for the size gate (V4.5); the full hierarchy window calls it once more to draw. Both are cheap local reads against SQLite; the cost of the full view is in *rendering*, not in fetching, which is exactly why the render happens in a separate window.
 
@@ -605,7 +606,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 ### 6.1 Command index by ID
 
-`API-01`–`API-06` M1 · `API-07`–`API-09`, `API-41` M2 · `API-10`–`API-11` M4 · `API-12`–`API-15` M5 · `API-16`–`API-20` M6 · `API-21`–`API-25`, `API-37`–`API-38` M7 · `API-26`–`API-31`, `API-39` M8 · `API-32` M9 · `API-33` M3 · `API-34`–`API-36`, `API-40` pre-flight/recovery.
+`API-01`–`API-06` M1 · `API-07`–`API-09`, `API-41` M2 · `API-10`–`API-11`, `API-42` M4 · `API-12`–`API-15` M5 · `API-16`–`API-20` M6 · `API-21`–`API-25`, `API-37`–`API-38` M7 · `API-26`–`API-31`, `API-39` M8 · `API-32` M9 · `API-33` M3 · `API-34`–`API-36`, `API-40` pre-flight/recovery.
 
 ---
 
