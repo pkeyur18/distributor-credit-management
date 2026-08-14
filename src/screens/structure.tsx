@@ -73,7 +73,7 @@ export function Structure() {
     return () => {
       cancelled = true;
     };
-  }, [rootNode?.memberId]);
+  }, [rootNode]);
 
   const backTarget = useBackTarget();
   useRouteLabel(rootNode ? `Structure (${rootNode.name})` : undefined);
