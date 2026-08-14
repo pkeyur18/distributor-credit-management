@@ -70,3 +70,18 @@ export function getDirectChildrenChart(
 ): Promise<DirectChildrenChartResult> {
   return invokeCommand("get_direct_children_chart", { ...request });
 }
+
+export interface AncestorNode {
+  id: number;
+  name: string;
+}
+
+export interface AncestorChainResult {
+  /** Root-first, the requested member last. */
+  chain: AncestorNode[];
+}
+
+// API-42 — the Structure screen's breadcrumb trail.
+export function getAncestorChain(memberId: number): Promise<AncestorChainResult> {
+  return invokeCommand("get_ancestor_chain", { memberId });
+}
