@@ -35,7 +35,7 @@ export interface CloseOutcome {
 export function confirmBackupAndClose(
   input: ConfirmBackupAndCloseInput,
 ): Promise<CloseOutcome> {
-  return invokeCommand("confirm_backup_and_close", { ...input });
+  return invokeCommand("confirm_backup_and_close", { input });
 }
 
 // API-15 — on-demand backup of the in-progress month, no zeroing.

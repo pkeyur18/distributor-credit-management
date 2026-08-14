@@ -581,6 +581,7 @@ pub fn export_low_contribution(
 pub struct ClosedMonthBackup {
     pub period_id: i64,
     pub period_month: String,
+    pub closed_at: Option<String>,
     pub latest_version: i64,
     pub is_corrected: bool,
 }
@@ -594,7 +595,7 @@ pub struct ClosedMonthBackup {
 /// exportable snapshot data, for the Reports screen's re-download card.
 pub fn list_backups(conn: &Connection) -> Result<Vec<ClosedMonthBackup>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT p.id, p.period_month, MAX(s.version)
+        "SELECT p.id, p.period_month, p.closed_at, MAX(s.version)
          FROM periods p
          JOIN monthly_snapshots s ON s.period_id = p.id
          WHERE p.status = 'closed'
@@ -603,10 +604,11 @@ pub fn list_backups(conn: &Connection) -> Result<Vec<ClosedMonthBackup>, AppErro
     )?;
     let rows = stmt
         .query_map([], |r| {
-            let latest_version: i64 = r.get(2)?;
+            let latest_version: i64 = r.get(3)?;
             Ok(ClosedMonthBackup {
                 period_id: r.get(0)?,
                 period_month: r.get(1)?,
+                closed_at: r.get(2)?,
                 latest_version,
                 is_corrected: latest_version > 1,
             })
