@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { CalendarCheck, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 
@@ -235,6 +236,8 @@ function CloseWizard({
 export function MonthlyClose() {
   const toast = useToast();
   const { refresh: refreshAlert } = useOutstandingAlert();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [outstanding, setOutstanding] = useState<Period[] | null>(null);
   const [wizard, setWizard] = useState<{ period: Period; begun: BeginCloseResult } | null>(null);
   const [backingUp, setBackingUp] = useState(false);
@@ -255,6 +258,17 @@ export function MonthlyClose() {
     refreshAlert();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Banner's Close link navigates here with `autoStart` so clicking it jumps
+  // straight into the wizard for the oldest month — same as clicking the
+  // row's own Close button — instead of landing on the plain list.
+  const autoStart = Boolean((location.state as { autoStart?: boolean } | null)?.autoStart);
+  useEffect(() => {
+    if (!autoStart || !outstanding || outstanding.length === 0) return;
+    navigate(location.pathname, { replace: true, state: null });
+    startClose(outstanding[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, outstanding]);
 
   async function startClose(period: Period) {
     try {

@@ -46,7 +46,11 @@ export function OutstandingMonthBanner({ alert }: OutstandingMonthBannerProps) {
             {monthLabel(alert.currentMonth)} entries unlock once {oldestLabel} is closed.
           </span>
         </div>
-        <Link to="/close" className={cn(buttonVariants({ variant: "primary", size: "sm" }), "shrink-0")}>
+        <Link
+          to="/close"
+          state={{ autoStart: true }}
+          className={cn(buttonVariants({ variant: "primary", size: "sm" }), "shrink-0")}
+        >
           Close {oldestLabel}
         </Link>
       </div>
