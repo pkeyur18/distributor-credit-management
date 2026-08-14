@@ -14,13 +14,14 @@ describe("Settings", () => {
 
   it("T-M7.1-4: disables removing the last remaining slab row, and refuses it if reached anyway", async () => {
     await navigateTo("Settings");
-    const rows = await $$('[id^="slab-save-"]');
-    // The seeded slab table has seven rows — remove all but one first.
+    // Add/remove is staged locally now (prototype-match single "Save slab
+    // table" flow) — no round trip needed to see the last-row control disable.
+    const rows = await $$('[id^="slab-remove-"]');
     for (let i = 0; i < rows.length - 1; i++) {
       const removeButtons = await $$('button[aria-label="Remove this slab row"]');
       await removeButtons[0].click();
       await browser.waitUntil(
-        async () => (await $$('[id^="slab-save-"]')).length === rows.length - 1 - i,
+        async () => (await $$('[id^="slab-remove-"]')).length === rows.length - 1 - i,
         { timeout: 3000 },
       );
     }
@@ -32,12 +33,21 @@ describe("Settings", () => {
 
   it("T-M7.1-6: a non-monotonic slab table saves without being blocked", async () => {
     await navigateTo("Settings");
-    await $("#slab-new-threshold").setValue("50000.00");
-    await $("#slab-new-percentage").setValue("1");
-    await $("#slab-add-row").click();
-    await $("div*=Slab row added").waitForExist({ timeout: 3000 });
-    // No monotonicity warning or refusal of any kind (ADR-009) — the save
-    // above completing without a blocking dialog *is* the assertion.
+    await $("button=Add row").click();
+    await $("#slab-threshold-new-0").setValue("50000.00");
+    await $("#slab-percentage-new-0").setValue("1");
+    await $("#slab-save-table").click();
+
+    const dialog = $('div[role="dialog"]');
+    await dialog.waitForExist({ timeout: 3000 });
+    const confirmButton = dialog.$("button*=Save and re-work");
+    await confirmButton.waitForEnabled({ timeout: 3000 });
+    await confirmButton.click();
+
+    // No monotonicity check (ADR-009) — the recalc-warning dialog appears for
+    // every slab save; confirming it completing with the success toast
+    // (not a validation refusal) is the assertion.
+    await $("div*=Slab table saved").waitForExist({ timeout: 3000 });
   });
 
   it("T-M7.4-2: the backup schedule segmented control saves immediately, no separate Save step", async () => {
