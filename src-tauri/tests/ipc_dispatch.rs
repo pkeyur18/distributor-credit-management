@@ -190,3 +190,134 @@ fn add_slab_row_flat_scalar_payload_succeeds() {
     );
     assert!(result.is_ok(), "expected success, got: {result:?}");
 }
+
+// Reproduces the "something went wrong" export bug reported on the Reports
+// screen: `export_monthly` and `export_low_contribution` each take a single
+// struct param (`input`), same binding rule as `update_settings`'s `patch`
+// above — but `src/lib/ipc/m6-reports.ts` was spreading the input flat
+// (`{ ...input }`) instead of nesting it (`{ input }`). The macro rejects
+// the flat shape with a raw string error, not a typed `AppError`, so the
+// frontend's `toErrorPresentation` can't recognize it and falls back to its
+// generic "Something went wrong." message. `export_yearly_average` takes a
+// plain scalar (`output_path`) and was never affected — included here only
+// as a regression guard against a future "fix" nesting it too.
+
+fn invoke_reports(cmd: &str, body: InvokeBody) -> Result<serde_json::Value, serde_json::Value> {
+    let app = mock_builder()
+        .invoke_handler(tauri::generate_handler![
+            commands::export_monthly,
+            commands::export_yearly_average,
+            commands::export_low_contribution,
+        ])
+        .build(mock_context(noop_assets()))
+        .unwrap();
+
+    app.manage(SessionState::new());
+    app.state::<SessionState>().mark_authenticated();
+    let conn = db::open_seeded_in_memory().unwrap();
+    conn.execute(
+        "INSERT INTO periods (period_month, status) VALUES ('2026-08', 'open')",
+        [],
+    )
+    .unwrap();
+    app.manage(DbState::with_connection(conn));
+
+    let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+
+    tauri::test::get_ipc_response(
+        &webview,
+        InvokeRequest {
+            cmd: cmd.into(),
+            callback: CallbackFn(0),
+            error: CallbackFn(1),
+            url: "tauri://localhost".parse().unwrap(),
+            body,
+            headers: Default::default(),
+            invoke_key: tauri::test::INVOKE_KEY.to_string(),
+        },
+    )
+    .map(|b| b.deserialize::<serde_json::Value>().unwrap())
+}
+
+/// The bug as it shipped: `exportMonthly()`'s flat `{ ...input }` spread.
+#[test]
+fn export_monthly_flat_payload_is_rejected_by_the_real_command_macro() {
+    let result = invoke_reports(
+        "export_monthly",
+        InvokeBody::Json(json!({
+            "periodMonth": "2026-08",
+            "optionalColumns": [],
+            "outputPath": std::env::temp_dir().join("x.xlsx").to_str().unwrap()
+        })),
+    );
+    let err = result.expect_err("flat payload should be rejected, not accepted");
+    let message = err.as_str().unwrap_or_default();
+    assert!(
+        message.contains("missing required key input"),
+        "expected a missing-key error, got: {message}"
+    );
+}
+
+/// The fix: nested under `input`, matching the single struct param's name.
+#[test]
+fn export_monthly_nested_under_input_succeeds() {
+    let result = invoke_reports(
+        "export_monthly",
+        InvokeBody::Json(json!({
+            "input": {
+                "periodMonth": "2026-08",
+                "optionalColumns": [],
+                "outputPath": std::env::temp_dir().join("y.xlsx").to_str().unwrap()
+            }
+        })),
+    );
+    assert!(result.is_ok(), "expected success, got: {result:?}");
+}
+
+/// The bug as it shipped: `exportLowContribution()`'s flat `{ ...input }` spread.
+#[test]
+fn export_low_contribution_flat_payload_is_rejected_by_the_real_command_macro() {
+    let result = invoke_reports(
+        "export_low_contribution",
+        InvokeBody::Json(json!({
+            "threshold": 10000,
+            "outputPath": std::env::temp_dir().join("z.xlsx").to_str().unwrap()
+        })),
+    );
+    let err = result.expect_err("flat payload should be rejected, not accepted");
+    let message = err.as_str().unwrap_or_default();
+    assert!(
+        message.contains("missing required key input"),
+        "expected a missing-key error, got: {message}"
+    );
+}
+
+/// The fix: nested under `input`, matching the single struct param's name.
+#[test]
+fn export_low_contribution_nested_under_input_succeeds() {
+    let result = invoke_reports(
+        "export_low_contribution",
+        InvokeBody::Json(json!({
+            "input": {
+                "threshold": 10000,
+                "outputPath": std::env::temp_dir().join("w.xlsx").to_str().unwrap()
+            }
+        })),
+    );
+    assert!(result.is_ok(), "expected success, got: {result:?}");
+}
+
+/// `exportYearlyAverage()`'s payload — flat, matching its single *scalar*
+/// param (`output_path`), never affected by the struct-binding bug above.
+#[test]
+fn export_yearly_average_flat_scalar_payload_succeeds() {
+    let result = invoke_reports(
+        "export_yearly_average",
+        InvokeBody::Json(json!({
+            "outputPath": std::env::temp_dir().join("v.xlsx").to_str().unwrap()
+        })),
+    );
+    assert!(result.is_ok(), "expected success, got: {result:?}");
+}

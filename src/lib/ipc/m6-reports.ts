@@ -15,7 +15,7 @@ export interface ExportMonthlyInput {
 
 // API-16 — the five mandatory columns (D-1) are always included regardless of selection.
 export function exportMonthly(input: ExportMonthlyInput): Promise<ExportResult> {
-  return invokeCommand("export_monthly", { ...input });
+  return invokeCommand("export_monthly", { input });
 }
 
 // API-17 — snapshot-count denominator, displayed alongside the average
@@ -33,7 +33,7 @@ export interface ExportLowContributionInput {
 
 // API-18 — filters on own Business Volume, not Total Business Volume (Rule-24).
 export function exportLowContribution(input: ExportLowContributionInput): Promise<ExportResult> {
-  return invokeCommand("export_low_contribution", { ...input });
+  return invokeCommand("export_low_contribution", { input });
 }
 
 // Closed periods that have a snapshot (T-M5.4-2 — an empty-month close is
