@@ -53,6 +53,7 @@ pub fn run() {
             commands::get_member_detail,
             commands::get_direct_children_chart,
             commands::get_ancestor_chain,
+            commands::export_member_detail_pdf,
             commands::get_outstanding_periods,
             commands::begin_close,
             commands::confirm_backup_and_close,

@@ -139,14 +139,24 @@ chosen output path follows the same `AppError::Export` path the `.xlsx` exports 
 
 ## 6. Testing
 
-- **Rust:** a test asserting the rendered PDF's extracted text/values match a
-  `MemberDetail` fixture — golden-scenario style, consistent with this project's
-  existing calculation tests. Covers: zero direct legs (no royalty line), many direct
-  legs (pagination), inactive member (status pill still renders, Rule-28 — inactive
-  has zero computational effect but must still display correctly).
-- **Frontend:** component test for the button → save-dialog → IPC call → toast flow,
-  mirroring whatever test pattern `reports.tsx`'s exports already use, including the
-  cancel-the-dialog path (no call made, no error toast).
+- **Rust (revised during implementation, 15 Aug 2026):** the original plan was to
+  assert on the rendered PDF's extracted text. `pdf-extract`'s `adobe-cmap-parser`
+  dependency panics on any text genpdf/printpdf-0.3.4 produces — confirmed with
+  plain ASCII, digits, and genpdf's minimal-conformance mode, all crash identically
+  (`index out of bounds` in `adobe-cmap-parser`). Revised approach: every section's
+  actual text is composed by a small pure function (`status_label`, `meta_line_text`,
+  `format_amount`, etc.) tested directly with no PDF involved; the genpdf layout
+  functions and `render_member_detail_pdf` itself are smoke-tested only (renders
+  without panicking, output starts with the `%PDF` magic bytes). The one exception
+  is the direct-legs pagination test, which reads the rendered PDF's page *count*
+  via `lopdf` (raw object-structure access, no CMap/glyph decoding — doesn't hit the
+  same crash). Covers: zero direct legs (no royalty line), many direct legs
+  (pagination), inactive member (status label still renders, Rule-28 — inactive has
+  zero computational effect but must still display correctly).
+- **Frontend:** no new test added — this codebase's other four save-dialog export
+  flows (`reports.tsx`) have none either (`grep -rl "plugin-dialog" src` matches zero
+  `*.test.tsx` files), so a test here would be a new pattern, not a followed one.
+  Coverage lives entirely in the Rust tests above plus manual verification.
 
 ## 7. Out of scope
 

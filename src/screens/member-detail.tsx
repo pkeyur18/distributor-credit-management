@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { Download } from "lucide-react";
+import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
@@ -18,7 +20,7 @@ import { MemberModal } from "@/components/member-modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { useToast } from "@/components/ui/toast";
-import { getMemberDetail } from "@/lib/ipc/m4-search";
+import { getMemberDetail, exportMemberDetailPdf } from "@/lib/ipc/m4-search";
 import { deactivateMember, reactivateMember } from "@/lib/ipc/m1-members";
 import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries";
 import type { MemberDetail as MemberDetailData } from "@/lib/ipc/m4-search";
@@ -44,6 +46,7 @@ export function MemberDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"deactivate" | "reactivate" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const backTarget = useBackTarget();
   useRouteLabel(detail?.member.name);
@@ -74,6 +77,24 @@ export function MemberDetail() {
       cancelled = true;
     };
   }, [id, viewMonth]);
+
+  async function handleExportPdf() {
+    if (!detail) return;
+    const outputPath = await saveFileDialog({
+      defaultPath: `member-detail-${detail.member.id}-${viewMonth ?? "current"}.pdf`,
+      filters: [{ name: "PDF Document", extensions: ["pdf"] }],
+    });
+    if (!outputPath) return;
+    setExportingPdf(true);
+    try {
+      await exportMemberDetailPdf(detail.member.id, viewMonth, outputPath);
+      toast.add({ title: "Member record exported", type: "success" });
+    } catch (raw) {
+      toast.add({ title: toErrorPresentation(raw).message, type: "danger" });
+    } finally {
+      setExportingPdf(false);
+    }
+  }
 
   async function handleConfirm() {
     if (!detail || !confirmAction) return;
@@ -140,6 +161,15 @@ export function MemberDetail() {
                 Reactivate
               </Button>
             )}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={exportingPdf}
+              onClick={handleExportPdf}
+            >
+              <Download />
+              Export PDF
+            </Button>
             <Button
               variant="primary"
               size="sm"

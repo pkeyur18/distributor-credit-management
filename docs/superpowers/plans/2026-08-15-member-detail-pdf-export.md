@@ -19,6 +19,25 @@ extended by ADR-013). Frontend adds one button + one IPC binding, mirroring
 
 **Spec:** `docs/superpowers/specs/2026-08-15-member-detail-pdf-export-design.md`
 
+## Amendment (during execution, 15 Aug 2026)
+
+Task 2's own tests found that `pdf-extract` (this plan's original PDF-content
+verification tool) panics on *any* text genpdf/printpdf-0.3.4 produces —
+confirmed with plain ASCII, digits, and genpdf's minimal-conformance mode, all
+identical `index out of bounds` crashes in `adobe-cmap-parser`. Every task from
+here on uses the revised approach instead of what its code blocks below show:
+content is asserted on small pure text-composition functions (`status_label`,
+`meta_line_text`, `format_amount`, etc.), never on PDF-extracted text; section
+builders and `render_member_detail_pdf` are smoke-tested only (renders without
+panicking, output starts with `%PDF`). Task 3's pagination spike uses `lopdf`
+(page-count only, no CMap decoding) instead of `pdf-extract`, since that one
+test genuinely needs to observe rendered output, not just composed strings.
+`pdf-extract` is removed from `Cargo.toml`; `lopdf = "0.42"` replaces it. See
+the spec's §6 for the full amendment. The task sections below are left as
+originally written for their structural shape (what each function does, what
+it's called) — read their test code as "assert this pure function's output,"
+not literally.
+
 ## Global Constraints
 
 - All PDF generation happens Rust-side. The WebView never receives raw file bytes —

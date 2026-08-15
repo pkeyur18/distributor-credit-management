@@ -1,5 +1,6 @@
 import { invokeCommand } from "./client";
 import type { ChartNode, Member, SlabRow } from "./entities";
+import type { ExportResult } from "./m6-reports";
 
 export interface RewardBreakdown {
   ownReward: { ownBusinessVolume: number; ownSlabPct: number; amount: number };
@@ -84,4 +85,15 @@ export interface AncestorChainResult {
 // API-42 — the Structure screen's breadcrumb trail.
 export function getAncestorChain(memberId: number): Promise<AncestorChainResult> {
   return invokeCommand("get_ancestor_chain", { memberId });
+}
+
+// API-46 (CR-6, M4.8) — reuses get_member_detail's data unchanged; no new
+// calculation logic. `periodMonth`: same default-to-oldest-recordable
+// behaviour as `getMemberDetail`.
+export function exportMemberDetailPdf(
+  memberId: number,
+  periodMonth: string | undefined,
+  outputPath: string,
+): Promise<ExportResult> {
+  return invokeCommand("export_member_detail_pdf", { memberId, periodMonth, outputPath });
 }
