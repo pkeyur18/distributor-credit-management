@@ -346,11 +346,11 @@ export function Structure() {
 
       <div
         ref={wrapRef}
-        className="mt-4 min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-bg p-6"
+        className="mt-4 flex min-h-0 flex-1 items-start justify-center-safe overflow-auto rounded-lg border border-border bg-bg p-6"
       >
         <div
           ref={canvasRef}
-          className="relative flex origin-top-left flex-col items-center gap-9"
+          className="relative flex w-max origin-top-left flex-col items-center gap-9"
           style={{ transform: `scale(${zoom})` }}
         >
           <TreeConnectorLayer>
