@@ -122,6 +122,8 @@ export interface AuditLogEntry {
   newValue: string | null;
   changedAt: string;
   cause: AuditCause;
+  /** Resolved member name for entityType "member" rows; null otherwise. */
+  memberName: string | null;
 }
 
 // API-11's node shape. The Structure/Full-Hierarchy tree node still shows

@@ -4,26 +4,31 @@ import { FileText, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import {
+  TableWrap,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 import { getAuditLog } from "@/lib/ipc/m9-audit";
-import type { AuditCause, AuditEntityType, AuditLogEntry } from "@/lib/ipc/entities";
+import type { AuditCause, AuditLogEntry } from "@/lib/ipc/entities";
 
+// Fuller than the raw enum key, but kept generic enough to stay accurate
+// across every entity type that shares a given cause (e.g. "entry" covers
+// volume entries, member onboarding and credential setup alike) — the
+// prototype's mock data invents one bespoke sentence per event, which the
+// real 7-value enum can't reproduce 1:1 without misdescribing some rows.
 const CAUSE_LABELS: Record<AuditCause, string> = {
-  entry: "Recorded",
-  edit: "Edited",
-  correction: "Corrected",
-  settings_change: "Setting changed",
-  period_close: "Month closed",
-  manual_backup: "Manual backup",
-  console_backup: "Console backup",
-};
-
-const ENTITY_LABELS: Record<AuditEntityType, string> = {
-  member: "Member",
-  entry: "Business Volume entry",
-  setting: "Setting",
-  period: "Period",
-  backup: "Backup",
-  auth: "Credential",
+  entry: "New record recorded",
+  edit: "Record edited",
+  correction: "Closed-month record corrected — new snapshot version created",
+  settings_change: "Setting changed by administrator",
+  period_close: "Month closed — permanent record written, live figures cleared",
+  manual_backup: "Manual backup created",
+  console_backup: "Console backup created",
 };
 
 function formatChangedAt(iso: string): string {
@@ -85,26 +90,38 @@ export function Audit() {
 
       <div className="mt-4">
         {loading ? null : entries.length === 0 ? (
-          <EmptyState icon={<FileText className="size-8" />} title="No matching entries" />
-        ) : (
-          <div className="divide-y divide-border rounded-sm border border-border bg-surface">
-            {entries.map((entry) => (
-              <div key={entry.id} className="flex flex-col gap-0.5 px-3 py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-body font-semibold text-ink">
-                    {ENTITY_LABELS[entry.entityType]} · {entry.field}
-                  </span>
-                  <span className="shrink-0 text-caption text-muted-text">
-                    {formatChangedAt(entry.changedAt)}
-                  </span>
-                </div>
-                <div className="text-caption text-muted-text">
-                  {entry.oldValue ?? "—"} → {entry.newValue ?? "—"}
-                  <span className="ml-2">{CAUSE_LABELS[entry.cause]}</span>
-                </div>
-              </div>
-            ))}
+          <div className="rounded-lg border border-border bg-surface">
+            <EmptyState icon={<FileText className="size-8" />} title="No matching entries" />
           </div>
+        ) : (
+          <TableWrap>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Member</TableHead>
+                  <TableHead>Field</TableHead>
+                  <TableHead>Before</TableHead>
+                  <TableHead>After</TableHead>
+                  <TableHead>Cause</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {entries.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell className="mono whitespace-nowrap">
+                      {formatChangedAt(entry.changedAt)}
+                    </TableCell>
+                    <TableCell>{entry.memberName ?? "—"}</TableCell>
+                    <TableCell>{entry.field}</TableCell>
+                    <TableCell className="text-muted-text">{entry.oldValue ?? "—"}</TableCell>
+                    <TableCell>{entry.newValue ?? "—"}</TableCell>
+                    <TableCell className="text-muted-text">{CAUSE_LABELS[entry.cause]}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableWrap>
         )}
       </div>
     </>
