@@ -58,6 +58,10 @@ pub struct AuditLogEntry {
     pub new_value: Option<String>,
     pub changed_at: String,
     pub cause: String,
+    /// `members.name` for `entity_type = 'member'` rows, resolved via the
+    /// join below; `None` for every other entity type (setting/period/
+    /// backup/auth have no member to name).
+    pub member_name: Option<String>,
 }
 
 fn row_to_entry(r: &rusqlite::Row) -> rusqlite::Result<AuditLogEntry> {
@@ -70,11 +74,15 @@ fn row_to_entry(r: &rusqlite::Row) -> rusqlite::Result<AuditLogEntry> {
         new_value: r.get(5)?,
         changed_at: r.get(6)?,
         cause: r.get(7)?,
+        member_name: r.get(8)?,
     })
 }
 
-const AUDIT_COLUMNS: &str =
-    "id, entity_type, entity_id, field, old_value, new_value, changed_at, cause";
+const AUDIT_COLUMNS: &str = "audit_log.id, audit_log.entity_type, audit_log.entity_id, \
+     audit_log.field, audit_log.old_value, audit_log.new_value, audit_log.changed_at, \
+     audit_log.cause, m.name";
+const AUDIT_FROM: &str = "audit_log LEFT JOIN members m \
+     ON m.id = audit_log.entity_id AND audit_log.entity_type = 'member'";
 
 /// API-32 (T-M9.1-4). `member_query` reuses Rule-44's one shared search
 /// function (`m1_members::search_members`) to resolve name/ID/phone to a
@@ -91,7 +99,7 @@ pub fn get_audit_log(
     let trimmed = member_query.map(str::trim).filter(|q| !q.is_empty());
     let Some(query) = trimmed else {
         let mut stmt = conn.prepare(&format!(
-            "SELECT {AUDIT_COLUMNS} FROM audit_log ORDER BY id DESC"
+            "SELECT {AUDIT_COLUMNS} FROM {AUDIT_FROM} ORDER BY audit_log.id DESC"
         ))?;
         return Ok(stmt
             .query_map([], row_to_entry)?
@@ -111,9 +119,9 @@ pub fn get_audit_log(
         .collect::<Vec<_>>()
         .join(",");
     let sql = format!(
-        "SELECT {AUDIT_COLUMNS} FROM audit_log \
-         WHERE entity_type = 'member' AND entity_id IN ({placeholders}) \
-         ORDER BY id DESC"
+        "SELECT {AUDIT_COLUMNS} FROM {AUDIT_FROM} \
+         WHERE audit_log.entity_type = 'member' AND audit_log.entity_id IN ({placeholders}) \
+         ORDER BY audit_log.id DESC"
     );
     let mut stmt = conn.prepare(&sql)?;
     let params = rusqlite::params_from_iter(matched_ids.iter());
@@ -295,6 +303,39 @@ mod tests {
         assert!(entries
             .iter()
             .all(|e| e.entity_type == "member" && e.entity_id == root_id));
+    }
+
+    #[test]
+    fn member_rows_resolve_member_name_other_entity_types_resolve_none() {
+        let conn = seeded();
+        let root = m1_members::create_root_member(
+            &conn,
+            m1_members::CreateRootMemberInput {
+                name: "Top Member".into(),
+                phone: "9876500001".into(),
+                address: "1 Main Street".into(),
+                email: None,
+                consent_given: true,
+            },
+        )
+        .unwrap();
+        write_audit_entry(&conn, "member", root.id, "name", None, Some("X"), "entry").unwrap();
+        write_audit_entry(
+            &conn,
+            "setting",
+            0,
+            "royalty",
+            None,
+            Some("5"),
+            "settings_change",
+        )
+        .unwrap();
+
+        let entries = get_audit_log(&conn, None).unwrap();
+        let member_row = entries.iter().find(|e| e.entity_type == "member").unwrap();
+        let setting_row = entries.iter().find(|e| e.entity_type == "setting").unwrap();
+        assert_eq!(member_row.member_name.as_deref(), Some(root.name.as_str()));
+        assert_eq!(setting_row.member_name, None);
     }
 
     #[test]

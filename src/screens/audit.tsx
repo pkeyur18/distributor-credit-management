@@ -1,29 +1,37 @@
 import { useEffect, useState } from "react";
 import { FileText, Search } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import {
+  TableWrap,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 import { getAuditLog } from "@/lib/ipc/m9-audit";
-import type { AuditCause, AuditEntityType, AuditLogEntry } from "@/lib/ipc/entities";
+import type { AuditCause, AuditLogEntry } from "@/lib/ipc/entities";
 
+const PAGE_SIZES = [10, 25, 50] as const;
+
+// Fuller than the raw enum key, but kept generic enough to stay accurate
+// across every entity type that shares a given cause (e.g. "entry" covers
+// volume entries, member onboarding and credential setup alike) — the
+// prototype's mock data invents one bespoke sentence per event, which the
+// real 7-value enum can't reproduce 1:1 without misdescribing some rows.
 const CAUSE_LABELS: Record<AuditCause, string> = {
-  entry: "Recorded",
-  edit: "Edited",
-  correction: "Corrected",
-  settings_change: "Setting changed",
-  period_close: "Month closed",
-  manual_backup: "Manual backup",
-  console_backup: "Console backup",
-};
-
-const ENTITY_LABELS: Record<AuditEntityType, string> = {
-  member: "Member",
-  entry: "Business Volume entry",
-  setting: "Setting",
-  period: "Period",
-  backup: "Backup",
-  auth: "Credential",
+  entry: "New record recorded",
+  edit: "Record edited",
+  correction: "Closed-month record corrected — new snapshot version created",
+  settings_change: "Setting changed by administrator",
+  period_close: "Month closed — permanent record written, live figures cleared",
+  manual_backup: "Manual backup created",
+  console_backup: "Console backup created",
 };
 
 function formatChangedAt(iso: string): string {
@@ -43,6 +51,8 @@ export function Audit() {
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0]);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +61,10 @@ export function Audit() {
       setLoading(true);
       getAuditLog(trimmed ? { memberQuery: trimmed } : {})
         .then((found) => {
-          if (!cancelled) setEntries(found);
+          if (!cancelled) {
+            setEntries(found);
+            setPage(0);
+          }
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -62,6 +75,11 @@ export function Audit() {
       clearTimeout(timer);
     };
   }, [query]);
+
+  const totalPages = Math.max(1, Math.ceil(entries.length / pageSize));
+  const currentPage = Math.min(page, totalPages - 1);
+  const rangeStart = currentPage * pageSize;
+  const pageRows = entries.slice(rangeStart, rangeStart + pageSize);
 
   return (
     <>
@@ -85,26 +103,84 @@ export function Audit() {
 
       <div className="mt-4">
         {loading ? null : entries.length === 0 ? (
-          <EmptyState icon={<FileText className="size-8" />} title="No matching entries" />
-        ) : (
-          <div className="divide-y divide-border rounded-sm border border-border bg-surface">
-            {entries.map((entry) => (
-              <div key={entry.id} className="flex flex-col gap-0.5 px-3 py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-body font-semibold text-ink">
-                    {ENTITY_LABELS[entry.entityType]} · {entry.field}
-                  </span>
-                  <span className="shrink-0 text-caption text-muted-text">
-                    {formatChangedAt(entry.changedAt)}
-                  </span>
-                </div>
-                <div className="text-caption text-muted-text">
-                  {entry.oldValue ?? "—"} → {entry.newValue ?? "—"}
-                  <span className="ml-2">{CAUSE_LABELS[entry.cause]}</span>
-                </div>
-              </div>
-            ))}
+          <div className="rounded-lg border border-border bg-surface">
+            <EmptyState icon={<FileText className="size-8" />} title="No matching entries" />
           </div>
+        ) : (
+          <>
+            <TableWrap>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Member</TableHead>
+                    <TableHead>Field</TableHead>
+                    <TableHead>Before</TableHead>
+                    <TableHead>After</TableHead>
+                    <TableHead>Cause</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pageRows.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="mono whitespace-nowrap">
+                        {formatChangedAt(entry.changedAt)}
+                      </TableCell>
+                      <TableCell>{entry.memberName ?? "—"}</TableCell>
+                      <TableCell>{entry.field}</TableCell>
+                      <TableCell className="text-muted-text">{entry.oldValue ?? "—"}</TableCell>
+                      <TableCell>{entry.newValue ?? "—"}</TableCell>
+                      <TableCell className="text-muted-text">
+                        {CAUSE_LABELS[entry.cause]}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableWrap>
+            <div className="mt-2.5 flex items-center justify-between">
+              <span className="text-caption">
+                Showing {rangeStart + 1}–{Math.min(rangeStart + pageSize, entries.length)} of{" "}
+                {entries.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <label htmlFor="audit-page-size" className="text-caption">
+                  Rows per page
+                </label>
+                <select
+                  id="audit-page-size"
+                  className="h-7.5 w-auto rounded-sm border border-border bg-surface px-2 text-body text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(0);
+                  }}
+                >
+                  {PAGE_SIZES.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={currentPage === 0}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Prev
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={currentPage >= totalPages - 1}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </>
