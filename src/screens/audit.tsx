@@ -49,7 +49,6 @@ function formatChangedAt(iso: string): string {
 // (append-only, T-M9.1-1), so this screen has no write path of any kind.
 export function Audit() {
   const [query, setQuery] = useState("");
-  const [monthFilter, setMonthFilter] = useState("");
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -77,54 +76,33 @@ export function Audit() {
     };
   }, [query]);
 
-  const filteredEntries = monthFilter
-    ? entries.filter((entry) => entry.changedAt.startsWith(monthFilter))
-    : entries;
-
-  const totalPages = Math.max(1, Math.ceil(filteredEntries.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(entries.length / pageSize));
   const currentPage = Math.min(page, totalPages - 1);
   const rangeStart = currentPage * pageSize;
-  const pageRows = filteredEntries.slice(rangeStart, rangeStart + pageSize);
+  const pageRows = entries.slice(rangeStart, rangeStart + pageSize);
 
   return (
     <>
       <PageHeader
         title="Audit log"
-        subtitle={`${filteredEntries.length} recorded ${filteredEntries.length === 1 ? "change" : "changes"} — no entry is ever edited or removed`}
+        subtitle={`${entries.length} recorded ${entries.length === 1 ? "change" : "changes"} — no entry is ever edited or removed`}
       />
 
-      <div className="mt-4 flex flex-wrap items-end gap-3">
-        <div className="max-w-85 flex-1">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.75 top-1/2 size-3.75 -translate-y-1/2 text-muted-text" />
-            <Input
-              id="audit-filter"
-              className="pl-8"
-              placeholder="Filter by member name, ID or phone"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-        </div>
-        <div>
-          <label htmlFor="audit-month-filter" className="text-label mb-1 block">
-            Month
-          </label>
+      <div className="mt-4 max-w-85">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.75 top-1/2 size-3.75 -translate-y-1/2 text-muted-text" />
           <Input
-            id="audit-month-filter"
-            type="month"
-            className="w-auto"
-            value={monthFilter}
-            onChange={(e) => {
-              setMonthFilter(e.target.value);
-              setPage(0);
-            }}
+            id="audit-filter"
+            className="pl-8"
+            placeholder="Filter by member name, ID or phone"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
           />
         </div>
       </div>
 
       <div className="mt-4">
-        {loading ? null : filteredEntries.length === 0 ? (
+        {loading ? null : entries.length === 0 ? (
           <div className="rounded-lg border border-border bg-surface">
             <EmptyState icon={<FileText className="size-8" />} title="No matching entries" />
           </div>
@@ -162,9 +140,8 @@ export function Audit() {
             </TableWrap>
             <div className="mt-2.5 flex items-center justify-between">
               <span className="text-caption">
-                Showing {rangeStart + 1}–
-                {Math.min(rangeStart + pageSize, filteredEntries.length)} of{" "}
-                {filteredEntries.length}
+                Showing {rangeStart + 1}–{Math.min(rangeStart + pageSize, entries.length)} of{" "}
+                {entries.length}
               </span>
               <div className="flex items-center gap-2">
                 <label htmlFor="audit-page-size" className="text-caption">
