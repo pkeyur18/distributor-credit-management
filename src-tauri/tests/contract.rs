@@ -11,7 +11,7 @@ use bvconsole_lib::db;
 use bvconsole_lib::db_state::DbState;
 use bvconsole_lib::error::AppError;
 use bvconsole_lib::m1_members::{AddMemberInput, AddMemberOutcome, CreateRootMemberInput};
-use bvconsole_lib::m2_entries::{EditEntryInput, RecordEntryInput};
+use bvconsole_lib::m2_entries::{AddClosedMonthEntryInput, EditEntryInput, RecordEntryInput};
 use bvconsole_lib::m6_reports::{ExportLowContributionInput, ExportMonthlyInput};
 use bvconsole_lib::m8_auth::{CredentialInput, SetupFirstRunInput};
 use bvconsole_lib::paths::AppPaths;
@@ -114,24 +114,25 @@ fn root_input(phone: &str) -> CreateRootMemberInput {
     }
 }
 
-// T-QA.2-3: the surface holds exactly 44 commands, API-01 to API-44, no
-// gaps (amended for API-43/44 — see 06-decision-log-and-open-items.md) —
-// and this list is the same one `lib.rs` feeds to `generate_handler!` and
-// `build.rs` feeds to the ACL generator (via `command_names.rs`), so the
-// three can never quietly drift apart.
+// T-QA.2-3: the surface holds exactly 45 commands, API-01 to API-45, no
+// gaps (amended for API-43/44 — see 06-decision-log-and-open-items.md;
+// amended again for API-45, correction panel "Add record") — and this list
+// is the same one `lib.rs` feeds to `generate_handler!` and `build.rs`
+// feeds to the ACL generator (via `command_names.rs`), so the three can
+// never quietly drift apart.
 #[test]
-fn the_command_surface_holds_exactly_forty_four_commands() {
+fn the_command_surface_holds_exactly_forty_five_commands() {
     assert_eq!(
         ALL_COMMAND_NAMES.len(),
-        44,
-        "API-01 to API-44, no gaps (C2)"
+        45,
+        "API-01 to API-45, no gaps (C2)"
     );
 
     let capabilities = include_str!("../capabilities/default.json");
     let allow_count = capabilities.matches("\"allow-").count();
     assert_eq!(
-        allow_count, 44,
-        "the Tauri capability allowlist must have exactly 44 allow-* entries"
+        allow_count, 45,
+        "the Tauri capability allowlist must have exactly 45 allow-* entries"
     );
     for name in ALL_COMMAND_NAMES {
         // Tauri's ACL identifiers are hyphen-only (autogenerate_command_permissions
@@ -748,6 +749,22 @@ fn edit_entry_requires_a_session() {
         app.state::<AppPaths>(),
         EditEntryInput {
             id: 1,
+            amount: 1_000,
+            entry_date: "2026-08-15".into(),
+        },
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn add_closed_month_entry_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::add_closed_month_entry(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        app.state::<AppPaths>(),
+        AddClosedMonthEntryInput {
+            member_id: 1,
             amount: 1_000,
             entry_date: "2026-08-15".into(),
         },

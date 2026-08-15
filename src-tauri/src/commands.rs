@@ -148,6 +148,22 @@ pub fn edit_entry(
     m2_entries::edit_entry(conn, &paths.db_path, &paths.app_data_dir, input)
 }
 
+/// API-45 — correction panel's "Add record" (Rule-39 extended to creation).
+#[tauri::command]
+pub fn add_closed_month_entry(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    paths: tauri::State<'_, AppPaths>,
+    input: m2_entries::AddClosedMonthEntryInput,
+) -> Result<m2_entries::BusinessVolumeEntry, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m2_entries::add_closed_month_entry(conn, &paths.db_path, &paths.app_data_dir, input)
+}
+
 /// API-07 (US-M2.3/M5.3, S12).
 #[tauri::command]
 pub fn get_period_lock_status(
@@ -894,6 +910,7 @@ mod tests {
             "search_members",
             "record_entry",
             "edit_entry",
+            "add_closed_month_entry",
             "setup_first_run",
             "login",
             "check_data_readable",

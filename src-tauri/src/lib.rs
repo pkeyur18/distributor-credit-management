@@ -46,6 +46,7 @@ pub fn run() {
             commands::search_members,
             commands::record_entry,
             commands::edit_entry,
+            commands::add_closed_month_entry,
             commands::get_period_lock_status,
             commands::list_period_entries,
             commands::preview_settings_impact,

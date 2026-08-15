@@ -1,10 +1,12 @@
 // M2 — Business Volume Entry (04-technical-architecture.md §3.1, §6 API-08/
-// API-09; 02-business-rules.md Rule-15/16/16a/36/39). US-M2.1/M2.2, S7;
-// US-M2.3/M2.4, S12.
+// API-09/API-45; 02-business-rules.md Rule-15/16/16a/36/39). US-M2.1/M2.2,
+// S7; US-M2.3/M2.4, S12; correction-panel "Add record" extends Rule-39 to
+// creation, not just editing.
 //
 // `record_entry` refuses a current-month entry while an earlier month is
 // still `awaiting_close`, and refuses a closed-month write outright (that
-// stays `edit_entry`'s job via Rule-39's correction path) — via
+// stays `edit_entry`'s/`add_closed_month_entry`'s job via Rule-39's
+// correction path) — via
 // `m5_close::resolve_recording_period`, which owns period-state resolution
 // end to end. Period *transitions* (`open` → `awaiting_close` → `closed`)
 // are US-M5.5's `run_period_catchup`, run at login — nothing in this module
@@ -272,6 +274,81 @@ pub fn edit_entry(
     }
 
     load_entry(conn, input.id)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddClosedMonthEntryInput {
+    pub member_id: i64,
+    pub amount: i64,
+    pub entry_date: String,
+}
+
+/// API-45 — Rule-39's correction path extended to creation (see
+/// 02-business-rules.md's amended Rule-39): the correction panel's "Add
+/// record" button, inserting a brand-new entry into an already-`closed`
+/// period. Uses the same closed-period machinery `edit_entry` uses for
+/// corrections — `write_correction_snapshot` plus a new backup version —
+/// rather than `record_entry`'s live-totals path, which refuses closed
+/// periods outright (Rule-36). Only reachable for a period that is
+/// already `closed`; the correction panel only ever offers closed months
+/// to pick from, so the `Conflict` branch below is a defensive guard, not
+/// a normal UI path.
+pub fn add_closed_month_entry(
+    conn: &Connection,
+    db_path: &Path,
+    app_data_dir: &Path,
+    input: AddClosedMonthEntryInput,
+) -> Result<BusinessVolumeEntry, AppError> {
+    validate_amount(input.amount)?;
+    if !member_exists(conn, input.member_id)? {
+        return Err(AppError::NotFound {
+            message: "Member not found.".into(),
+        });
+    }
+    let period_month = period_month_of_date(&input.entry_date)?;
+    let period_id: i64 = conn
+        .query_row(
+            "SELECT id FROM periods WHERE period_month = ?1",
+            [&period_month],
+            |r| r.get(0),
+        )
+        .optional()?
+        .ok_or_else(|| AppError::NotFound {
+            message: "Period not found.".into(),
+        })?;
+    if period_status(conn, period_id)? != "closed" {
+        return Err(AppError::Conflict {
+            message:
+                "This entry point is for closed months only — use the volume entry screen instead."
+                    .into(),
+        });
+    }
+    let created_at = today_iso();
+
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "INSERT INTO business_volume_entries (member_id, amount, entry_date, period_month, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![input.member_id, input.amount, input.entry_date, period_month, created_at],
+    )?;
+    let entry_id = tx.last_insert_rowid();
+    m3_calc::write_correction_snapshot(&tx, input.member_id, period_id)?;
+    write_audit(
+        &tx,
+        entry_id,
+        "amount",
+        None,
+        &input.amount.to_string(),
+        "correction",
+    )?;
+    tx.commit()?;
+
+    // Post-commit, same reasoning as `edit_entry`'s closed-period branch —
+    // the copy must capture the file as it exists *after* the insert above.
+    backup::write_backup_copy(conn, db_path, app_data_dir, period_id, "period_close")?;
+
+    load_entry(conn, entry_id)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -941,6 +1018,208 @@ mod tests {
             )
             .unwrap();
         assert_eq!(cause, "correction");
+    }
+
+    #[test]
+    fn add_closed_month_entry_writes_a_first_snapshot_version_and_backup_when_none_existed() {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        let period_id = insert_period(&db.conn, "2026-06", "closed");
+
+        let entry = add_closed_month_entry(
+            &db.conn,
+            &db.db_path(),
+            &db.app_data_dir(),
+            AddClosedMonthEntryInput {
+                member_id: root,
+                amount: 150_000,
+                entry_date: "2026-06-10".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(entry.amount, 150_000);
+        assert_eq!(entry.period_month, "2026-06");
+
+        let v1: i64 = db
+            .conn
+            .query_row(
+                "SELECT total_business_volume FROM monthly_snapshots
+                 WHERE member_id = ?1 AND period_id = ?2 AND version = 1",
+                rusqlite::params![root, period_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(v1, 150_000);
+
+        let backup_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM backups WHERE period_id = ?1",
+                [period_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(backup_count, 1);
+
+        let cause: String = db
+            .conn
+            .query_row(
+                "SELECT cause FROM audit_log WHERE entity_id = ?1 ORDER BY id DESC LIMIT 1",
+                [entry.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(cause, "correction");
+    }
+
+    #[test]
+    fn add_closed_month_entry_on_a_previously_corrected_period_adds_a_new_version_leaving_earlier_ones_untouched(
+    ) {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        let entry = record_entry(
+            &db.conn,
+            RecordEntryInput {
+                member_id: root,
+                amount: 100_000,
+                entry_date: "2026-08-15".into(),
+            },
+        )
+        .unwrap();
+        let period_id: i64 = db
+            .conn
+            .query_row(
+                "SELECT id FROM periods WHERE period_month = '2026-08'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        // Simulates S11's close, same as the `edit_entry` closed-period test above.
+        db.conn
+            .execute(
+                "INSERT INTO monthly_snapshots
+                    (member_id, period_id, version, business_volume, total_business_volume,
+                     slab_pct, differential, royalty, own_reward, rewards, is_active_status, created_at)
+                 SELECT member_id, period_id, 1, business_volume, total_business_volume,
+                        slab_pct, differential, royalty, own_reward, rewards, 1, '2026-08-31'
+                 FROM member_period_totals WHERE period_id = ?1",
+                [period_id],
+            )
+            .unwrap();
+        db.conn
+            .execute(
+                "DELETE FROM member_period_totals WHERE period_id = ?1",
+                [period_id],
+            )
+            .unwrap();
+        db.conn
+            .execute(
+                "UPDATE periods SET status = 'closed' WHERE id = ?1",
+                [period_id],
+            )
+            .unwrap();
+
+        let added = add_closed_month_entry(
+            &db.conn,
+            &db.db_path(),
+            &db.app_data_dir(),
+            AddClosedMonthEntryInput {
+                member_id: root,
+                amount: 50_000,
+                entry_date: "2026-08-20".into(),
+            },
+        )
+        .unwrap();
+        assert_ne!(
+            added.id, entry.id,
+            "a genuinely new entry row, not a mutation of the existing one"
+        );
+
+        let v1: i64 = db
+            .conn
+            .query_row(
+                "SELECT total_business_volume FROM monthly_snapshots
+                 WHERE member_id = ?1 AND period_id = ?2 AND version = 1",
+                rusqlite::params![root, period_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(v1, 100_000, "version 1 must stay byte-identical");
+
+        let v2: i64 = db
+            .conn
+            .query_row(
+                "SELECT total_business_volume FROM monthly_snapshots
+                 WHERE member_id = ?1 AND period_id = ?2 AND version = 2",
+                rusqlite::params![root, period_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            v2, 150_000,
+            "the new entry's amount joins the original entry's, not replaces it"
+        );
+
+        assert_eq!(
+            member_period_total(&db.conn, root, period_id),
+            None,
+            "a closed period's live totals must never be written by this path either"
+        );
+    }
+
+    #[test]
+    fn add_closed_month_entry_refuses_when_the_period_is_not_closed() {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        insert_period(&db.conn, "2026-08", "open");
+
+        let err = add_closed_month_entry(
+            &db.conn,
+            &db.db_path(),
+            &db.app_data_dir(),
+            AddClosedMonthEntryInput {
+                member_id: root,
+                amount: 1_000,
+                entry_date: "2026-08-15".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Conflict { .. }));
+    }
+
+    #[test]
+    fn add_closed_month_entry_refuses_a_non_positive_amount() {
+        let db = TempDb::new();
+        let root = insert_member(&db.conn, None);
+        let err = add_closed_month_entry(
+            &db.conn,
+            &db.db_path(),
+            &db.app_data_dir(),
+            AddClosedMonthEntryInput {
+                member_id: root,
+                amount: 0,
+                entry_date: "2026-08-15".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn add_closed_month_entry_refuses_an_unknown_member() {
+        let db = TempDb::new();
+        let err = add_closed_month_entry(
+            &db.conn,
+            &db.db_path(),
+            &db.app_data_dir(),
+            AddClosedMonthEntryInput {
+                member_id: 999_999,
+                amount: 1_000,
+                entry_date: "2026-08-15".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::NotFound { .. }));
     }
 
     // Direct SQL insert, not `record_entry` — `list_period_entries` is a
