@@ -45,9 +45,15 @@ tauri-plugin-dialog = "2.7.2"
 # native save dialog restore already uses for source paths, never raw file
 # content.
 rust_xlsxwriter = "0.90.1"
+# ADR-013: extends ADR-007's Rust-side-generation boundary to a second file
+# type. genpdf paginates flowing content (tables) automatically — the
+# direct-legs table has no fixed row count, and printpdf alone would need
+# hand-rolled page-break logic for it.
+genpdf = "0.2.0"
 
 [dev-dependencies]
 proptest = "1.8.0"
+pdf-extract = "0.12.0"
 tauri = { version = "2.11.5", features = ["test"] }
 
 [profile.release]

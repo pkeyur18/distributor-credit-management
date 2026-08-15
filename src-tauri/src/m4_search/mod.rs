@@ -11,6 +11,8 @@ use crate::m1_members::Member;
 use crate::m3_calc::engine::round_half_up_div100;
 use crate::m5_close::get_period_lock_status;
 
+pub mod pdf;
+
 /// T-M2.5-3: figure screens default to the **oldest recordable** period,
 /// never "whatever period_id happens to be highest." Before US-M2.5 every
 /// query here picked its period independently per member (`ORDER BY
