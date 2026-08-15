@@ -8,7 +8,7 @@ Three kinds of thing live here:
 - **§3 — Open items (O2–O6):** genuinely undecided. **No default has been invented for any of them.**
 - **§6 — Do not re-raise:** decisions that look like oversights and are not.
 
-**Change requests are recorded in §5, by date.** The most recent are **CR-4 and CR-5 of 8 August 2026**, which add Rule-46 and amend Rule-12. CR-4 in particular **reverses the 3 August 2026 decision that a member earns nothing on their own Business Volume** — if you find a document still describing that as an absolute rule, or citing the pre-CR-4 golden totals (35/22/450/1,000/980), that document is stale and §5 is right. CR-1, CR-2 and CR-3 of 7 August 2026 (amending Rule-36, adding Rule-44 and Rule-45) remain in force alongside CR-4/CR-5.
+**Change requests are recorded in §5, by date.** The most recent is **CR-6 of 15 August 2026**, adding the member detail PDF export — a pure addition, no rule reversed. Before that, **CR-4 and CR-5 of 8 August 2026** add Rule-46 and amend Rule-12. CR-4 in particular **reverses the 3 August 2026 decision that a member earns nothing on their own Business Volume** — if you find a document still describing that as an absolute rule, or citing the pre-CR-4 golden totals (35/22/450/1,000/980), that document is stale and §5 is right. CR-1, CR-2 and CR-3 of 7 August 2026 (amending Rule-36, adding Rule-44 and Rule-45) remain in force alongside CR-4/CR-5/CR-6.
 
 ---
 
@@ -42,9 +42,9 @@ A conflict that precedence does not settle belongs in §3, not in code.
 |---|---|
 | **Disagreement** | `12-implementation-context.md` §4 says "32-command IPC surface"; §7 of the same file says "36 Tauri IPC commands"; `08-testing-strategy.md` says "there are 36 commands"; `04-api-specification.md` enumerates **API-01 … API-40**. |
 | **Cause** | Three additions in sequence: the original 26 in `architecture.md` Appendix C, minus `reverse_entry` (dropped), plus API-33 and API-34–36 on 6 August, plus API-37–40 on 7 August. Each document froze at a different point. |
-| **Resolution** | **45 commands**, API-01 to API-45, with no gaps (amended 14 Aug 2026 — `get_ancestor_chain`, API-42, then `preview_monthly_data`/`preview_yearly_average`, API-43/44, same day, for the Reports screen's prototype-parity preview tables; amended again 15 Aug 2026 — `add_closed_month_entry`, API-45, for the correction panel's "Add record" button, extending Rule-39 to creation). Full contracts in [04](04-technical-architecture.md) §6. |
+| **Resolution** | **46 commands**, API-01 to API-46, with no gaps (amended 14 Aug 2026 — `get_ancestor_chain`, API-42, then `preview_monthly_data`/`preview_yearly_average`, API-43/44, same day, for the Reports screen's prototype-parity preview tables; amended 15 Aug 2026 — `add_closed_month_entry`, API-45, for the correction panel's "Add record" button, extending Rule-39 to creation; amended again 15 Aug 2026 — `export_member_detail_pdf`, API-46, for the member detail PDF export, CR-6). Full contracts in [04](04-technical-architecture.md) §6. |
 | **Authority** | `04-api-specification.md` command-surface summary, 15 Aug 2026 (tier 3, later date, and the document that owns the surface). |
-| **Build consequence** | The Tauri capability allowlist has 45 entries. The contract-test suite has 45 command-surface assertions. |
+| **Build consequence** | The Tauri capability allowlist has 46 entries. The contract-test suite has 46 command-surface assertions. |
 
 ### C3 — Unauthenticated commands: six or seven?
 
@@ -366,6 +366,18 @@ Raised by the client just before implementation begins. CR-4 changes a calculati
 | **Which command** | Structure's ancestor trail needs a root-to-member path that no existing command returns (`get_direct_children_chart` only walks downward) |
 | **Decided** | **API-42 `get_ancestor_chain`** added — the closed 41-command surface (C2) becomes 42. Returns the ancestor path root-first, the requested member last; the back-link labels themselves are computed client-side from navigation history, no backend involvement |
 | **Rule** | No new business rule — a read-only structural lookup, same status as `get_direct_children_chart` (API-11) |
+
+### 15 August 2026 — CR-6: Member detail PDF export
+
+| | |
+|---|---|
+| **Requested** | An ability to export an individual member's detail page as a PDF — their own figures, the reward calculation behind them, and their direct legs with each leg's Total Business Volume, so the administrator can show a member "exactly which people below them contributed what" (product objective 4, `01-product-and-scope.md` §1.2) |
+| **Decided** | One PDF per member, covering whatever period the member-detail screen is currently viewing. Contains the same data the screen already shows — identity, the four stat figures, the full rewards-detail breakdown, and the direct-legs table — laid out in the screen's own two-column arrangement. Generated Rust-side (extends ADR-007's boundary to a second file type — see ADR-013), reusing `get_member_detail` unchanged; no new calculation logic |
+| **Scope** | Direct legs only (the one level already on screen), not the full downline — consistent with Rule-45/FR-2's rule that deeper tree views never show more per node than name, ID and own Business Volume |
+| **Vocabulary** | Every figure spelled out in full on the document ("Business Volume", "Total Business Volume") rather than the internal "BV"/"TBV" shorthand — the document may be handed directly to a member unfamiliar with the abbreviation |
+| **Rule** | No new business rule — a rendering of already-defined figures, same status as CR-5's chart. M4.8 (new), US-M4.5 (new), ADR-013 (new), API-46 (new), AC-48 |
+| **Reverses** | Nothing — pure addition |
+| **Gap found while filing this CR** | `04-technical-architecture.md` §6 had drifted from `04-api-specification.md` — its header still read "42 commands, API-01 to API-42, no gaps" and its Module M6 table never gained rows for API-43/44 (`preview_monthly_data`/`preview_yearly_average`, added 14 Aug 2026), even though `04-api-specification.md` and this file's own C2 resolution (above) already carried them. Not caused by this CR; flagged here since it was found while placing API-46 next to it. `04-technical-architecture.md` §6's header is corrected to the true count as part of this change; its Module M6 table still lacks the API-43/44 rows — a pre-existing gap, not closed here, left for a dedicated pass |
 
 ---
 

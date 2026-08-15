@@ -33,9 +33,9 @@ Where a source document is cited, it is cited as *provenance* — evidence of wh
 | **[03-functional-specification.md](03-functional-specification.md)** | FR-1–10, UN-01–31, RQ-1–23 coverage; screen-by-screen specification of every view, modal, window and flow | Building any UI |
 | **[04-technical-architecture.md](04-technical-architecture.md)** | ADR-001–012, modules M1–M9, full DDL for 10 entities, all 40 IPC contracts, state machines, security, backup/restore | Building any backend |
 | **[05-quality-and-acceptance.md](05-quality-and-acceptance.md)** | 63 error/edge cases, test strategy, golden scenarios, AC-1–AC-47, SC-1–SC-8, Definition of Done | Before claiming any story done |
-| **[06-decision-log-and-open-items.md](06-decision-log-and-open-items.md)** | Every resolved conflict with its authority, the open-items register, superseded-decision history, the CR-1–5 change requests | When something looks wrong, contradictory, or missing |
+| **[06-decision-log-and-open-items.md](06-decision-log-and-open-items.md)** | Every resolved conflict with its authority, the open-items register, superseded-decision history, the CR-1–6 change requests | When something looks wrong, contradictory, or missing |
 | **[07-design-system.md](07-design-system.md)** | Colour tokens (light/dark), typography scale, layout, elevation, shape rules, and every component's exact spec — buttons, pills, modals, the Structure Tree Node, Full Hierarchy Window, Impact Summary, Restore Option List | Building any screen, alongside 03 |
-| **[delivery-plan.md](delivery-plan.md)** | 36 user stories, dependency graph, proposed PI and sprint breakdown | Planning and sequencing the build |
+| **[delivery-plan.md](delivery-plan.md)** | 37 user stories, dependency graph, proposed PI and sprint breakdown | Planning and sequencing the build |
 
 ---
 
@@ -67,16 +67,16 @@ Identifier schemes in use. **One namespace was added on 7 August 2026 — `CR-N`
 | `FR-N` | FR-1 … FR-10 | 10 | A functional requirement area | [03](03-functional-specification.md) §2 |
 | `UN-NN` | UN-01 … UN-31 | 31 | A user need | [03](03-functional-specification.md) §3 |
 | `RQ-N` | RQ-1 … RQ-23 | 23 | A client-answered validation question | [03](03-functional-specification.md) §4 |
-| `CR-N` | CR-1 … CR-5 | 5 | A client change request raised after this set was approved | [06](06-decision-log-and-open-items.md) §5 |
+| `CR-N` | CR-1 … CR-6 | 6 | A client change request raised after this set was approved | [06](06-decision-log-and-open-items.md) §5 |
 | `NFR-N` | NFR-1 … NFR-16 | 16 | A non-functional requirement | [01](01-product-and-scope.md) §7 |
-| `ADR-NNN` | ADR-001 … ADR-012 | 12 | An architecture decision | [04](04-technical-architecture.md) §2 |
-| `API-NN` | API-01 … API-42 | **42** | A Tauri IPC command | [04](04-technical-architecture.md) §6 |
+| `ADR-NNN` | ADR-001 … ADR-013 | 13 | An architecture decision | [04](04-technical-architecture.md) §2 |
+| `API-NN` | API-01 … API-46 | **46** | A Tauri IPC command | [04](04-technical-architecture.md) §6 |
 | `M-N` | M1 … M9 | 9 | An application module | [04](04-technical-architecture.md) §3 |
-| `M-N.N` | M1.1 … M8.7 | 57 | A module function | [03](03-functional-specification.md) §1 |
+| `M-N.N` | M1.1 … M8.7, M4.8 | 58 | A module function | [03](03-functional-specification.md) §1 |
 | `V-N.N` | V1.1 … V8.5 | 50 | A validation rule | [03](03-functional-specification.md) §6 |
-| `AC-NN` | AC-1 … AC-47 | 47 | An acceptance criterion | [05](05-quality-and-acceptance.md) §4 |
+| `AC-NN` | AC-1 … AC-48 | 48 | An acceptance criterion | [05](05-quality-and-acceptance.md) §4 |
 | `SC-N` | SC-1 … SC-8 | 8 | A success criterion | [05](05-quality-and-acceptance.md) §5 |
-| `US-*` | US-0.1 … US-M9.1 | **36** | A user story | [delivery-plan.md](delivery-plan.md) §3 |
+| `US-*` | US-0.1 … US-M9.1, US-M4.5 | **37** | A user story | [delivery-plan.md](delivery-plan.md) §3 |
 | `OS-NN` | OS-1 … OS-15 | 15 | An out-of-scope item | [01](01-product-and-scope.md) §5 |
 | `R-N` | R-1 … R-14 | 14 | A business risk | [01](01-product-and-scope.md) §10 |
 | `TR-N` | TR-1 … TR-7 | 7 | A technical risk | [04](04-technical-architecture.md) §11 |
@@ -90,6 +90,8 @@ Identifier schemes in use. **One namespace was added on 7 August 2026 — `CR-N`
 **Everything added on 7 August 2026 was appended, never renumbered** — Rule-44/45, FR-10, UN-29/30/31, M2.6/M2.7/M4.6/M4.7, V2.6/V2.7/V4.4/V4.5, AC-40–45, TR-7, US-M2.3/M2.4/M2.5/M4.3. **Rule-36, V2.3, V2.5, AC-19, OC-2, OC-6, R-4, US-M1.4, US-M2.1 and US-M5.3 were amended in place**, each carrying its superseded wording so the reversal is visible rather than silently overwritten. **No API command was added** — API-06, API-07, API-08 and API-11 were amended.
 
 **8 August 2026 (CR-4, CR-5) — appended:** Rule-46, M3.5 (new numbering, M3.6/M3.7 shifted), V4.6, AC-46/47. **Rule-12 amended in place** — Rewards gains a third additive term; Differential (Rule-8) and Royalty (Rule-10) are untouched. **No API command was added.**
+
+**15 August 2026 (CR-6) — appended:** M4.8, US-M4.5, ADR-013, API-46, AC-48 — the member detail PDF export. **No business rule was added or amended** — the export renders `get_member_detail`'s existing output; nothing about how a figure is calculated changes. (API-46, not API-43 — API-43/44 were already taken by `preview_monthly_data`/`preview_yearly_average`, added 14 Aug 2026; see [06](06-decision-log-and-open-items.md) §5 CR-6 for a doc-drift gap found while confirming this.)
 
 ---
 
