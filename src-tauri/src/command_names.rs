@@ -3,8 +3,10 @@
 // and the runtime `generate_handler!`/contract-test list can never drift
 // apart. See `commands.rs` for the command implementations themselves.
 
-/// The complete, closed list — API-01 to API-44, no gaps (C2, amended for
-/// API-43/44's addition — see 06-decision-log-and-open-items.md).
+/// The complete, closed list — API-01 to API-45, no gaps (C2, amended for
+/// API-43/44's addition — see 06-decision-log-and-open-items.md; amended
+/// again for API-45's addition — correction panel "Add record", Rule-39
+/// extended to creation).
 pub const ALL_COMMAND_NAMES: &[&str] = &[
     "create_root_member",
     "add_member",
@@ -14,6 +16,7 @@ pub const ALL_COMMAND_NAMES: &[&str] = &[
     "search_members",
     "record_entry",
     "edit_entry",
+    "add_closed_month_entry",
     "get_period_lock_status",
     "list_period_entries",
     "preview_settings_impact",

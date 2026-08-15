@@ -39,7 +39,7 @@ Storage engine: SQLite via `rusqlite`, encrypted at rest with SQLCipher (ADR-003
 ## Entity: `business_volume_entries`
 
 **Purpose:** The append-only ledger of every Business Volume figure ever recorded. This is the source of truth `member_period_totals` and `monthly_snapshots` are derived from.
-**Lifecycle:** Created via `record_entry`; corrected in place via `edit_entry` (Rule-39) with every change captured in `audit_log` — never hard-deleted.
+**Lifecycle:** Created via `record_entry` for an open/awaiting_close period, or `add_closed_month_entry` for an already-closed one (Rule-39, amended 15 Aug 2026); corrected in place via `edit_entry` (Rule-39). Every change captured in `audit_log` — never hard-deleted.
 **Retention:** Permanent (this is the record that makes the "figure can always be explained" promise possible).
 **Security sensitivity:** Medium — no direct personal data beyond the member link, but sensitive as the basis of every financial-equivalent figure in the system.
 

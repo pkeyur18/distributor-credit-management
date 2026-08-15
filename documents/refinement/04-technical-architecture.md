@@ -527,6 +527,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 | API-08 | `record_entry` | Record BV against a member, into the period its `entry_date` falls in | Auth | `amount > 0` (Rule-16a), ≤2 decimals (Rule-16), `entry_date` within its own period's bounds (V2.6). **Refused when that period is `closed`** (use API-09 instead, Rule-39), **and when it is the current month while any earlier period is `awaiting_close`** (V2.7, Rule-36) | Insert entry + chain-upward recalc (ADR-005) **within that entry's own period**, one transaction | `entry` |
 | API-09 | `edit_entry` | Correct an entry — open period **or any closed month** | Auth | Same amount/date validation, scoped to the entry's own period bounds | Update entry + chain recalc; if period closed, additionally new `monthly_snapshots`/`backups` version | `edit` or `correction` |
 | API-41 | `list_period_entries` | List every entry recorded in a given month across all members, newest first — backs Volume Entry's period table and its two summary nodes | Auth | `period_month` required | Read-only | Not audited |
+| API-45 | `add_closed_month_entry` | Correction panel's "Add record" — insert a **brand-new** entry into an already-`closed` month (Rule-39, amended 15 Aug 2026 to extend from edit-only to creation) | Auth | Same amount/date validation as `record_entry`; **refused when the target period is not `closed`** — `record_entry` remains the path for open/awaiting_close periods | Insert entry + `write_correction_snapshot` (same closed-period path `edit_entry` uses), one transaction; new `backups` version | `correction` |
 
 ### Module M3 — Calculation Engine *(no exposed commands except the preview)*
 
@@ -606,7 +607,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 ### 6.1 Command index by ID
 
-`API-01`–`API-06` M1 · `API-07`–`API-09`, `API-41` M2 · `API-10`–`API-11`, `API-42` M4 · `API-12`–`API-15` M5 · `API-16`–`API-20` M6 · `API-21`–`API-25`, `API-37`–`API-38` M7 · `API-26`–`API-31`, `API-39` M8 · `API-32` M9 · `API-33` M3 · `API-34`–`API-36`, `API-40` pre-flight/recovery.
+`API-01`–`API-06` M1 · `API-07`–`API-09`, `API-41`, `API-45` M2 · `API-10`–`API-11`, `API-42` M4 · `API-12`–`API-15` M5 · `API-16`–`API-20` M6 · `API-21`–`API-25`, `API-37`–`API-38` M7 · `API-26`–`API-31`, `API-39` M8 · `API-32` M9 · `API-33` M3 · `API-34`–`API-36`, `API-40` pre-flight/recovery.
 
 ---
 
@@ -628,7 +629,7 @@ closed → [end]
 |---|---|
 | `awaiting_close` | ✅ Yes — for as long as it stays unclosed. This is the whole point of the amendment |
 | `open` (the current month) | ✅ Only when **no** earlier period is `awaiting_close`; otherwise refused, naming that period |
-| `closed` | ❌ Never via `record_entry` — corrections only, through API-09 (Rule-39) |
+| `closed` | ❌ Never via `record_entry` — corrections only, through API-09 (edit an existing entry) or API-45 (add a new one), Rule-39 |
 
 A period row for the current month is created as `open` as soon as the calendar month begins, whether or not it can yet be written to; its writability is a function of what sits behind it, not of its own state. Multiple periods can sit at `awaiting_close` simultaneously (Rule-20's queue) and **each of them accepts entries**; only the oldest is closable, and each closes through its own instance of this state machine. More than one live period at once is expected to be rare — it requires a month to be left unclosed past the end of the next one.
 

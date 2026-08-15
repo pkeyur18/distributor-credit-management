@@ -54,7 +54,8 @@ pub enum AppError {
         blocking_month: String,
     },
     /// A fresh entry against an already-`closed` period — not offered via
-    /// `record_entry`, only via `edit_entry`'s correction path (Rule-39).
+    /// `record_entry`, only via the correction panel's `edit_entry`/
+    /// `add_closed_month_entry` (Rule-39).
     #[error("{month} is closed — use the correction panel instead")]
     PeriodClosed { month: String },
     /// M6 (S13): `rust_xlsxwriter`'s `XlsxError` doesn't implement

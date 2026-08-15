@@ -14,6 +14,7 @@
     "allow-search-members",
     "allow-record-entry",
     "allow-edit-entry",
+    "allow-add-closed-month-entry",
     "allow-get-period-lock-status",
     "allow-list-period-entries",
     "allow-preview-settings-impact",

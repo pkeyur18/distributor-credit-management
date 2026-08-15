@@ -43,3 +43,16 @@ export interface EditEntryInput {
 export function editEntry(input: EditEntryInput): Promise<BusinessVolumeEntry> {
   return invokeCommand("edit_entry", { input });
 }
+
+export interface AddClosedMonthEntryInput {
+  memberId: number;
+  amount: number;
+  entryDate: string;
+}
+
+// API-45 — correction panel's "Add record": a brand-new entry into an
+// already-closed month, writing a new snapshot version the same way
+// editEntry's closed-month path does (Rule-39, extended to creation).
+export function addClosedMonthEntry(input: AddClosedMonthEntryInput): Promise<BusinessVolumeEntry> {
+  return invokeCommand("add_closed_month_entry", { input });
+}

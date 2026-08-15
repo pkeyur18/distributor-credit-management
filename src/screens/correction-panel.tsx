@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, Plus } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,8 @@ import { EmptyState } from "@/components/empty-state";
 import { useMemberSearch } from "@/lib/use-member-search";
 import { listBackups, type ClosedMonthBackup } from "@/lib/ipc/m6-reports";
 import { getMemberDetail } from "@/lib/ipc/m4-search";
-import { editEntry, listPeriodEntries } from "@/lib/ipc/m2-entries";
-import type { PeriodEntryRecord, SearchResult } from "@/lib/ipc/entities";
+import { addClosedMonthEntry, editEntry, listPeriodEntries } from "@/lib/ipc/m2-entries";
+import type { BusinessVolumeEntry, PeriodEntryRecord, SearchResult } from "@/lib/ipc/entities";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -38,11 +38,11 @@ import { useBackTarget, useRouteLabel } from "@/lib/navigation-history";
 
 const PAGE_SIZES = [10, 25, 50] as const;
 
-// US-M2.2 (§5.5), Rule-39 — `edit_entry` is the sole correction mechanism
-// (no new entries into a closed month; that's outside Rule-39's scope).
+// US-M2.2 (§5.5), Rule-39 (amended 15 Aug 2026 to extend to creation) —
+// `edit_entry`/`add_closed_month_entry` are the two correction mechanisms.
 // Matches ui-prototype-v2.html's `renderCorrectionPanel()`: pick the closed
-// month, pick the member, edit one of that member's entries in that month
-// from the listed table — never a bare "Entry ID" lookup.
+// month, pick the member, then edit or add one of that member's entries in
+// that month from the listed table — never a bare "Entry ID" lookup.
 export function CorrectionPanel() {
   const [months, setMonths] = useState<ClosedMonthBackup[] | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
@@ -53,7 +53,7 @@ export function CorrectionPanel() {
   const [entries, setEntries] = useState<PeriodEntryRecord[]>([]);
   const [entriesPage, setEntriesPage] = useState(0);
   const [entriesPageSize, setEntriesPageSize] = useState<number>(PAGE_SIZES[0]);
-  const [editing, setEditing] = useState<PeriodEntryRecord | null>(null);
+  const [modal, setModal] = useState<{ entry: PeriodEntryRecord | null } | null>(null);
   const toast = useToast();
   const backTarget = useBackTarget();
   useRouteLabel("Correct a closed month");
@@ -115,7 +115,10 @@ export function CorrectionPanel() {
 
         <div className="mt-3.5 rounded-lg border border-border bg-surface p-4.5">
           {months && months.length === 0 ? (
-            <EmptyState title="No closed months yet" description="Nothing has been closed to correct." />
+            <EmptyState
+              title="No closed months yet"
+              description="Nothing has been closed to correct."
+            />
           ) : (
             <>
               <div>
@@ -187,8 +190,12 @@ export function CorrectionPanel() {
 
         {selected && ym && (
           <div className="mt-4.5">
-            <div className="text-title-sm mb-1.5">
-              Records — {monthLabel(ym)}
+            <div className="mb-1.5 flex items-center justify-between">
+              <div className="text-title-sm">Records — {monthLabel(ym)}</div>
+              <Button variant="secondary" size="sm" onClick={() => setModal({ entry: null })}>
+                <Plus className="size-3.5" />
+                Add record
+              </Button>
             </div>
             {entries.length === 0 ? (
               <div className="rounded-lg border border-border bg-surface">
@@ -217,7 +224,7 @@ export function CorrectionPanel() {
                               variant="ghost"
                               size="sm"
                               aria-label="Edit record"
-                              onClick={() => setEditing(e)}
+                              onClick={() => setModal({ entry: e })}
                             >
                               <Pencil className="size-3.5" />
                             </Button>
@@ -229,8 +236,8 @@ export function CorrectionPanel() {
                 </TableWrap>
                 <div className="mt-2.5 flex items-center justify-between">
                   <span className="text-caption">
-                    Showing {rangeStart + 1}–{Math.min(rangeStart + entriesPageSize, entries.length)} of{" "}
-                    {entries.length}
+                    Showing {rangeStart + 1}–
+                    {Math.min(rangeStart + entriesPageSize, entries.length)} of {entries.length}
                   </span>
                   <div className="flex items-center gap-2">
                     <label htmlFor="correction-page-size" className="text-caption">
@@ -281,15 +288,18 @@ export function CorrectionPanel() {
         </p>
       </div>
 
-      {editing && ym && (
-        <EditEntryModal
-          entry={editing}
+      {modal && selected && ym && (
+        <EntryModal
+          entry={modal.entry}
+          memberId={selected.id}
           ym={ym}
-          onOpenChange={(open) => !open && setEditing(null)}
-          onSaved={async (updated) => {
-            setEditing(null);
+          onOpenChange={(open) => !open && setModal(null)}
+          onSaved={async (saved) => {
+            setModal(null);
             toast.add({
-              title: `Entry #${updated.id} corrected to ${centsToDisplay(updated.amount)}`,
+              title: modal.entry
+                ? `Entry #${saved.id} corrected to ${centsToDisplay(saved.amount)}`
+                : `Entry #${saved.id} added — ${centsToDisplay(saved.amount)}`,
               type: "success",
             });
             await refreshEntries();
@@ -300,17 +310,20 @@ export function CorrectionPanel() {
   );
 }
 
-interface EditEntryModalProps {
-  entry: PeriodEntryRecord;
+interface EntryModalProps {
+  /** `null` adds a new entry into the closed month; set, edits that one. */
+  entry: PeriodEntryRecord | null;
+  memberId: number;
   ym: string;
   onOpenChange: (open: boolean) => void;
-  onSaved: (updated: PeriodEntryRecord) => void;
+  onSaved: (saved: BusinessVolumeEntry) => void;
 }
 
-function EditEntryModal({ entry, ym, onOpenChange, onSaved }: EditEntryModalProps) {
+function EntryModal({ entry, memberId, ym, onOpenChange, onSaved }: EntryModalProps) {
   const bounds = monthBounds(ym);
-  const [date, setDate] = useState(entry.entryDate);
-  const [amountInput, setAmountInput] = useState(centsToDisplay(entry.amount));
+  const isNew = entry === null;
+  const [date, setDate] = useState(entry?.entryDate ?? bounds.max);
+  const [amountInput, setAmountInput] = useState(entry ? centsToDisplay(entry.amount) : "");
   const [amountError, setAmountError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -324,8 +337,10 @@ function EditEntryModal({ entry, ym, onOpenChange, onSaved }: EditEntryModalProp
     setAmountError(null);
     setDateError(null);
     try {
-      const updated = await editEntry({ id: entry.id, amount: cents, entryDate: date });
-      onSaved({ ...entry, amount: updated.amount, entryDate: updated.entryDate, updatedAt: updated.updatedAt });
+      const saved = entry
+        ? await editEntry({ id: entry.id, amount: cents, entryDate: date })
+        : await addClosedMonthEntry({ memberId, amount: cents, entryDate: date });
+      onSaved(saved);
     } catch (raw) {
       const presented = toErrorPresentation(raw);
       if (presented.field === "entryDate") {
@@ -340,7 +355,7 @@ function EditEntryModal({ entry, ym, onOpenChange, onSaved }: EditEntryModalProp
 
   return (
     <Modal open onOpenChange={onOpenChange} dismissable>
-      <ModalHeader title="Edit record" />
+      <ModalHeader title={isNew ? "Add record" : "Edit record"} />
       <ModalBody>
         <label htmlFor="closed-entry-date" className="text-label mb-1 block">
           Date
@@ -357,7 +372,9 @@ function EditEntryModal({ entry, ym, onOpenChange, onSaved }: EditEntryModalProp
             setDateError(null);
           }}
         />
-        <InputHint error={!!dateError}>{dateError ?? `Must stay within ${monthLabel(ym)}.`}</InputHint>
+        <InputHint error={!!dateError}>
+          {dateError ?? `Must stay within ${monthLabel(ym)}.`}
+        </InputHint>
 
         <div className="mt-3.5">
           <label htmlFor="closed-entry-amount" className="text-label mb-1 block">

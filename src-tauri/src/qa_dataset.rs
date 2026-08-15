@@ -17,10 +17,12 @@
 // system never holds live entries anywhere but the current month — every
 // earlier month is closed, its figures already moved to `monthly_snapshots`
 // (Rule-38). Those months are seeded with a direct `business_volume_entries`
-// insert (there is no command that back-dates a *closed* month's entries —
-// by design, per Rule-39, only `edit_entry` ever touches one, and only an
-// entry that already exists), then rolled up with the real
-// `m3_calc::recalculate_chain` and snapshotted with the real
+// insert rather than the real `add_closed_month_entry` command (API-45,
+// Rule-39) — that command's per-call `write_correction_snapshot` walks the
+// full ancestor chain on every single entry, which is fine for one
+// correction-panel save but far too slow for seeding a year of bulk test
+// data at scale (NFR-1/2). The bulk insert here is rolled up once, with the
+// real `m3_calc::recalculate_chain` and snapshotted with the real
 // `m5_close::write_period_close_snapshots`/`zero_period_totals` — the same
 // functions the actual close flow calls, just without the backup-file
 // ceremony, which has nothing to verify for throwaway performance-test data.
