@@ -82,22 +82,11 @@ pub(super) fn period_line_text(period_label: &str, generated_at: &str) -> String
 }
 
 /// Header block: name, active/inactive, member number, phone, joining date,
-/// period, generation timestamp. `is_root` is threaded through for a future
-/// root-member mark, not used yet (M4.8's scope has no root-specific header
-/// content). The text this produces is composed by `status_label`,
-/// `meta_line_text` and `period_line_text` above — test those directly for
-/// content; this function is only smoke-tested for "renders without
-/// panicking" (see the module doc comment).
-pub(super) fn header_section(
-    member: &Member,
-    _total_business_volume: i64,
-    _slab_pct: i64,
-    _own_business_volume: i64,
-    _rewards_total: i64,
-    period_label: &str,
-    generated_at: &str,
-    _is_root: bool,
-) -> LinearLayout {
+/// period, generation timestamp. The text this produces is composed by
+/// `status_label`, `meta_line_text` and `period_line_text` above — test
+/// those directly for content; this function is only smoke-tested for
+/// "renders without panicking" (see the module doc comment).
+pub(super) fn header_section(member: &Member, period_label: &str, generated_at: &str) -> LinearLayout {
     let mut layout = LinearLayout::vertical();
 
     let mut name_line = Paragraph::new("");
@@ -424,8 +413,6 @@ pub fn render_member_detail_pdf(
     doc.set_paper_size(Size::new(210, 297)); // A4
     doc.set_font_size(11);
 
-    let is_root = detail.member.introducer_member_id.is_none();
-
     let mut decorator = SimplePageDecorator::new();
     decorator.set_margins(Margins::trbl(18, 18, 16, 18));
     // genpdf 0.2 has no footer callback, only a running header — used here
@@ -448,16 +435,7 @@ pub fn render_member_detail_pdf(
     });
     doc.set_page_decorator(decorator);
 
-    doc.push(header_section(
-        &detail.member,
-        detail.total_business_volume,
-        detail.slab_pct,
-        detail.rewards.own_reward.own_business_volume,
-        detail.rewards.rewards_total,
-        period_label,
-        generated_at,
-        is_root,
-    ));
+    doc.push(header_section(&detail.member, period_label, generated_at));
     doc.push(stat_boxes(
         detail.rewards.own_reward.own_business_volume,
         detail.total_business_volume,
@@ -549,9 +527,7 @@ mod tests {
     #[test]
     fn header_section_renders_without_panicking() {
         let member = sample_member(true, Some(100001));
-        let section = header_section(
-            &member, 8_450, 12, 1_200, 612, "July 2026", "15 Aug 2026 14:32", false,
-        );
+        let section = header_section(&member, "July 2026", "15 Aug 2026 14:32");
         let bytes = render_bytes(section);
         assert!(!bytes.is_empty());
         assert!(bytes.starts_with(b"%PDF"));
@@ -560,7 +536,7 @@ mod tests {
     #[test]
     fn header_section_renders_for_an_inactive_member_without_panicking() {
         let member = sample_member(false, Some(100001));
-        let section = header_section(&member, 0, 0, 0, 0, "July 2026", "15 Aug 2026 14:32", false);
+        let section = header_section(&member, "July 2026", "15 Aug 2026 14:32");
         let bytes = render_bytes(section);
         assert!(bytes.starts_with(b"%PDF"));
     }
