@@ -74,6 +74,17 @@ from the same screen and the same query that already serves it — it belongs wi
 already MIT-licensed, no network fetch — consistent with the offline constraint,
 NFR-14).
 
+**Fonts (found during implementation planning, not in the original design):** genpdf
+has no built-in font — it requires real static-weight TTF files embedded at build time,
+via a `genpdf::fonts::FontFamily` built from raw bytes. The app's existing Inter asset
+(`@fontsource-variable/inter`) is a variable-weight woff2, which neither `genpdf` nor
+the `printpdf`/`ttf-parser` stack underneath it can consume directly. Static Inter
+Regular + SemiBold TTFs (OFL-1.1, from Inter's v3.19 release — the last one distributed
+as static per-weight files) are added at `src-tauri/assets/fonts/` and embedded via
+`include_bytes!`, kept as two files rather than fetched over the network at build or
+run time. SemiBold stands in for the screen's weight-650 emphasis (`07-design-system.md`
+§2) — the nearest static weight to it.
+
 ### Why genpdf over printpdf
 
 `printpdf` gives exact coordinate control but requires hand-rolled pagination — the
