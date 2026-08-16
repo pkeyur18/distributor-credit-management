@@ -377,7 +377,7 @@ pub fn preview_monthly_data(
             slab_pct: r.slab_pct,
         })
         .collect();
-    preview.sort_by(|a, b| b.total_business_volume.cmp(&a.total_business_volume));
+    preview.sort_by_key(|r| std::cmp::Reverse(r.total_business_volume));
     Ok(preview)
 }
 
@@ -1072,7 +1072,10 @@ mod tests {
 
         let rows = preview_yearly_average(&conn).unwrap();
         assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].id, high, "highest average Total Business Volume first");
+        assert_eq!(
+            rows[0].id, high,
+            "highest average Total Business Volume first"
+        );
         assert_eq!(rows[1].id, low);
     }
 
@@ -1087,7 +1090,10 @@ mod tests {
 
         let rows = preview_yearly_average(&conn).unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].period_count, 1, "late joiner divides by their own count");
+        assert_eq!(
+            rows[0].period_count, 1,
+            "late joiner divides by their own count"
+        );
         assert_eq!(rows[0].avg_business_volume, 90_000.0);
     }
 

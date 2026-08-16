@@ -70,23 +70,35 @@ impl CellDecorator for RowLineCellDecorator {
         let line_style = Style::new().with_color(BORDER);
 
         if column == 0 {
-            area.draw_line(vec![Position::default(), Position::new(0, size.height)], line_style);
+            area.draw_line(
+                vec![Position::default(), Position::new(0, size.height)],
+                line_style,
+            );
         }
         if column + 1 == self.num_columns {
             area.draw_line(
-                vec![Position::new(size.width, 0), Position::new(size.width, size.height)],
+                vec![
+                    Position::new(size.width, 0),
+                    Position::new(size.width, size.height),
+                ],
                 line_style,
             );
         }
         if row == 0 {
-            area.draw_line(vec![Position::default(), Position::new(size.width, 0)], line_style);
+            area.draw_line(
+                vec![Position::default(), Position::new(size.width, 0)],
+                line_style,
+            );
         }
         // Skipped when `has_more`: this row continues onto the next page,
         // so the line belongs under whichever page it actually finishes
         // on, not here.
         if !has_more {
             area.draw_line(
-                vec![Position::new(0, size.height), Position::new(size.width, size.height)],
+                vec![
+                    Position::new(0, size.height),
+                    Position::new(size.width, size.height),
+                ],
                 line_style,
             );
         }
@@ -122,7 +134,11 @@ pub(super) fn load_font_family() -> FontFamily<FontData> {
 /// text in `header_section`, never a substitute for it (07-design-
 /// system.md's Colour-Plus-Label Rule).
 pub(super) fn status_label(is_active: bool) -> &'static str {
-    if is_active { "Active" } else { "Inactive" }
+    if is_active {
+        "Active"
+    } else {
+        "Inactive"
+    }
 }
 
 /// "Member #100042 · +91 98765 43210 · Joined 2024-03-12" — pulled out as a
@@ -146,18 +162,31 @@ pub(super) fn period_line_text(period_label: &str, generated_at: &str) -> String
 /// `status_label`, `meta_line_text` and `period_line_text` above — test
 /// those directly for content; this function is only smoke-tested for
 /// "renders without panicking" (see the module doc comment).
-pub(super) fn header_section(member: &Member, period_label: &str, generated_at: &str) -> LinearLayout {
+pub(super) fn header_section(
+    member: &Member,
+    period_label: &str,
+    generated_at: &str,
+) -> LinearLayout {
     let mut layout = LinearLayout::vertical();
 
     let mut name_line = Paragraph::new("");
-    name_line.push_styled(&member.name, Style::new().bold().with_font_size(15).with_color(INK));
+    name_line.push_styled(
+        &member.name,
+        Style::new().bold().with_font_size(15).with_color(INK),
+    );
     name_line.push_styled("   ", Style::new());
     let status_color = if member.is_active { SUCCESS } else { DANGER };
-    name_line.push_styled(status_label(member.is_active), Style::new().bold().with_color(status_color));
+    name_line.push_styled(
+        status_label(member.is_active),
+        Style::new().bold().with_color(status_color),
+    );
     layout.push(name_line);
 
     let mut meta_line = Paragraph::new("");
-    meta_line.push_styled(meta_line_text(member), Style::new().with_color(MUTED).with_font_size(10));
+    meta_line.push_styled(
+        meta_line_text(member),
+        Style::new().with_color(MUTED).with_font_size(10),
+    );
     layout.push(meta_line);
 
     let mut period_line = Paragraph::new("");
@@ -186,7 +215,11 @@ pub(super) fn format_amount(value: i64) -> String {
         grouped.push(c);
     }
     let grouped: String = grouped.chars().rev().collect();
-    if negative { format!("-{grouped}") } else { grouped }
+    if negative {
+        format!("-{grouped}")
+    } else {
+        grouped
+    }
 }
 
 /// The four stat-box (label, value) pairs, in display order. Every label
@@ -199,7 +232,10 @@ pub(super) fn stat_box_values(
 ) -> [(&'static str, String); 4] {
     [
         ("Business Volume", format_amount(business_volume)),
-        ("Total Business Volume", format_amount(total_business_volume)),
+        (
+            "Total Business Volume",
+            format_amount(total_business_volume),
+        ),
         ("Slab", format!("{slab_pct}%")),
         ("Rewards this period", format_amount(rewards_total)),
     ]
@@ -265,7 +301,13 @@ pub(super) fn rewards_detail_rows(rewards: &RewardBreakdown) -> Vec<RewardRow> {
 pub(super) fn details_rows(member: &Member, leg_count: i64) -> Vec<(&'static str, String)> {
     vec![
         ("Address", member.address.clone()),
-        ("Email", member.email.clone().unwrap_or_else(|| "Not provided".into())),
+        (
+            "Email",
+            member
+                .email
+                .clone()
+                .unwrap_or_else(|| "Not provided".into()),
+        ),
         (
             "Introduced by",
             member
@@ -284,7 +326,10 @@ fn stat_box(label: &str, value: String) -> PaddedElement<LinearLayout> {
     label_p.push_styled(label, Style::new().with_color(MUTED).with_font_size(9));
     inner.push(label_p);
     let mut value_p = Paragraph::new("");
-    value_p.push_styled(value, Style::new().bold().with_font_size(13).with_color(INK));
+    value_p.push_styled(
+        value,
+        Style::new().bold().with_font_size(13).with_color(INK),
+    );
     inner.push(value_p);
     inner.padded(Margins::all(4))
 }
@@ -297,13 +342,19 @@ pub(super) fn stat_boxes(
     slab_pct: i64,
     rewards_total: i64,
 ) -> impl Element {
-    let values = stat_box_values(business_volume, total_business_volume, slab_pct, rewards_total);
+    let values = stat_box_values(
+        business_volume,
+        total_business_volume,
+        slab_pct,
+        rewards_total,
+    );
     let mut table = TableLayout::new(vec![1, 1, 1, 1]);
     let mut row = table.row();
     for (label, value) in values {
         row = row.element(stat_box(label, value));
     }
-    row.push().expect("a fixed 4-cell row always has the right cell count");
+    row.push()
+        .expect("a fixed 4-cell row always has the right cell count");
     // On screen each stat is its own separately-bordered `StatCard` — a
     // single-row, 4-column grid with both inner and outer lines produces
     // the same four boxes. Continuation borders don't apply: this table
@@ -337,12 +388,21 @@ fn rewards_detail_table(rewards: &RewardBreakdown) -> TableLayout {
     let mut table = TableLayout::new(vec![4, 4, 5]);
 
     let mut leg_header = Paragraph::new("");
-    leg_header.push_styled("Leg", Style::new().bold().with_font_size(9).with_color(MUTED));
+    leg_header.push_styled(
+        "Leg",
+        Style::new().bold().with_font_size(9).with_color(MUTED),
+    );
     let mut bv_header = Paragraph::new("");
-    bv_header.push_styled("Business Volume", Style::new().bold().with_font_size(9).with_color(MUTED));
+    bv_header.push_styled(
+        "Business Volume",
+        Style::new().bold().with_font_size(9).with_color(MUTED),
+    );
     bv_header.set_alignment(Alignment::Right);
     let mut amt_header = Paragraph::new("");
-    amt_header.push_styled("Amount", Style::new().bold().with_font_size(9).with_color(MUTED));
+    amt_header.push_styled(
+        "Amount",
+        Style::new().bold().with_font_size(9).with_color(MUTED),
+    );
     amt_header.set_alignment(Alignment::Right);
     table
         .row()
@@ -354,7 +414,11 @@ fn rewards_detail_table(rewards: &RewardBreakdown) -> TableLayout {
 
     for row in rewards_detail_rows(rewards) {
         let mut desc = Paragraph::new("");
-        let desc_style = if row.emphasized { Style::new().bold() } else { Style::new() };
+        let desc_style = if row.emphasized {
+            Style::new().bold()
+        } else {
+            Style::new()
+        };
         desc.push_styled(row.description, desc_style);
 
         let mut bv = Paragraph::new("");
@@ -367,7 +431,13 @@ fn rewards_detail_table(rewards: &RewardBreakdown) -> TableLayout {
         amt.push_styled(row.amount, Style::new().bold());
         amt.set_alignment(Alignment::Right);
 
-        table.row().element(cell(desc)).element(cell(bv)).element(cell(amt)).push().unwrap();
+        table
+            .row()
+            .element(cell(desc))
+            .element(cell(bv))
+            .element(cell(amt))
+            .push()
+            .unwrap();
     }
 
     table.set_cell_decorator(RowLineCellDecorator::default());
@@ -405,7 +475,11 @@ fn details_block(member: &Member, leg_count: i64) -> LinearLayout {
 /// shorter ones (e.g. "72,598" at 13.3mm) survived — explaining why the
 /// drops looked scattered rather than a clean cutoff. Fixed at the source
 /// in `rewards_detail_table`'s own column weights, not here.
-pub(super) fn mid_section(rewards: &RewardBreakdown, member: &Member, leg_count: i64) -> TableLayout {
+pub(super) fn mid_section(
+    rewards: &RewardBreakdown,
+    member: &Member,
+    leg_count: i64,
+) -> TableLayout {
     let mut rewards_wrapper = LinearLayout::vertical();
     rewards_wrapper.push(rewards_detail_table(rewards));
 
@@ -451,7 +525,13 @@ pub(super) fn direct_leg_rows(children: &[MemberDetailChild]) -> Vec<DirectLegRo
 pub(super) fn direct_legs_table(children: &[MemberDetailChild]) -> TableLayout {
     let mut table = TableLayout::new(vec![4, 2, 3, 2, 2]);
 
-    let headers = ["Name", "Member #", "Total Business Volume", "Slab", "Status"];
+    let headers = [
+        "Name",
+        "Member #",
+        "Total Business Volume",
+        "Slab",
+        "Status",
+    ];
     let mut row = table.row();
     for (i, h) in headers.iter().enumerate() {
         let mut p = Paragraph::new("");
@@ -461,7 +541,8 @@ pub(super) fn direct_legs_table(children: &[MemberDetailChild]) -> TableLayout {
         }
         row = row.element(cell(p));
     }
-    row.push().expect("a fixed 5-cell header row always has the right cell count");
+    row.push()
+        .expect("a fixed 5-cell header row always has the right cell count");
 
     for leg in direct_leg_rows(children) {
         let mut name = Paragraph::new("");
@@ -474,7 +555,11 @@ pub(super) fn direct_legs_table(children: &[MemberDetailChild]) -> TableLayout {
         let mut slab = Paragraph::new("");
         slab.push_styled(leg.slab_pct, Style::new().with_color(ACCENT));
         let mut status = Paragraph::new("");
-        let status_color = if leg.status == "Active" { SUCCESS } else { DANGER };
+        let status_color = if leg.status == "Active" {
+            SUCCESS
+        } else {
+            DANGER
+        };
         status.push_styled(leg.status, Style::new().with_color(status_color));
 
         table
@@ -540,7 +625,11 @@ pub fn render_member_detail_pdf(
         detail.rewards.rewards_total,
     ));
     doc.push(Break::new(1));
-    doc.push(mid_section(&detail.rewards, &detail.member, detail.leg_count));
+    doc.push(mid_section(
+        &detail.rewards,
+        &detail.member,
+        detail.leg_count,
+    ));
 
     if !detail.direct_children.is_empty() {
         doc.push(Break::new(1));
@@ -602,7 +691,8 @@ mod tests {
         doc.set_paper_size(Size::new(210, 297));
         doc.push(element);
         let mut bytes = Vec::new();
-        doc.render(&mut bytes).expect("a minimal document must render");
+        doc.render(&mut bytes)
+            .expect("a minimal document must render");
         bytes
     }
 
@@ -656,12 +746,20 @@ mod tests {
     #[test]
     fn rewards_detail_rows_orders_own_reward_first_then_legs_then_royalty_then_total() {
         let rewards = RewardBreakdown {
-            own_reward: OwnRewardLine { own_business_volume: 100_000, own_slab_pct: 14, amount: 14_000 },
+            own_reward: OwnRewardLine {
+                own_business_volume: 100_000,
+                own_slab_pct: 14,
+                amount: 14_000,
+            },
             differentials: vec![
                 differential_line(1, "Mohit Shah", 2_147_185, 14, 14, 0),
                 differential_line(2, "Diya Patel", 118_847, 4, 14, 11_885),
             ],
-            royalty: Some(RoyaltyLine { qualifying_children: 1, rate_percent: 5, amount: 5_942 }),
+            royalty: Some(RoyaltyLine {
+                qualifying_children: 1,
+                rate_percent: 5,
+                amount: 5_942,
+            }),
             rewards_total: 31_827,
         };
         let rows = rewards_detail_rows(&rewards);
@@ -690,7 +788,11 @@ mod tests {
     #[test]
     fn rewards_detail_rows_omits_royalty_row_when_there_is_no_royalty() {
         let rewards = RewardBreakdown {
-            own_reward: OwnRewardLine { own_business_volume: 0, own_slab_pct: 14, amount: 0 },
+            own_reward: OwnRewardLine {
+                own_business_volume: 0,
+                own_slab_pct: 14,
+                amount: 0,
+            },
             differentials: vec![],
             royalty: None,
             rewards_total: 0,
@@ -731,8 +833,20 @@ mod tests {
     #[test]
     fn direct_leg_rows_formats_every_field_and_status_as_text() {
         let children = vec![
-            MemberDetailChild { member_id: 5, name: "Kavya Reddy".into(), total_business_volume: 613_088, slab_pct: 10, is_active: true },
-            MemberDetailChild { member_id: 6, name: "Neha Joshi".into(), total_business_volume: 467_811, slab_pct: 8, is_active: false },
+            MemberDetailChild {
+                member_id: 5,
+                name: "Kavya Reddy".into(),
+                total_business_volume: 613_088,
+                slab_pct: 10,
+                is_active: true,
+            },
+            MemberDetailChild {
+                member_id: 6,
+                name: "Neha Joshi".into(),
+                total_business_volume: 467_811,
+                slab_pct: 8,
+                is_active: false,
+            },
         ];
         let rows = direct_leg_rows(&children);
         assert_eq!(rows[0].name, "Kavya Reddy");
@@ -760,7 +874,11 @@ mod tests {
     fn mid_section_renders_without_panicking() {
         let member = sample_member(true, Some(42));
         let rewards = RewardBreakdown {
-            own_reward: OwnRewardLine { own_business_volume: 0, own_slab_pct: 14, amount: 0 },
+            own_reward: OwnRewardLine {
+                own_business_volume: 0,
+                own_slab_pct: 14,
+                amount: 0,
+            },
             differentials: vec![differential_line(1, "Mohit Shah", 2_147_185, 14, 14, 0)],
             royalty: None,
             rewards_total: 0,
@@ -791,14 +909,25 @@ mod tests {
             .map(|i| differential_line(i, &format!("Leg {i}"), 10_000, 10, 14, 10))
             .collect();
         let rewards = RewardBreakdown {
-            own_reward: OwnRewardLine { own_business_volume: 0, own_slab_pct: 14, amount: 0 },
+            own_reward: OwnRewardLine {
+                own_business_volume: 0,
+                own_slab_pct: 14,
+                amount: 0,
+            },
             differentials,
-            royalty: Some(RoyaltyLine { qualifying_children: 80, rate_percent: 5, amount: 800 }),
+            royalty: Some(RoyaltyLine {
+                qualifying_children: 80,
+                rate_percent: 5,
+                amount: 800,
+            }),
             rewards_total: 1_600,
         };
         let bytes = render_bytes(mid_section(&rewards, &member, 80));
         let doc = lopdf::Document::load_mem(&bytes).expect("lopdf must parse genpdf's output");
-        assert!(doc.get_pages().len() > 1, "80 legs must overflow a single page");
+        assert!(
+            doc.get_pages().len() > 1,
+            "80 legs must overflow a single page"
+        );
     }
 
     /// Regression for the bug found 15 Aug 2026 in real use: rendering
@@ -833,9 +962,17 @@ mod tests {
             differential_line(8, "Ishita Iyer 2", 172_245, 6, 14, 13_780),
         ];
         let rewards = RewardBreakdown {
-            own_reward: OwnRewardLine { own_business_volume: 0, own_slab_pct: 14, amount: 0 },
+            own_reward: OwnRewardLine {
+                own_business_volume: 0,
+                own_slab_pct: 14,
+                amount: 0,
+            },
             differentials,
-            royalty: Some(RoyaltyLine { qualifying_children: 3, rate_percent: 5, amount: 72_598 }),
+            royalty: Some(RoyaltyLine {
+                qualifying_children: 3,
+                rate_percent: 5,
+                amount: 72_598,
+            }),
             rewards_total: 169_933,
         };
         let bytes = render_bytes(mid_section(&rewards, &member, 8));
@@ -865,7 +1002,11 @@ mod tests {
             slab_pct: 14,
             leg_count: 1,
             rewards: RewardBreakdown {
-                own_reward: OwnRewardLine { own_business_volume: 0, own_slab_pct: 14, amount: 0 },
+                own_reward: OwnRewardLine {
+                    own_business_volume: 0,
+                    own_slab_pct: 14,
+                    amount: 0,
+                },
                 differentials,
                 royalty: None,
                 rewards_total: 0,
@@ -873,8 +1014,13 @@ mod tests {
             direct_children: children,
         };
         let path = std::env::temp_dir().join("member-detail-pdf-render-test.pdf");
-        render_member_detail_pdf(&detail, "2026-07", "15 Aug 2026 14:32", path.to_str().unwrap())
-            .expect("rendering a normal member detail must succeed");
+        render_member_detail_pdf(
+            &detail,
+            "2026-07",
+            "15 Aug 2026 14:32",
+            path.to_str().unwrap(),
+        )
+        .expect("rendering a normal member detail must succeed");
         let bytes = std::fs::read(&path).expect("render_to_file must write the file");
         assert!(bytes.starts_with(b"%PDF"));
         std::fs::remove_file(&path).ok();
@@ -889,7 +1035,11 @@ mod tests {
             slab_pct: 0,
             leg_count: 0,
             rewards: RewardBreakdown {
-                own_reward: OwnRewardLine { own_business_volume: 0, own_slab_pct: 0, amount: 0 },
+                own_reward: OwnRewardLine {
+                    own_business_volume: 0,
+                    own_slab_pct: 0,
+                    amount: 0,
+                },
                 differentials: vec![],
                 royalty: None,
                 rewards_total: 0,
@@ -897,11 +1047,15 @@ mod tests {
             direct_children: vec![],
         };
         let path = std::env::temp_dir().join("member-detail-pdf-render-empty-test.pdf");
-        render_member_detail_pdf(&detail, "2026-07", "15 Aug 2026 14:32", path.to_str().unwrap())
-            .expect("rendering a member with no direct legs must succeed");
+        render_member_detail_pdf(
+            &detail,
+            "2026-07",
+            "15 Aug 2026 14:32",
+            path.to_str().unwrap(),
+        )
+        .expect("rendering a member with no direct legs must succeed");
         let bytes = std::fs::read(&path).expect("render_to_file must write the file");
         assert!(bytes.starts_with(b"%PDF"));
         std::fs::remove_file(&path).ok();
     }
 }
-

@@ -400,7 +400,8 @@ fn get_direct_children_chart_requires_a_session() {
 #[test]
 fn get_ancestor_chain_requires_a_session() {
     let app = app_with_seeded_db();
-    let result = commands::get_ancestor_chain(app.state::<SessionState>(), app.state::<DbState>(), 1);
+    let result =
+        commands::get_ancestor_chain(app.state::<SessionState>(), app.state::<DbState>(), 1);
     assert!(matches!(result, Err(AppError::AuthRequired)));
 }
 
@@ -449,12 +450,9 @@ fn get_ancestor_chain_end_to_end_through_the_command_layer() {
     )
     .unwrap();
 
-    let result = commands::get_ancestor_chain(
-        app.state::<SessionState>(),
-        app.state::<DbState>(),
-        root.id,
-    )
-    .unwrap();
+    let result =
+        commands::get_ancestor_chain(app.state::<SessionState>(), app.state::<DbState>(), root.id)
+            .unwrap();
     assert_eq!(result.chain.len(), 1);
     assert_eq!(result.chain[0].id, root.id);
 }
@@ -1500,9 +1498,12 @@ fn preview_monthly_data_end_to_end_through_the_command_layer() {
     )
     .unwrap();
 
-    let rows =
-        commands::preview_monthly_data(app.state::<SessionState>(), app.state::<DbState>(), current_month)
-            .unwrap();
+    let rows = commands::preview_monthly_data(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        current_month,
+    )
+    .unwrap();
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].id, root.id);

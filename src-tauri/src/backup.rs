@@ -1176,7 +1176,11 @@ mod tests {
         manifest::append(&manifest_path, fresh).unwrap();
 
         let entries = manifest::list(&manifest_path).unwrap();
-        assert_eq!(entries.len(), 1, "the stale entry must be replaced, not duplicated");
+        assert_eq!(
+            entries.len(),
+            1,
+            "the stale entry must be replaced, not duplicated"
+        );
         assert_eq!(entries[0].checksum, "fresh-checksum");
     }
 }
