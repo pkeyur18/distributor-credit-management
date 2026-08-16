@@ -492,7 +492,10 @@ fn ancestor_chain_ids(conn: &Connection, member_id: i64) -> Result<Vec<i64>, App
 /// API-42. Cost scales with chain *depth* (indexed primary-key point
 /// lookups, in-process SQLite), not with total member count — see the
 /// design spec §2 for the worst-case analysis.
-pub fn get_ancestor_chain(conn: &Connection, member_id: i64) -> Result<AncestorChainResult, AppError> {
+pub fn get_ancestor_chain(
+    conn: &Connection,
+    member_id: i64,
+) -> Result<AncestorChainResult, AppError> {
     let ids = ancestor_chain_ids(conn, member_id)?;
     let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!("SELECT id, name FROM members WHERE id IN ({placeholders})");
@@ -832,11 +835,13 @@ mod tests {
     fn export_member_detail_pdf_writes_a_real_file() {
         let conn = seeded();
         let root = insert_member(&conn, "Root", None);
-        let dir = std::env::temp_dir().join(format!("bvconsole-export-pdf-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("bvconsole-export-pdf-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let output_path = dir.join("member.pdf");
 
-        let result = export_member_detail_pdf(&conn, root, None, output_path.to_str().unwrap()).unwrap();
+        let result =
+            export_member_detail_pdf(&conn, root, None, output_path.to_str().unwrap()).unwrap();
 
         assert_eq!(result.file_path, output_path.to_string_lossy());
         assert!(output_path.exists());

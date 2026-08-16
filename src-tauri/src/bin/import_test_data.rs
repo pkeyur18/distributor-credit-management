@@ -96,8 +96,7 @@ fn default_app_data_dir() -> PathBuf {
             std::env::var("APPDATA").unwrap_or_else(|_| format!("{home}/AppData/Roaming"));
         PathBuf::from(appdata).join(IDENTIFIER)
     } else {
-        let xdg =
-            std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{home}/.local/share"));
+        let xdg = std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{home}/.local/share"));
         PathBuf::from(xdg).join(IDENTIFIER)
     }
 }
@@ -158,12 +157,14 @@ impl Columns {
         )
     }
 
-    fn get<'a>(&self, row: &'a [String], name: &str) -> String {
+    fn get(&self, row: &[String], name: &str) -> String {
         let idx = *self
             .0
             .get(name)
             .unwrap_or_else(|| panic!("CSV is missing required column '{name}'"));
-        row.get(idx).map(|s| s.trim().to_string()).unwrap_or_default()
+        row.get(idx)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default()
     }
 }
 
@@ -202,11 +203,7 @@ struct PendingEntry {
     entry_date: String,
 }
 
-fn import_closed_month(
-    conn: &rusqlite::Connection,
-    period_month: &str,
-    entries: &[PendingEntry],
-) {
+fn import_closed_month(conn: &rusqlite::Connection, period_month: &str, entries: &[PendingEntry]) {
     let last_day = last_day_of_month(period_month);
     conn.execute(
         "INSERT INTO periods (period_month, status, ended_at, closed_at) VALUES (?1, 'closed', ?2, ?2)",
@@ -375,7 +372,9 @@ fn main() {
     }
     {
         let mut stmt = conn
-            .prepare("SELECT id, period_month FROM periods WHERE status = 'open' AND period_month < ?1")
+            .prepare(
+                "SELECT id, period_month FROM periods WHERE status = 'open' AND period_month < ?1",
+            )
             .unwrap();
         let elapsed: Vec<(i64, String)> = stmt
             .query_map([&current_month], |r| Ok((r.get(0)?, r.get(1)?)))
