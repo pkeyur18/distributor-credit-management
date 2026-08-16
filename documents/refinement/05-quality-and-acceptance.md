@@ -230,7 +230,7 @@ Re-run all six scenarios through the actual built UI (not just the isolated engi
 
 ---
 
-## 4. Acceptance criteria — AC-1 to AC-47
+## 4. Acceptance criteria — AC-1 to AC-48
 
 ### 4.1 Calculation — the six worked examples
 
@@ -325,6 +325,12 @@ Re-run all six scenarios through the actual built UI (not just the isolated engi
 | **AC-47** | Home shows a "Rewards by slab" chart directly below "Members by slab," same bar-per-slab pattern, each bar's value and label reflecting the total Rewards (differential + royalty + own-Business-Volume reward) accumulated by members currently on that slab, out of the total across all members, for the current live period |
 
 (AC-46, the own-Business-Volume reward golden scenario, is listed with the other five worked examples in §4.1.)
+
+### 4.10 CR-6 (15 August 2026) — Member detail PDF export
+
+| # | Criterion |
+|---|---|
+| **AC-48** | From the member detail screen, "Export PDF" opens the native save dialog; on a chosen destination, the generated PDF contains exactly what `get_member_detail` returns for the period on screen — identity, the four stat figures, the full Rewards-detail breakdown, and the direct-legs table with each leg's Total Business Volume — with every figure spelled out in full ("Business Volume", never "BV") and no company branding or currency figure anywhere on it |
 
 ---
 

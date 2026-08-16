@@ -114,25 +114,26 @@ fn root_input(phone: &str) -> CreateRootMemberInput {
     }
 }
 
-// T-QA.2-3: the surface holds exactly 45 commands, API-01 to API-45, no
+// T-QA.2-3: the surface holds exactly 46 commands, API-01 to API-46, no
 // gaps (amended for API-43/44 — see 06-decision-log-and-open-items.md;
-// amended again for API-45, correction panel "Add record") — and this list
-// is the same one `lib.rs` feeds to `generate_handler!` and `build.rs`
-// feeds to the ACL generator (via `command_names.rs`), so the three can
-// never quietly drift apart.
+// amended for API-45, correction panel "Add record"; amended again for
+// API-46, CR-6's member detail PDF export) — and this list is the same one
+// `lib.rs` feeds to `generate_handler!` and `build.rs` feeds to the ACL
+// generator (via `command_names.rs`), so the three can never quietly drift
+// apart.
 #[test]
-fn the_command_surface_holds_exactly_forty_five_commands() {
+fn the_command_surface_holds_exactly_forty_six_commands() {
     assert_eq!(
         ALL_COMMAND_NAMES.len(),
-        45,
-        "API-01 to API-45, no gaps (C2)"
+        46,
+        "API-01 to API-46, no gaps (C2)"
     );
 
     let capabilities = include_str!("../capabilities/default.json");
     let allow_count = capabilities.matches("\"allow-").count();
     assert_eq!(
-        allow_count, 45,
-        "the Tauri capability allowlist must have exactly 45 allow-* entries"
+        allow_count, 46,
+        "the Tauri capability allowlist must have exactly 46 allow-* entries"
     );
     for name in ALL_COMMAND_NAMES {
         // Tauri's ACL identifiers are hyphen-only (autogenerate_command_permissions
@@ -1390,6 +1391,45 @@ fn export_monthly_end_to_end_through_the_command_layer() {
             optional_columns: vec!["active_status".into()],
             output_path: output_path.to_string_lossy().into_owned(),
         },
+    )
+    .unwrap();
+
+    assert_eq!(result.file_path, output_path.to_string_lossy());
+    assert!(output_path.exists());
+}
+
+#[test]
+fn export_member_detail_pdf_requires_a_session() {
+    let app = app_with_seeded_db();
+    let result = commands::export_member_detail_pdf(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        1,
+        None,
+        "unused.pdf".into(),
+    );
+    assert!(matches!(result, Err(AppError::AuthRequired)));
+}
+
+#[test]
+fn export_member_detail_pdf_end_to_end_through_the_command_layer() {
+    let app = app_with_seeded_db();
+    app.state::<SessionState>().mark_authenticated();
+    let root = commands::create_root_member(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root_input("9876599907"),
+    )
+    .unwrap();
+
+    let output_dir = TempAppDir::new("export-member-detail-pdf-output");
+    let output_path = output_dir.0.join("member.pdf");
+    let result = commands::export_member_detail_pdf(
+        app.state::<SessionState>(),
+        app.state::<DbState>(),
+        root.id,
+        None,
+        output_path.to_string_lossy().into_owned(),
     )
     .unwrap();
 

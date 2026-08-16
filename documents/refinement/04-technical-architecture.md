@@ -92,6 +92,11 @@ Every major decision below traces to one of these three.
 **Rationale:** Every kind of whole-console backup is a verified copy of the single SQLCipher file — the same artifact a month-close backup already is, just not scoped to one period. A bespoke export format was rejected outright — the file already contains everything (members, entries, snapshots, settings, slab table, audit log, and the `auth` row); reconstructing that completeness in a second format is real work for no benefit.
 **Consequence:** Every query currently assuming `backups.period_id` is non-null (e.g. `list_backups`) must filter on `kind = 'period_close'` explicitly.
 
+### ADR-013 — Rust-side PDF generation, extending ADR-007's boundary
+**Decision:** The member detail PDF export (CR-6, M4.8) generates its `.pdf` in Rust (`genpdf`, built on `printpdf`), exactly as ADR-007 already requires for `.xlsx`. The WebView supplies only a destination path from the same native save dialog the `.xlsx` exports and backup/restore flows already use.
+**Rationale:** No reason to open a second security boundary for a second file type — ADR-007's rationale (the WebView never handles raw file content) applies identically. `genpdf` was chosen over driving `printpdf` directly because the direct-legs table has no fixed row count and needs to paginate; `genpdf` paginates flowing content automatically, `printpdf` would require hand-rolled page-break logic.
+**Consequence:** `genpdf = "0.2"` added to `src-tauri/Cargo.toml`. Layout code lives in `m4_search::pdf`, not `m6_reports` — this is a single member's own detail export, generated from the same screen and the same `get_member_detail` query that already serves it, not a bulk report across members.
+
 ---
 
 ## 3. Container & module architecture
@@ -498,9 +503,9 @@ Each write touches `O(depth × average_width)` rows — bounded by tree depth (t
 
 ---
 
-## 6. API specification — 42 Tauri IPC commands
+## 6. API specification — 46 Tauri IPC commands
 
-**42 commands total** — API-01 to API-42, no gaps. See [06](06-decision-log-and-open-items.md) C2. `reverse_entry` was removed (dead, confirmed) from the original 26-command count; `list_period_entries` (API-41) was added 13 August 2026; `get_ancestor_chain` (API-42) was added 14 August 2026.
+**46 commands total** — API-01 to API-46, no gaps. See [06](06-decision-log-and-open-items.md) C2 for the full count history. `reverse_entry` was removed (dead, confirmed) from the original 26-command count; `list_period_entries` (API-41) was added 13 August 2026; `get_ancestor_chain` (API-42) was added 14 August 2026; `export_member_detail_pdf` (API-46) was added 15 August 2026 (CR-6). **Known gap:** API-43/44 (`preview_monthly_data`/`preview_yearly_average`, M6, added 14 August 2026) and API-45 (`add_closed_month_entry`, M2) are documented in full in `implementation-readiness/04-api-specification.md` — the authoritative command ledger — but this file's own module tables below were never given matching rows for API-43/44. Not introduced by CR-6; flagged while placing API-46 next to it, left for a dedicated pass.
 
 **No delete command exists anywhere, for any entity.** Members, entries, snapshots, backups — none are ever removed (Rule-28, Rule-42, Rule-31).
 
@@ -542,6 +547,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 | API-10 | `get_member_detail` | Full detail: contact, Rewards breakdown (own-Business-Volume reward first, then per-leg differential, then royalty — Rule-46), direct children, TBV, leg count. Request: `member_id`, `period_month: string \| null` | Auth | member_id must exist | Read-only | Not audited |
 | API-11 | `get_direct_children_chart` | Chart node data. Request: `member_id`, `full_tree: bool`, `period_month: string \| null`. With `full_tree: false` — the member and its direct children (FR-2). With `full_tree: true` — **the entire subtree**, which is what the full hierarchy window draws (FR-10, Rule-45) | Auth | member_id must exist | Read-only | Not audited |
 | API-42 | `get_ancestor_chain` | Root-to-member ancestor path for the Structure screen's breadcrumb trail, root first, member last | Auth | member_id must exist | Read-only | Not audited |
+| API-46 | `export_member_detail_pdf` | Export one member's own detail as a PDF — identity, Rewards breakdown, direct legs with Total Business Volume — for the period on screen. Reuses `get_member_detail`'s data assembly unchanged (CR-6, M4.8) | Auth | member_id must exist | Read-only | Not audited |
 
 **On API-11's `full_tree` flag.** The parameter was always in the command's contract; it is now put to work by FR-10 and no new command is introduced for the full hierarchy view. Either value returns the same node shape — name, ID, own Business Volume, active flag, introducer link — so FR-2's three-field constraint holds identically in both modes. The main window calls it once to obtain the count for the size gate (V4.5); the full hierarchy window calls it once more to draw. Both are cheap local reads against SQLite; the cost of the full view is in *rendering*, not in fetching, which is exactly why the render happens in a separate window.
 
@@ -607,7 +613,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 ### 6.1 Command index by ID
 
-`API-01`–`API-06` M1 · `API-07`–`API-09`, `API-41`, `API-45` M2 · `API-10`–`API-11`, `API-42` M4 · `API-12`–`API-15` M5 · `API-16`–`API-20` M6 · `API-21`–`API-25`, `API-37`–`API-38` M7 · `API-26`–`API-31`, `API-39` M8 · `API-32` M9 · `API-33` M3 · `API-34`–`API-36`, `API-40` pre-flight/recovery.
+`API-01`–`API-06` M1 · `API-07`–`API-09`, `API-41`, `API-45` M2 · `API-10`–`API-11`, `API-42`, `API-46` M4 · `API-12`–`API-15` M5 · `API-16`–`API-20` M6 · `API-21`–`API-25`, `API-37`–`API-38` M7 · `API-26`–`API-31`, `API-39` M8 · `API-32` M9 · `API-33` M3 · `API-34`–`API-36`, `API-40` pre-flight/recovery. (API-43/44, M6, are documented in `implementation-readiness/04-api-specification.md` but not yet reflected in this map's M6 grouping — see this file's §6 header note.)
 
 ---
 

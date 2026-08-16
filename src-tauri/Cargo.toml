@@ -45,9 +45,20 @@ tauri-plugin-dialog = "2.7.2"
 # native save dialog restore already uses for source paths, never raw file
 # content.
 rust_xlsxwriter = "0.90.1"
+# ADR-013: extends ADR-007's Rust-side-generation boundary to a second file
+# type. genpdf paginates flowing content (tables) automatically — the
+# direct-legs table has no fixed row count, and printpdf alone would need
+# hand-rolled page-break logic for it.
+genpdf = "0.2.0"
 
 [dev-dependencies]
 proptest = "1.8.0"
+# T-M4.8's pagination spike only: counts rendered pages via raw PDF object
+# structure. Not `pdf-extract` — its `adobe-cmap-parser` dependency panics
+# ("index out of bounds") on any text genpdf/printpdf-0.3.4 produces, even
+# plain ASCII, confirmed 15 Aug 2026. lopdf reads page-tree structure only,
+# no CMap/glyph decoding, so it avoids that crash entirely.
+lopdf = "0.42"
 tauri = { version = "2.11.5", features = ["test"] }
 
 [profile.release]

@@ -269,6 +269,23 @@ pub fn get_ancestor_chain(
     m4_search::get_ancestor_chain(conn, member_id)
 }
 
+/// API-46 (CR-6, M4.8).
+#[tauri::command]
+pub fn export_member_detail_pdf(
+    session: tauri::State<'_, SessionState>,
+    db: tauri::State<'_, DbState>,
+    member_id: i64,
+    period_month: Option<String>,
+    output_path: String,
+) -> Result<m6_reports::ExportResult, AppError> {
+    require_session(&session)?;
+    let guard = locked_conn(&db);
+    let conn = guard.as_ref().expect(
+        "an authenticated session implies an open database connection — see S5's login flow",
+    );
+    m4_search::export_member_detail_pdf(conn, member_id, period_month.as_deref(), &output_path)
+}
+
 // M5 — US-M5.1, S11; US-M5.2/M5.3/M5.5, S12 (US-M5.4 is S13 and stays a stub).
 
 /// API-12.
@@ -919,6 +936,7 @@ mod tests {
             "get_member_detail",
             "get_direct_children_chart",
             "get_ancestor_chain",
+            "export_member_detail_pdf",
             "use_recovery_code",
             // US-M7.1/M7.2/M7.4, S10 (US-M8.5/M8.6's own commands pulled
             // forward — see the "M8 remainder" comment above).

@@ -63,6 +63,7 @@ Eight functional modules (M1–M8) plus the architecture-introduced M9. Every fu
 | M4.5 | Inactive member shown in a visually distinct colour everywhere they appear — chart, search result, list — informational only | Rule-28 |
 | M4.6 | Search by phone number, in every search box, with the phone shown in the results | Rule-44 |
 | M4.7 | Full hierarchy view — the whole structure from the top member, every branch expanded, in a separate read-only window | Rule-45, FR-10 |
+| M4.8 | Export a member's own detail — identity, reward-detail breakdown, direct legs with each leg's Total Business Volume — as a PDF, for the period currently on screen | CR-6 |
 
 ### M5 — Monthly Close & Permanent Record
 

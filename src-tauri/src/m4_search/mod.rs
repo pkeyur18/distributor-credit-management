@@ -11,6 +11,8 @@ use crate::m1_members::Member;
 use crate::m3_calc::engine::round_half_up_div100;
 use crate::m5_close::get_period_lock_status;
 
+pub mod pdf;
+
 /// T-M2.5-3: figure screens default to the **oldest recordable** period,
 /// never "whatever period_id happens to be highest." Before US-M2.5 every
 /// query here picked its period independently per member (`ORDER BY
@@ -291,6 +293,45 @@ pub fn get_member_detail(
         },
         direct_children: children,
         member,
+    })
+}
+
+/// API-46 (CR-6, M4.8). Reuses `get_member_detail` unchanged — no new
+/// calculation logic, same period resolution, same reward breakdown. The
+/// period label shown on the document comes from whatever `period_month`
+/// resolved to; `generated_at` is wall-clock time at export, not a stored
+/// value (this document is a point-in-time snapshot, same spirit as the
+/// full hierarchy window's own timestamp, Rule-45).
+pub fn export_member_detail_pdf(
+    conn: &Connection,
+    member_id: i64,
+    period_month: Option<&str>,
+    output_path: &str,
+) -> Result<crate::m6_reports::ExportResult, AppError> {
+    let detail = get_member_detail(conn, member_id, period_month)?;
+    // Mirrors resolve_view_period_id's own None-branch (used by
+    // get_member_detail above) rather than looking the label back up by
+    // `period_id` — that id can be the sentinel `0` when no `periods` row
+    // exists yet (fresh install, or a test fixture with no activity), and
+    // a lookup against a nonexistent id would fail where get_member_detail
+    // itself does not.
+    let period_label: String = match period_month {
+        Some(month) => month.to_string(),
+        None => {
+            let status = get_period_lock_status(conn)?;
+            status
+                .recordable_period_months
+                .first()
+                .cloned()
+                .expect("get_period_lock_status always names at least the current month")
+        }
+    };
+    let generated_at = chrono::Local::now().format("%d %b %Y %H:%M").to_string();
+
+    pdf::render_member_detail_pdf(&detail, &period_label, &generated_at, output_path)?;
+
+    Ok(crate::m6_reports::ExportResult {
+        file_path: output_path.to_string(),
     })
 }
 
@@ -785,5 +826,30 @@ mod tests {
         let conn = seeded();
         let err = get_direct_children_chart(&conn, None, false, None).unwrap_err();
         assert!(matches!(err, AppError::NotFound { .. }));
+    }
+
+    #[test]
+    fn export_member_detail_pdf_writes_a_real_file() {
+        let conn = seeded();
+        let root = insert_member(&conn, "Root", None);
+        let dir = std::env::temp_dir().join(format!("bvconsole-export-pdf-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let output_path = dir.join("member.pdf");
+
+        let result = export_member_detail_pdf(&conn, root, None, output_path.to_str().unwrap()).unwrap();
+
+        assert_eq!(result.file_path, output_path.to_string_lossy());
+        assert!(output_path.exists());
+        let bytes = std::fs::read(&output_path).unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn export_member_detail_pdf_refuses_an_unknown_member() {
+        let conn = seeded();
+        let result = export_member_detail_pdf(&conn, 999_999, None, "unused.pdf");
+        assert!(matches!(result, Err(AppError::NotFound { .. })));
     }
 }

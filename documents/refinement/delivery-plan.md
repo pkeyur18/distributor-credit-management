@@ -1,6 +1,6 @@
 # Delivery Plan — Epics, Stories, PI & Sprint Breakdown
 
-36 user stories across Epic 0 and modules M1–M9, their dependency graph, and a proposed two-PI, eight-sprint sequence. **Four stories were added on 7 August 2026** by change requests CR-1/CR-2/CR-3 — US-M2.3, US-M2.4, US-M2.5 and US-M4.3 — and US-M1.4, US-M2.1 and US-M5.3 were amended. **One more story was added on 8 August 2026** by CR-5 — US-M4.4 (Rewards-by-slab chart) — and US-M3.1/US-M4.1 were amended for CR-4 (own-Business-Volume reward, Rule-46) (see [06](06-decision-log-and-open-items.md) §5). **Sprint boundaries are a starting proposal — adjust them freely. The dependency constraints are not optional** — a story cannot start before what it depends on is Done (per [05](05-quality-and-acceptance.md) §6.1).
+37 user stories across Epic 0 and modules M1–M9, their dependency graph, and a proposed two-PI, eight-sprint sequence. **Four stories were added on 7 August 2026** by change requests CR-1/CR-2/CR-3 — US-M2.3, US-M2.4, US-M2.5 and US-M4.3 — and US-M1.4, US-M2.1 and US-M5.3 were amended. **One more story was added on 8 August 2026** by CR-5 — US-M4.4 (Rewards-by-slab chart) — and US-M3.1/US-M4.1 were amended for CR-4 (own-Business-Volume reward, Rule-46). **One more story was added on 15 August 2026** by CR-6 — US-M4.5 (member detail PDF export), no story amended (see [06](06-decision-log-and-open-items.md) §5). **Sprint boundaries are a starting proposal — adjust them freely. The dependency constraints are not optional** — a story cannot start before what it depends on is Done (per [05](05-quality-and-acceptance.md) §6.1).
 
 Solo-maintainer project, two-week sprints assumed. Adjust cadence to actual availability; the sequencing logic holds regardless of sprint length.
 
@@ -16,7 +16,7 @@ One epic per architecture module, plus Sprint 0 for scaffolding.
 | **Epic M1** | Member Directory | US-M1.1 – US-M1.4 | Epic 0 |
 | **Epic M2** | Business Volume Entry | US-M2.1, US-M2.2 | M1, M3 |
 | **Epic M3** | Calculation Engine | US-M3.1, US-M3.2 | M1 (data model) |
-| **Epic M4** | Member Detail & Hierarchy Chart | US-M4.1 – US-M4.4 | M1, M3 |
+| **Epic M4** | Member Detail & Hierarchy Chart | US-M4.1 – US-M4.5 | M1, M3 |
 | **Epic M5** | Monthly Close | US-M5.1 – US-M5.4 | M2, M3 |
 | **Epic M6** | Reports & Exports | US-M6.1 – US-M6.4 | M5 |
 | **Epic M7** | Settings | US-M7.1 – US-M7.4 | Low dependency; US-M7.3 needs M3, US-M7.4 needs the `backups` generalization |
@@ -191,6 +191,17 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 *Technical:* client-side aggregation of the same not-yet-closed `member_period_totals` rows the members-by-slab chart already reads. No new IPC command, matching the sibling chart's existing pattern.
 *Known accepted limit:* TR-7 — the top-down layout's width grows with leaf count; at 25,000 members the canvas is extremely wide and a print spans many pages. Chosen deliberately by the client over a width-stable outline; do not switch layouts unilaterally.
 
+**US-M4.5 — Export member detail as PDF.** *(new 15 Aug 2026, CR-6)*
+*Requirement refs:* M4.8, ADR-013, API-46, AC-48.
+*Dependencies:* US-M4.1 (the detail data and screen the export button lives on).
+*Acceptance criteria:*
+- Given the member detail screen, when "Export PDF" is activated, then the native save dialog opens; cancelling it makes no IPC call and shows no toast.
+- Given a destination is chosen, when the export runs, then the PDF contains exactly what `get_member_detail` returns for the period currently on screen — identity, the four stat figures, the full Rewards-detail breakdown, and the direct-legs table with each leg's Total Business Volume — laid out in the screen's own two-column arrangement.
+- Given the document, when it is inspected, then every figure is spelled out in full ("Business Volume", "Total Business Volume") — never the internal "BV"/"TBV" shorthand.
+- Given a member with no direct legs, when exported, then the Rewards-detail section shows the own-Business-Volume reward only, no royalty line, matching the screen's own empty state.
+- Given a member with enough direct legs to overflow one page, when exported, then the document paginates without truncating or duplicating rows.
+*Technical:* Rust-side generation (`genpdf`, ADR-013), reusing `get_member_detail` unchanged — no new calculation logic. New command `export_member_detail_pdf` (API-46) in `m4_search`, not `m6_reports` — a single member's own detail, not a bulk report.
+
 ### Epic M5 — Monthly Close
 
 **US-M5.1 — Close the oldest outstanding month.**
@@ -307,7 +318,7 @@ Epic M9 (audit) — cross-cutting, wired into M1/M2/M5/M7 as each ships
 | **Sprint 1** | US-0.1, US-0.2 | Tauri/React/Rust scaffolding; encrypted DB with full schema and seed data |
 | **Sprint 2** | US-M1.1, US-M1.2, US-M1.3, US-M1.4 · US-M8.1, US-M8.2, US-M8.3 | Member directory and base authentication **in parallel** — M8's base auth has no data dependency on M1 |
 | **Sprint 3** | US-M3.1, US-M3.2 | The calculation engine, pure and unit-tested against the six scenarios *before* anything else is built on top — this is the highest-value, highest-risk work in the project |
-| **Sprint 4** | US-M2.1, US-M2.2 · US-M4.1, US-M4.2, **US-M4.3**, **US-M4.4** · US-M8.4 | Entry, correction, member detail, hierarchy chart, **full hierarchy window (CR-3)**, **Rewards-by-slab chart (CR-5)**, credential recovery. **Sprint 4 exit gate:** all six golden scenarios reproduce through the real UI |
+| **Sprint 4** | US-M2.1, US-M2.2 · US-M4.1, US-M4.2, **US-M4.3**, **US-M4.4**, **US-M4.5** · US-M8.4 | Entry, correction, member detail, hierarchy chart, **full hierarchy window (CR-3)**, **Rewards-by-slab chart (CR-5)**, **member detail PDF export (CR-6)**, credential recovery. **Sprint 4 exit gate:** all six golden scenarios reproduce through the real UI |
 
 ### PI-2 — Configuration, Close, Reporting & Hardening (Sprints 5–8)
 

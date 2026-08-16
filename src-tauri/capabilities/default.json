@@ -21,6 +21,7 @@
     "allow-get-member-detail",
     "allow-get-direct-children-chart",
     "allow-get-ancestor-chain",
+    "allow-export-member-detail-pdf",
     "allow-get-outstanding-periods",
     "allow-begin-close",
     "allow-confirm-backup-and-close",
