@@ -17,10 +17,13 @@
 //! via `lopdf` — raw object-structure access, no CMap/glyph decoding, so
 //! it doesn't hit the same crash.
 
-use genpdf::elements::{Break, LinearLayout, PaddedElement, Paragraph, TableLayout};
+use genpdf::elements::{
+    Break, CellDecorator, FrameCellDecorator, LinearLayout, PaddedElement, Paragraph, TableLayout,
+};
 use genpdf::fonts::{FontData, FontFamily};
+use genpdf::render;
 use genpdf::style::{Color, Style};
-use genpdf::{Alignment, Document, Element, Margins, SimplePageDecorator, Size};
+use genpdf::{Alignment, Document, Element, Margins, Position, SimplePageDecorator, Size};
 
 use crate::error::AppError;
 use crate::m1_members::Member;
@@ -32,6 +35,63 @@ const SUCCESS: Color = Color::Rgb(0x05, 0x96, 0x69);
 const DANGER: Color = Color::Rgb(0xdc, 0x26, 0x26);
 const MUTED: Color = Color::Rgb(0x64, 0x74, 0x8b);
 const INK: Color = Color::Rgb(0x0f, 0x17, 0x2a);
+// src/index.css's `--border` token — the exact hairline colour every
+// `border-border` line on screen (table.tsx, StatCard) already uses.
+const BORDER: Color = Color::Rgb(0xe2, 0xe8, 0xf0);
+
+/// The on-screen table's own hairline convention (table.tsx: `TableWrap`'s
+/// outer border, `TableHead`/`TableRow`'s `border-b`) — a full outer box
+/// plus a horizontal line under the header and under every row, no
+/// vertical lines between columns. genpdf's own `FrameCellDecorator`
+/// couples inner horizontal and vertical lines together, which would add
+/// column lines the approved on-screen design doesn't have, so this
+/// exists instead. Always draws in `BORDER`, ignoring whatever ambient
+/// style the table renders with — `draw_line` only reads `style.color()`,
+/// so this can't accidentally recolour any text.
+#[derive(Default)]
+struct RowLineCellDecorator {
+    num_columns: usize,
+}
+
+impl CellDecorator for RowLineCellDecorator {
+    fn set_table_size(&mut self, num_columns: usize, _num_rows: usize) {
+        self.num_columns = num_columns;
+    }
+
+    fn decorate_cell(
+        &mut self,
+        column: usize,
+        row: usize,
+        has_more: bool,
+        area: render::Area<'_>,
+        _style: Style,
+    ) {
+        let size = area.size();
+        let line_style = Style::new().with_color(BORDER);
+
+        if column == 0 {
+            area.draw_line(vec![Position::default(), Position::new(0, size.height)], line_style);
+        }
+        if column + 1 == self.num_columns {
+            area.draw_line(
+                vec![Position::new(size.width, 0), Position::new(size.width, size.height)],
+                line_style,
+            );
+        }
+        if row == 0 {
+            area.draw_line(vec![Position::default(), Position::new(size.width, 0)], line_style);
+        }
+        // Skipped when `has_more`: this row continues onto the next page,
+        // so the line belongs under whichever page it actually finishes
+        // on, not here.
+        if !has_more {
+            area.draw_line(
+                vec![Position::new(0, size.height), Position::new(size.width, size.height)],
+                line_style,
+            );
+        }
+    }
+}
 
 /// Static Inter TTFs (v3.19, OFL-1.1 — see assets/fonts/Inter-LICENSE),
 /// embedded at compile time so the shipped binary needs no filesystem
@@ -236,7 +296,7 @@ pub(super) fn stat_boxes(
     total_business_volume: i64,
     slab_pct: i64,
     rewards_total: i64,
-) -> TableLayout {
+) -> impl Element {
     let values = stat_box_values(business_volume, total_business_volume, slab_pct, rewards_total);
     let mut table = TableLayout::new(vec![1, 1, 1, 1]);
     let mut row = table.row();
@@ -244,7 +304,16 @@ pub(super) fn stat_boxes(
         row = row.element(stat_box(label, value));
     }
     row.push().expect("a fixed 4-cell row always has the right cell count");
-    table
+    // On screen each stat is its own separately-bordered `StatCard` — a
+    // single-row, 4-column grid with both inner and outer lines produces
+    // the same four boxes. Continuation borders don't apply: this table
+    // never spans a page break. `FrameCellDecorator` draws in whatever
+    // ambient style it's rendered with, so the whole table is wrapped in
+    // `BORDER` here — each stat box's own label/value colours still win
+    // for their own text, since `Style::merge` lets the more specific
+    // (child) style override the ambient one.
+    table.set_cell_decorator(FrameCellDecorator::new(true, true, false));
+    table.styled(Style::new().with_color(BORDER))
 }
 
 /// Every table cell in this file goes through this — genpdf's `TableLayout`
@@ -301,6 +370,7 @@ fn rewards_detail_table(rewards: &RewardBreakdown) -> TableLayout {
         table.row().element(cell(desc)).element(cell(bv)).element(cell(amt)).push().unwrap();
     }
 
+    table.set_cell_decorator(RowLineCellDecorator::default());
     table
 }
 
@@ -418,6 +488,7 @@ pub(super) fn direct_legs_table(children: &[MemberDetailChild]) -> TableLayout {
             .expect("a fixed 5-cell row always has the right cell count");
     }
 
+    table.set_cell_decorator(RowLineCellDecorator::default());
     table
 }
 
@@ -833,3 +904,4 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 }
+
