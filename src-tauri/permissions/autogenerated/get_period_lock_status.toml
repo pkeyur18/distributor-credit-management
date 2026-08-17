@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-period-lock-status"
+description = "Enables the get_period_lock_status command without any pre-configured scope."
+commands.allow = ["get_period_lock_status"]
+
+[[permission]]
+identifier = "deny-get-period-lock-status"
+description = "Denies the get_period_lock_status command without any pre-configured scope."
+commands.deny = ["get_period_lock_status"]

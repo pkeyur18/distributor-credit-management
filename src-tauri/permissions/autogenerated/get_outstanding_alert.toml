@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-outstanding-alert"
+description = "Enables the get_outstanding_alert command without any pre-configured scope."
+commands.allow = ["get_outstanding_alert"]
+
+[[permission]]
+identifier = "deny-get-outstanding-alert"
+description = "Denies the get_outstanding_alert command without any pre-configured scope."
+commands.deny = ["get_outstanding_alert"]

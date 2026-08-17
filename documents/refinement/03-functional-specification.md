@@ -63,6 +63,7 @@ Eight functional modules (M1–M8) plus the architecture-introduced M9. Every fu
 | M4.5 | Inactive member shown in a visually distinct colour everywhere they appear — chart, search result, list — informational only | Rule-28 |
 | M4.6 | Search by phone number, in every search box, with the phone shown in the results | Rule-44 |
 | M4.7 | Full hierarchy view — the whole structure from the top member, every branch expanded, in a separate read-only window | Rule-45, FR-10 |
+| M4.8 | Export a member's own detail — identity, reward-detail breakdown, direct legs with each leg's Total Business Volume — as a PDF, for the period currently on screen | CR-6 |
 
 ### M5 — Monthly Close & Permanent Record
 
@@ -347,7 +348,7 @@ This section describes screen *content* — what each screen shows and does. For
 
 **Purpose:** FR-8, M6.
 
-- **Monthly data card:** period selector, column picker (four defaults pre-ticked and un-removable, plus the full optional list from Rule-33), export action.
+- **Monthly data card:** period selector, column picker (five mandatory columns pre-ticked and un-removable, plus the full optional list from Rule-33), export action.
 - **Yearly average card:** cycle bounds from settings, export action. Extract shows both Total Business Volume and own-Business-Volume averages, each with its month count displayed alongside (Rule-23).
 - **Low-contribution card:** threshold (default 100, overridable), export action. Filters on **own** Business Volume yearly average (Rule-24).
 - **Closed month snapshot card:** re-download any past closed month's data as `.xlsx` — maps to `redownload_backup`, always the latest version. Used when entries in that month have since been corrected, or simply for another copy.
@@ -446,7 +447,7 @@ The complete set of 49, organised by module. "On failure" states the exact behav
 
 | # | Rule | Note |
 |---|---|---|
-| V6.1 | The four default columns are always present and cannot be removed | **See [06](06-decision-log-and-open-items.md) O1 — possible conflict with Rule-19's five-field wording** |
+| V6.1 | The five mandatory columns (name, ID, phone, Business Volume, Total Business Volume) are always present and cannot be removed | Per Rule-19/Rule-33 ([06](06-decision-log-and-open-items.md) C9, D-1) |
 | V6.2 | Every yearly average is shown with the month count it is based on | |
 | V6.3 | The low-contribution threshold must be a positive number | Refuse otherwise |
 | V6.4 | A past month's extract reads from the permanent record — a re-extract after a correction automatically reflects it | Per RQ-4 |

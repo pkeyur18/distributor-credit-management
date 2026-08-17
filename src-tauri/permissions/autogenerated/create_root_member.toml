@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-root-member"
+description = "Enables the create_root_member command without any pre-configured scope."
+commands.allow = ["create_root_member"]
+
+[[permission]]
+identifier = "deny-create-root-member"
+description = "Denies the create_root_member command without any pre-configured scope."
+commands.deny = ["create_root_member"]

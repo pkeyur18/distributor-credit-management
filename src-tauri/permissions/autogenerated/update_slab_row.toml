@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-slab-row"
+description = "Enables the update_slab_row command without any pre-configured scope."
+commands.allow = ["update_slab_row"]
+
+[[permission]]
+identifier = "deny-update-slab-row"
+description = "Denies the update_slab_row command without any pre-configured scope."
+commands.deny = ["update_slab_row"]

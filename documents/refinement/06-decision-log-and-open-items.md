@@ -4,11 +4,11 @@ The place to look when something in this specification appears wrong, contradict
 
 Three kinds of thing live here:
 
-- **§2 — Conflicts (C1–C8):** places where two source documents disagree, and which one wins. All resolved. The resolution is already applied throughout the rest of this set; §2 records *why*, so nobody re-litigates it.
-- **§3 — Open items (O1–O5):** genuinely undecided. **No default has been invented for any of them.**
+- **§2 — Conflicts (C1–C9):** places where two source documents disagree, and which one wins. All resolved. The resolution is already applied throughout the rest of this set; §2 records *why*, so nobody re-litigates it.
+- **§3 — Open items (O2–O6):** genuinely undecided. **No default has been invented for any of them.**
 - **§6 — Do not re-raise:** decisions that look like oversights and are not.
 
-**Change requests are recorded in §5, by date.** The most recent are **CR-4 and CR-5 of 8 August 2026**, which add Rule-46 and amend Rule-12. CR-4 in particular **reverses the 3 August 2026 decision that a member earns nothing on their own Business Volume** — if you find a document still describing that as an absolute rule, or citing the pre-CR-4 golden totals (35/22/450/1,000/980), that document is stale and §5 is right. CR-1, CR-2 and CR-3 of 7 August 2026 (amending Rule-36, adding Rule-44 and Rule-45) remain in force alongside CR-4/CR-5.
+**Change requests are recorded in §5, by date.** The most recent is **CR-6 of 15 August 2026**, adding the member detail PDF export — a pure addition, no rule reversed. Before that, **CR-4 and CR-5 of 8 August 2026** add Rule-46 and amend Rule-12. CR-4 in particular **reverses the 3 August 2026 decision that a member earns nothing on their own Business Volume** — if you find a document still describing that as an absolute rule, or citing the pre-CR-4 golden totals (35/22/450/1,000/980), that document is stale and §5 is right. CR-1, CR-2 and CR-3 of 7 August 2026 (amending Rule-36, adding Rule-44 and Rule-45) remain in force alongside CR-4/CR-5/CR-6.
 
 ---
 
@@ -24,7 +24,7 @@ A conflict that precedence does not settle belongs in §3, not in code.
 
 ---
 
-## 2. Conflicts resolved — C1 to C8
+## 2. Conflicts resolved — C1 to C9
 
 ### C1 — Settings count: 13 or 16?
 
@@ -42,9 +42,9 @@ A conflict that precedence does not settle belongs in §3, not in code.
 |---|---|
 | **Disagreement** | `12-implementation-context.md` §4 says "32-command IPC surface"; §7 of the same file says "36 Tauri IPC commands"; `08-testing-strategy.md` says "there are 36 commands"; `04-api-specification.md` enumerates **API-01 … API-40**. |
 | **Cause** | Three additions in sequence: the original 26 in `architecture.md` Appendix C, minus `reverse_entry` (dropped), plus API-33 and API-34–36 on 6 August, plus API-37–40 on 7 August. Each document froze at a different point. |
-| **Resolution** | **40 commands**, API-01 to API-40, with no gaps. Full contracts in [04](04-technical-architecture.md) §6. |
-| **Authority** | `04-api-specification.md` command-surface summary, 7 Aug 2026 (tier 3, later date, and the document that owns the surface). |
-| **Build consequence** | The Tauri capability allowlist has 40 entries. The contract-test suite has 40 tests, not 36. |
+| **Resolution** | **46 commands**, API-01 to API-46, with no gaps (amended 14 Aug 2026 — `get_ancestor_chain`, API-42, then `preview_monthly_data`/`preview_yearly_average`, API-43/44, same day, for the Reports screen's prototype-parity preview tables; amended 15 Aug 2026 — `add_closed_month_entry`, API-45, for the correction panel's "Add record" button, extending Rule-39 to creation; amended again 15 Aug 2026 — `export_member_detail_pdf`, API-46, for the member detail PDF export, CR-6). Full contracts in [04](04-technical-architecture.md) §6. |
+| **Authority** | `04-api-specification.md` command-surface summary, 15 Aug 2026 (tier 3, later date, and the document that owns the surface). |
+| **Build consequence** | The Tauri capability allowlist has 46 entries. The contract-test suite has 46 command-surface assertions. |
 
 ### C3 — Unauthenticated commands: six or seven?
 
@@ -105,21 +105,21 @@ A conflict that precedence does not settle belongs in §3, not in code.
 | **Authority** | Client requirement confirmed via the architect, 6 Aug 2026; recorded in `06-security-authorization-matrix.md` §6 and `03-business-rules.md` Rule-42. |
 | **Build consequence** | No delete path in the schema, the API, or the UI. No "erasure requested" flag. No export filter that would omit a member. HIGH-2 is marked **"not to be re-raised in future analysis"** — see §6 below. |
 
----
-
-## 3. Open items — O1 to O5
-
-**Nothing below has a default invented for it.** Each states the question, why it matters, what the closest available evidence is, and who has to answer.
-
-### O1 — Is Total Business Volume a fifth mandatory export column? ⚠️ *needs a client answer*
+### C9 — Is Total Business Volume a fifth mandatory export column?
 
 | | |
 |---|---|
-| **The question** | Rule-19 says every extract carries "the member's basic details, contact number, **volume** and Business Volume, regardless of which optional columns are chosen" — which reads as five things, with *volume* meaning Total Business Volume. AC-29 repeats the same five. But Rule-33, V6.1, and US-M6.1's acceptance criteria all name only **four** mandatory columns: name, ID, phone, Business Volume. Total Business Volume appears in Rule-33's *optional* list. |
-| **Why it matters** | It changes the fixed column set of all three extracts. If Total Business Volume is mandatory, it can never be unticked — and V6.1's "the four default columns are always present and cannot be removed" is wrong by one. |
-| **Closest evidence** | The approved prototype's default export column set is `['name', 'id', 'phone', 'bv']` — four, consistent with Rule-33/V6.1. But a *default* is not the same thing as a *mandatory* column: Rule-19 is about what cannot be removed, Rule-33 about what starts ticked. The prototype does not distinguish the two, so it does not settle this. |
-| **Who answers** | **The client.** One question: "on every extract, is Total Business Volume always present, or is it an optional column that happens to be untickable-by-default?" |
-| **Until answered** | Build the four-column mandatory set (name, ID, phone, Business Volume) and keep Total Business Volume optional, which is what the prototype and three of the four sources say — but do not close this item on that basis. |
+| **Disagreement** | Rule-19 says every extract carries "the member's basic details, contact number, **volume** and Business Volume, regardless of which optional columns are chosen" — which reads as five things, with *volume* meaning Total Business Volume. AC-29 repeats the same five. But Rule-33, V6.1, and US-M6.1's acceptance criteria all named only **four** mandatory columns: name, ID, phone, Business Volume, with Total Business Volume in Rule-33's *optional* list. |
+| **Cause** | Rule-33/V6.1 conflated *what starts ticked* (a default) with *what can never be unticked* (mandatory) — the approved prototype's default column set (`['name', 'id', 'phone', 'bv']`) settles the former, not the latter, but the two subsequent documents copied it as though it settled both. |
+| **Resolution** | **Five mandatory columns: name, member number, phone, Business Volume, Total Business Volume.** Untickable on all three extracts. Resolved toward Rule-19's own wording, the client's own statement of what an extract must always carry. |
+| **Authority** | Architect, 8 Aug 2026 (`PI/05-decisions-and-gaps.md` D-1) — resolved *toward* Rule-19's client-sourced wording, not client-confirmed directly. Worth a client conversation to confirm; if the client wants four, this reverses in under a day. |
+| **Build consequence** | V6.1's "the four default columns are always present and cannot be removed" is corrected to five. Total Business Volume leaves the optional list entirely. The seeded default column set changes from four entries to five (US-M6.5, S13). |
+
+---
+
+## 3. Open items — O2 to O6
+
+**Nothing below has a default invented for it.** Each states the question, why it matters, what the closest available evidence is, and who has to answer.
 
 ### O2 — Hierarchy depth setting has no stated default
 
@@ -158,6 +158,15 @@ A conflict that precedence does not settle belongs in §3, not in code.
 | **Why it matters** | Only to the advisory warning in `add_member` (Rule-1, V1.7) — the warning cannot fire, or must be suppressed, for a level with no configured width. Nothing is ever blocked either way, so the consequence is cosmetic. |
 | **Who answers** | **The architect**, as a build decision, unless the client wants per-level widths for a deeper structure. |
 | **Until answered** | Suppress the width warning for any level with no configured width; the depth warning (Rule-32) still fires independently. Do not silently reuse level 4's width for level 5+ — that would produce a warning the client never configured. |
+
+### O6 — `login`'s lockout-transition audit and `use_recovery_code`'s audit are architecturally unrealizable as documented **[NEW — found in S14's US-M9.1 completeness pass]**
+
+| | |
+|---|---|
+| **The question** | `04-technical-architecture.md` §6 documents `login`/`unlock_session` as audited "only on failed-lockout transitions" and `use_recovery_code` as audited with cause "credential recovery". Neither is built, and neither can be with the architecture as it stands: `audit_log` lives inside the SQLCipher database, and both these paths run — by design, per Rule-29's closed set of seven unauthenticated commands — with no key and no open connection. `setup_first_run` had the identical problem and S14 could close it (a connection opens moments later, once the credential is created); `login`'s lockout bookkeeping and `use_recovery_code`'s credential reset both live entirely in the unencrypted `auth.json` sidecar and never reach a point where a database connection exists. |
+| **Why it matters** | NFR-5's "an audit log that can explain any figure" doesn't strictly need these — neither touches a member's figures — but a security-relevant event (repeated failed logins escalating a lockout; a recovery code consuming itself and replacing the credential) going unrecorded anywhere is a real gap for an admin trying to reconstruct what happened after the fact. Rule-43/S14 solved the structurally similar "restore" case with an unencrypted manifest, but that mechanism was justified because backup metadata was already deemed safe to reveal pre-auth (§8.6). Recording lockout/recovery *events* in a similar unencrypted file is a different risk profile — it starts to reveal security-relevant activity to anyone with filesystem access, before any credential has been proven. |
+| **Who answers** | **The architect.** Either accept that these two paths are simply never audited (correct the API table to say so plainly, matching how `lock_session`/most reads already say "Not audited") or decide what a pre-auth-safe security event log would need to look like and whether that's worth building. |
+| **Until answered** | Left exactly as S10 left it — neither path writes anything. The API table (§6) now states this explicitly as an open gap rather than a built behaviour, so a future reader doesn't assume it exists. |
 
 ---
 
@@ -339,6 +348,37 @@ Raised by the client just before implementation begins. CR-4 changes a calculati
 | **Rejected alternative** | A single combined chart showing both member count and Rewards total per bar. Two simple, familiar charts read faster at a glance than one denser dual-value one — the client asked for "easy to understand in one glance," and reuse of an already-understood pattern serves that directly |
 | **No new API/data model change** | Computed from the same in-memory period figures the existing chart already reads; no dedicated backend command exists for either chart today, and none is being added for this one |
 
+### 13 August 2026 — Volume Entry period table and summary nodes
+
+| | |
+|---|---|
+| **Requested** | Volume Entry's entry list should show the real period's entries (every member, not just the current session), sorted by recorded date descending, paginated (10/25/50, default 10), titled `<Month> <Year> entries`. Two summary nodes above the lock-status banner: total entries recorded in that month, and entries recorded today |
+| **Which month** | Reuses the existing recording-month rule (T-M2.3-2/T-M2.3-4, CR-2) rather than a new one: the outstanding month while one exists, otherwise the current month |
+| **Decided** | **API-41 `list_period_entries`** added — the closed 40-command surface (C2) becomes 41. Returns the full month's entry list (member name blended in server-side); both summary nodes and the table's pagination derive from this one fetch client-side, no separate aggregate commands |
+| **Entry-count definition** | Raw entry-record count, not distinct members — a member with two entries in the month counts as two |
+| **Rule** | No new business rule — a read-only listing of already-recorded data, same status as `get_audit_log` (API-32) |
+
+### 14 August 2026 — Back-navigation breadcrumbs (Structure / Member Detail / Volume Entry)
+
+| | |
+|---|---|
+| **Requested** | Structure, Member Detail, and Volume Entry need the back-link/breadcrumb navigation the client-approved prototype already ships: a dynamic "back to whatever screen you came from" link on all three, plus Structure's root-to-current ancestor trail and Member Detail's fixed Home crumb |
+| **Which command** | Structure's ancestor trail needs a root-to-member path that no existing command returns (`get_direct_children_chart` only walks downward) |
+| **Decided** | **API-42 `get_ancestor_chain`** added — the closed 41-command surface (C2) becomes 42. Returns the ancestor path root-first, the requested member last; the back-link labels themselves are computed client-side from navigation history, no backend involvement |
+| **Rule** | No new business rule — a read-only structural lookup, same status as `get_direct_children_chart` (API-11) |
+
+### 15 August 2026 — CR-6: Member detail PDF export
+
+| | |
+|---|---|
+| **Requested** | An ability to export an individual member's detail page as a PDF — their own figures, the reward calculation behind them, and their direct legs with each leg's Total Business Volume, so the administrator can show a member "exactly which people below them contributed what" (product objective 4, `01-product-and-scope.md` §1.2) |
+| **Decided** | One PDF per member, covering whatever period the member-detail screen is currently viewing. Contains the same data the screen already shows — identity, the four stat figures, the full rewards-detail breakdown, and the direct-legs table — laid out in the screen's own two-column arrangement. Generated Rust-side (extends ADR-007's boundary to a second file type — see ADR-013), reusing `get_member_detail` unchanged; no new calculation logic |
+| **Scope** | Direct legs only (the one level already on screen), not the full downline — consistent with Rule-45/FR-2's rule that deeper tree views never show more per node than name, ID and own Business Volume |
+| **Vocabulary** | Every figure spelled out in full on the document ("Business Volume", "Total Business Volume") rather than the internal "BV"/"TBV" shorthand — the document may be handed directly to a member unfamiliar with the abbreviation |
+| **Rule** | No new business rule — a rendering of already-defined figures, same status as CR-5's chart. M4.8 (new), US-M4.5 (new), ADR-013 (new), API-46 (new), AC-48 |
+| **Reverses** | Nothing — pure addition |
+| **Gap found while filing this CR** | `04-technical-architecture.md` §6 had drifted from `04-api-specification.md` — its header still read "42 commands, API-01 to API-42, no gaps" and its Module M6 table never gained rows for API-43/44 (`preview_monthly_data`/`preview_yearly_average`, added 14 Aug 2026), even though `04-api-specification.md` and this file's own C2 resolution (above) already carried them. Not caused by this CR; flagged here since it was found while placing API-46 next to it. `04-technical-architecture.md` §6's header is corrected to the true count as part of this change; its Module M6 table still lacks the API-43/44 rows — a pre-existing gap, not closed here, left for a dedicated pass |
+
 ---
 
 ## 6. Do not re-raise
@@ -370,9 +410,9 @@ Each of these looks like an oversight on first encounter and is not. Each was co
 | | |
 |---|---|
 | **Blocking issues** | **None.** No item, at any point in this analysis, met the bar of "implementation should not begin until resolved" |
-| **Conflicts** | 8, all resolved by precedence and applied throughout this set |
-| **Open items** | 5 — O1 needs a client answer; O2–O5 are build decisions to be taken deliberately rather than by default |
+| **Conflicts** | 9, all resolved by precedence and applied throughout this set (C9 added 8 Aug 2026 — see `PI/05-decisions-and-gaps.md` D-1) |
+| **Open items** | 5 — O2–O5 are build decisions to be taken deliberately rather than by default; O6 (added S14) is an architectural limitation found by US-M9.1's completeness audit, not a build decision — `login`'s lockout-transition audit and `use_recovery_code`'s audit cannot be built as documented without a new security tradeoff |
 | **Modules gated** | None. No open item blocks any module from starting |
-| **Prototype behaviours awaiting port** | 5 — the settings recalculation warning, the last-slab-row refusal, the data-recovery screen, the whole-console backup schedule/retention, and the restore flows. All are **approved reference behaviour**, to be ported like any other approved design |
+| **Prototype behaviours, approved reference** | 5 — the settings recalculation warning, the last-slab-row refusal, the data-recovery screen, the whole-console backup schedule/retention, and the restore flows. All now ported — S14 closed the last of them (the data-recovery screen and the restore flows, M8.6) |
 
-O1 is worth asking about in the same conversation as anything else outstanding, but it gates only M6's export column set — build M1, M2, M3, M4, M5, M7, M8 and M9 without waiting on it.
+C9's mandatory-column resolution is architect-resolved, not client-confirmed — worth raising in the next client conversation, but it does not block M6, which is already built against it.

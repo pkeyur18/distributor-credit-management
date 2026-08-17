@@ -92,6 +92,11 @@ Every major decision below traces to one of these three.
 **Rationale:** Every kind of whole-console backup is a verified copy of the single SQLCipher file — the same artifact a month-close backup already is, just not scoped to one period. A bespoke export format was rejected outright — the file already contains everything (members, entries, snapshots, settings, slab table, audit log, and the `auth` row); reconstructing that completeness in a second format is real work for no benefit.
 **Consequence:** Every query currently assuming `backups.period_id` is non-null (e.g. `list_backups`) must filter on `kind = 'period_close'` explicitly.
 
+### ADR-013 — Rust-side PDF generation, extending ADR-007's boundary
+**Decision:** The member detail PDF export (CR-6, M4.8) generates its `.pdf` in Rust (`genpdf`, built on `printpdf`), exactly as ADR-007 already requires for `.xlsx`. The WebView supplies only a destination path from the same native save dialog the `.xlsx` exports and backup/restore flows already use.
+**Rationale:** No reason to open a second security boundary for a second file type — ADR-007's rationale (the WebView never handles raw file content) applies identically. `genpdf` was chosen over driving `printpdf` directly because the direct-legs table has no fixed row count and needs to paginate; `genpdf` paginates flowing content automatically, `printpdf` would require hand-rolled page-break logic.
+**Consequence:** `genpdf = "0.2"` added to `src-tauri/Cargo.toml`. Layout code lives in `m4_search::pdf`, not `m6_reports` — this is a single member's own detail export, generated from the same screen and the same `get_member_detail` query that already serves it, not a bulk report across members.
+
 ---
 
 ## 3. Container & module architecture
@@ -294,13 +299,13 @@ Index `(period_id, version DESC)`; index `(kind, created_at DESC)` for retention
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER PK | |
-| `entity_type` | TEXT NOT NULL | `member`/`entry`/`setting`/`period` |
+| `entity_type` | TEXT NOT NULL | `member`/`entry`/`setting`/`period`/`backup`/`auth` (D-12/D-13's corrected set) |
 | `entity_id` | INTEGER NOT NULL | |
 | `field` | TEXT NOT NULL | |
 | `old_value` | TEXT NULL | |
 | `new_value` | TEXT NULL | |
 | `changed_at` | TEXT NOT NULL | |
-| `cause` | TEXT NOT NULL | `entry`/`edit`/`correction`/`settings_change`/`period_close`/`manual_backup`. `reversal` retired — see [06](06-decision-log-and-open-items.md) §6 |
+| `cause` | TEXT NOT NULL | `entry`/`edit`/`correction`/`settings_change`/`period_close`/`manual_backup`/`console_backup` — the closed seven (T-M9.1-3). `reversal` retired (`reverse_entry` dropped — see [06](06-decision-log-and-open-items.md) §6); `restore` was added in error during S10, never part of this list, and retired in S14 alongside it — see `backup::restore_from_backup`'s doc comment for why a restore's own record lives in the S14 backups-manifest instead (§9.5) |
 
 Index `(entity_type, entity_id)`.
 
@@ -498,9 +503,9 @@ Each write touches `O(depth × average_width)` rows — bounded by tree depth (t
 
 ---
 
-## 6. API specification — 40 Tauri IPC commands
+## 6. API specification — 46 Tauri IPC commands
 
-**40 commands total** — API-01 to API-40, no gaps. See [06](06-decision-log-and-open-items.md) C2. `reverse_entry` was removed (dead, confirmed) from the original 26-command count.
+**46 commands total** — API-01 to API-46, no gaps. See [06](06-decision-log-and-open-items.md) C2 for the full count history. `reverse_entry` was removed (dead, confirmed) from the original 26-command count; `list_period_entries` (API-41) was added 13 August 2026; `get_ancestor_chain` (API-42) was added 14 August 2026; `export_member_detail_pdf` (API-46) was added 15 August 2026 (CR-6). **Known gap:** API-43/44 (`preview_monthly_data`/`preview_yearly_average`, M6, added 14 August 2026) and API-45 (`add_closed_month_entry`, M2) are documented in full in `implementation-readiness/04-api-specification.md` — the authoritative command ledger — but this file's own module tables below were never given matching rows for API-43/44. Not introduced by CR-6; flagged while placing API-46 next to it, left for a dedicated pass.
 
 **No delete command exists anywhere, for any entity.** Members, entries, snapshots, backups — none are ever removed (Rule-28, Rule-42, Rule-31).
 
@@ -526,6 +531,8 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 | API-07 | `get_period_lock_status` | Report **which months accept entries**, oldest first, and which month is blocked and by what | Auth | — | Read-only | Not audited. Returns a list of recordable periods plus the blocking month, **not a boolean** (amended 7 Aug 2026, CR-2 — the name is retained for continuity; the semantics are now "entry eligibility", not "locked yes/no") |
 | API-08 | `record_entry` | Record BV against a member, into the period its `entry_date` falls in | Auth | `amount > 0` (Rule-16a), ≤2 decimals (Rule-16), `entry_date` within its own period's bounds (V2.6). **Refused when that period is `closed`** (use API-09 instead, Rule-39), **and when it is the current month while any earlier period is `awaiting_close`** (V2.7, Rule-36) | Insert entry + chain-upward recalc (ADR-005) **within that entry's own period**, one transaction | `entry` |
 | API-09 | `edit_entry` | Correct an entry — open period **or any closed month** | Auth | Same amount/date validation, scoped to the entry's own period bounds | Update entry + chain recalc; if period closed, additionally new `monthly_snapshots`/`backups` version | `edit` or `correction` |
+| API-41 | `list_period_entries` | List every entry recorded in a given month across all members, newest first — backs Volume Entry's period table and its two summary nodes | Auth | `period_month` required | Read-only | Not audited |
+| API-45 | `add_closed_month_entry` | Correction panel's "Add record" — insert a **brand-new** entry into an already-`closed` month (Rule-39, amended 15 Aug 2026 to extend from edit-only to creation) | Auth | Same amount/date validation as `record_entry`; **refused when the target period is not `closed`** — `record_entry` remains the path for open/awaiting_close periods | Insert entry + `write_correction_snapshot` (same closed-period path `edit_entry` uses), one transaction; new `backups` version | `correction` |
 
 ### Module M3 — Calculation Engine *(no exposed commands except the preview)*
 
@@ -537,10 +544,14 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-10 | `get_member_detail` | Full detail: contact, Rewards breakdown (own-Business-Volume reward first, then per-leg differential, then royalty — Rule-46), direct children, TBV, leg count | Auth | member_id must exist | Read-only | Not audited |
-| API-11 | `get_direct_children_chart` | Chart node data. Request: `member_id`, `full_tree: bool`. With `full_tree: false` — the member and its direct children (FR-2). With `full_tree: true` — **the entire subtree**, which is what the full hierarchy window draws (FR-10, Rule-45) | Auth | member_id must exist | Read-only | Not audited |
+| API-10 | `get_member_detail` | Full detail: contact, Rewards breakdown (own-Business-Volume reward first, then per-leg differential, then royalty — Rule-46), direct children, TBV, leg count. Request: `member_id`, `period_month: string \| null` | Auth | member_id must exist | Read-only | Not audited |
+| API-11 | `get_direct_children_chart` | Chart node data. Request: `member_id`, `full_tree: bool`, `period_month: string \| null`. With `full_tree: false` — the member and its direct children (FR-2). With `full_tree: true` — **the entire subtree**, which is what the full hierarchy window draws (FR-10, Rule-45) | Auth | member_id must exist | Read-only | Not audited |
+| API-42 | `get_ancestor_chain` | Root-to-member ancestor path for the Structure screen's breadcrumb trail, root first, member last | Auth | member_id must exist | Read-only | Not audited |
+| API-46 | `export_member_detail_pdf` | Export one member's own detail as a PDF — identity, Rewards breakdown, direct legs with Total Business Volume — for the period on screen. Reuses `get_member_detail`'s data assembly unchanged (CR-6, M4.8) | Auth | member_id must exist | Read-only | Not audited |
 
 **On API-11's `full_tree` flag.** The parameter was always in the command's contract; it is now put to work by FR-10 and no new command is introduced for the full hierarchy view. Either value returns the same node shape — name, ID, own Business Volume, active flag, introducer link — so FR-2's three-field constraint holds identically in both modes. The main window calls it once to obtain the count for the size gate (V4.5); the full hierarchy window calls it once more to draw. Both are cheap local reads against SQLite; the cost of the full view is in *rendering*, not in fetching, which is exactly why the render happens in a separate window.
+
+**On API-10/API-11's `period_month` parameter (added S13, T-M2.5-3).** `null` resolves to the oldest recordable period (`get_period_lock_status`'s own ordering) — never "whichever period has the highest `period_id`," which is what both commands did before this parameter existed and is wrong once Rule-36/CR-2 allows two periods to be simultaneously `open`/`awaiting_close`. An explicit value selects any other recordable month via the month switcher (US-M2.5).
 
 ### Module M5 — Monthly Close
 
@@ -555,10 +566,10 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-16 | `export_monthly` | Export current/selected month's data | Auth | Always includes 4 mandatory columns (Rule-19) regardless of selection | Read-only | Not audited |
+| API-16 | `export_monthly` | Export current/selected month's data | Auth | Always includes 5 mandatory columns (Rule-19, [06](06-decision-log-and-open-items.md) C9/D-1) regardless of selection | Read-only | Not audited |
 | API-17 | `export_yearly_average` | Export yearly average with snapshot-count denominator | Auth | — | Read-only | Not audited |
 | API-18 | `export_low_contribution` | Export members below own-BV yearly-average threshold | Auth | — | Read-only | Not audited |
-| API-19 | `list_backups` | List all retained backups | Auth | — | Read-only | Not audited |
+| API-19 | `list_backups` | List closed *periods* that have a snapshot, for the Reports screen's re-download card — not the same listing as API-35's whole-console backup rows | Auth | — | Read-only | Not audited |
 | API-20 | `redownload_backup` | Re-download a past backup, always latest version | Auth | period_id must have ≥1 backup | Read-only | Not audited. This is the command backing "Closed month snapshot" — see [06](06-decision-log-and-open-items.md) C-history HIGH-1 |
 
 ### Module M7 — Settings
@@ -577,11 +588,11 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-26 | `setup_first_run` | First-run wizard: set PIN and/or password, generate recovery codes | **Unauthenticated** (only when no `auth` row exists) | PIN 6 numeric digits; password ≥8 chars, letter+number; ≥1 credential required | Hash + store credential(s) (Argon2id), generate + hash recovery codes | auth setup |
-| API-27 | `login` | Authenticate with PIN or password | **Unauthenticated** (entry point) | Credential must match stored hash | Verify + update failed_attempts/locked_until | Only on failed-lockout transitions |
+| API-26 | `setup_first_run` | First-run wizard: set PIN and/or password, generate recovery codes | **Unauthenticated** (only when no `auth` row exists) | PIN 6 numeric digits; password ≥8 chars, letter+number; ≥1 credential required | Hash + store credential(s) (Argon2id), generate + hash recovery codes | `entity_type = 'auth'`, cause `entry`, one entry per credential configured, naming only *that* a PIN/password was set ("PIN set") — never the value (T-M9.1-6). Implemented S14 — couldn't audit before then, since `audit_log` lives inside the database this call is what creates |
+| API-27 | `login` | Authenticate with PIN or password | **Unauthenticated** (entry point) | Credential must match stored hash | Verify + update failed_attempts/locked_until | ⚠️ **Gap, not yet built:** "only on failed-lockout transitions" was never realizable as written — lockout state (`auth.json`) is written before any database connection exists, the same reason `use_recovery_code` below can't audit either. Left open at the end of S14; needs either a documented exception (no `audit_log` entry for lockout, ever) or a design that doesn't require one |
 | API-28 | `lock_session` | Manually lock the session | Auth | — | Idempotent | Not audited |
-| API-29 | `unlock_session` | Resume a locked session | Locked-session state | Same as `login` | Same as `login` | Same as `login` |
-| API-30 | `use_recovery_code` | Reset credential(s) via a one-time recovery code | **Unauthenticated** | Code must match an unused hashed code | Verify code, invalidate all old codes, set new credential, generate new codes | credential recovery |
+| API-29 | `unlock_session` | Resume a locked session | Locked-session state | Same as `login` | Same as `login` | Same gap as `login` above |
+| API-30 | `use_recovery_code` | Reset credential(s) via a one-time recovery code | **Unauthenticated** | Code must match an unused hashed code | Verify code, invalidate all old codes, set new credential, generate new codes | ⚠️ **Gap, not yet built:** genuinely unauthenticated (Rule-29's closed set of seven) — no database connection exists to write into, the same limitation restores had before S14's manifest. Unlike restores, there's no equivalent "record it in a file instead" answer here without writing something credential-adjacent to an unencrypted sidecar, which is a real new security question (T-M9.1-6), not a S14-sized fix |
 | API-31 | `get_outstanding_alert` | Fetch current outstanding-month alert state | Auth | — | Read-only | Not audited |
 | API-39 | `run_console_backup_now` | Take an immediate whole-console backup; also the internal call the schedule check makes at login | Auth | — (`kind` inferred: `manual` user-triggered, `scheduled` login-triggered) | Copy + checksum the live DB file; prune `scheduled`/`manual` rows beyond retention, oldest first | `console_backup` |
 
@@ -589,10 +600,10 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 | ID | Command | Purpose | Auth | Key validation | Transaction | Audit |
 |---|---|---|---|---|---|---|
-| API-34 | `check_data_readable` | Can the encrypted database be opened? Decides sign-in vs recovery screen | **Unauthenticated** | — | Read-only | Not audited |
-| API-35 | `list_restore_points` | Retained backups, every `kind`, newest first | **Unauthenticated** | — | Read-only | Not audited |
-| API-36 | `restore_from_backup` | Replace the unreadable database with a retained backup | **Unauthenticated** | **Must verify checksum before overwriting** — mismatch → refused, nothing overwritten. Writes a `pre_restore_safety` backup of the current file first | One transaction: safety-backup → verify → restore → drop any session → leave app at sign-in | On success |
-| API-40 | `restore_from_backup_file` | Replace the current/not-yet-existing database with an admin-picked file | **Unauthenticated** | Same checksum-verify-first requirement. Backs both the first-run "Restore instead" link and Settings' "Restore from a file…" (frontend gates the latter behind its own checklist-confirm modal) | Same as API-36 | On success |
+| API-34 | `check_data_readable` | Can the encrypted database be opened? Decides sign-in vs recovery screen | **Unauthenticated** | Two-layer (S14): sidecar exists and parses; database file exists and is page-aligned. A structurally-plausible-but-actually-corrupted file still passes — `login`'s own Argon2-succeeds-but-SQLCipher-open-fails ordering is the real backstop, reported as `AppError::DataUnreadable` | Read-only | Not audited |
+| API-35 | `list_restore_points` | Retained backups, every `kind`, newest first | **Unauthenticated** | — | Read-only, reads the S14 backups-manifest (§9.5), never `backups` SQL — same call for this screen and the authenticated Settings Restore card | Not audited |
+| API-36 | `restore_from_backup` | Replace the unreadable database with a retained backup | **Unauthenticated** | **Must verify checksum before overwriting** — mismatch → refused, nothing overwritten. Writes a `pre_restore_safety` backup of the current file first, to the manifest | One transaction: safety-backup → verify → restore → drop any session → leave app at sign-in | No `audit_log` entry (S14 revision — see §9.5's own explanation); the manifest's `pre_restore_safety` entry is the durable record instead |
+| API-40 | `restore_from_backup_file` | Replace the current/not-yet-existing database with an admin-picked file | **Unauthenticated** | Same checksum-verify-first requirement. Backs both the first-run "Restore instead" link and Settings' "Restore from a file…" (frontend gates the latter behind its own checklist-confirm modal) | Same as API-36 | Same as API-36 |
 
 ### Module M9 — Audit Log
 
@@ -602,7 +613,7 @@ Every mutating command runs inside exactly one DB transaction and produces exact
 
 ### 6.1 Command index by ID
 
-`API-01`–`API-06` M1 · `API-07`–`API-09` M2 · `API-10`–`API-11` M4 · `API-12`–`API-15` M5 · `API-16`–`API-20` M6 · `API-21`–`API-25`, `API-37`–`API-38` M7 · `API-26`–`API-31`, `API-39` M8 · `API-32` M9 · `API-33` M3 · `API-34`–`API-36`, `API-40` pre-flight/recovery.
+`API-01`–`API-06` M1 · `API-07`–`API-09`, `API-41`, `API-45` M2 · `API-10`–`API-11`, `API-42`, `API-46` M4 · `API-12`–`API-15` M5 · `API-16`–`API-20` M6 · `API-21`–`API-25`, `API-37`–`API-38` M7 · `API-26`–`API-31`, `API-39` M8 · `API-32` M9 · `API-33` M3 · `API-34`–`API-36`, `API-40` pre-flight/recovery. (API-43/44, M6, are documented in `implementation-readiness/04-api-specification.md` but not yet reflected in this map's M6 grouping — see this file's §6 header note.)
 
 ---
 
@@ -624,7 +635,7 @@ closed → [end]
 |---|---|
 | `awaiting_close` | ✅ Yes — for as long as it stays unclosed. This is the whole point of the amendment |
 | `open` (the current month) | ✅ Only when **no** earlier period is `awaiting_close`; otherwise refused, naming that period |
-| `closed` | ❌ Never via `record_entry` — corrections only, through API-09 (Rule-39) |
+| `closed` | ❌ Never via `record_entry` — corrections only, through API-09 (edit an existing entry) or API-45 (add a new one), Rule-39 |
 
 A period row for the current month is created as `open` as soon as the calendar month begins, whether or not it can yet be written to; its writability is a function of what sits behind it, not of its own state. Multiple periods can sit at `awaiting_close` simultaneously (Rule-20's queue) and **each of them accepts entries**; only the oldest is closable, and each closes through its own instance of this state machine. More than one live period at once is expected to be rare — it requires a month to be left unclosed past the end of the next one.
 
@@ -766,6 +777,10 @@ If the client never takes the external-medium backup, the internal copy and the 
 **Retention.** After every `scheduled`/`manual` write, rows of those two kinds beyond `settings.console_backup_retention_count` (default 10) are deleted, oldest first. `period_close` rows (permanent) and `pre_restore_safety` rows are never pruned by this.
 
 **Restore, and its safety net.** `restore_from_backup_file` is one mechanism behind three surfaces: a plain "Restore from a backup file instead" link on the ordinary first-run setup screen (a brand-new machine has no console to log into and no local backups to choose from — skips straight to a file picker); the same recovery screen the db-error path uses (reworded, not duplicated); and the authenticated Settings "Restore" card (gated behind the frontend's own checklist-confirm modal before the command is called). Every restore path writes one `pre_restore_safety` backup of whatever is currently live **before** overwriting it, and drops any live session immediately after — the restored file may hold a different credential.
+
+**The backups manifest (S14, new).** `backups` rows live *inside* the SQLCipher file — unreadable without a key, and there is no key before login. API-34/35/36/40 are nonetheless unauthenticated of necessity (Rule-29's closed set of seven), so an unencrypted mirror, `backups-manifest.json` (sibling to the existing `auth.json` sidecar), carries exactly the fields §8.6 already says these commands may reveal pre-auth — id/kind/version/checksum/path/created_at, never member data or figures. Every `backups`-row write in `backup.rs` mirrors into it at the same call site, so the two can't drift independently. `list_restore_points` reads the manifest exclusively now — one function, one list, for both the authenticated Restore card and the unauthenticated data-recovery screen, rather than two lists that could disagree. This extends ADR-012's reasoning rather than reversing it: ADR-012 rejected a *second SQL table*; the manifest is a second location for the same reason a disk-encryption tool's keyslot header sits outside the volume it protects — the thing that answers "what's here" can't itself require the key to read.
+
+A `pre_restore_safety` entry is manifest-only, never a `backups` SQL row, and is written *before* the physical overwrite while the live file is still the one it was resolved against — the S10-era version wrote it (and a `cause = 'restore'` `audit_log` row) *after* the overwrite, through the pre-restore `Connection`, whose key context no longer matched the file underneath it. Harmless only by accident (every existing test restored between same-key fixtures); AC-38's actual shape — a different credential on the restored file — is exactly what would have exposed it. No `audit_log` entry is written for a restore at all as of S14: writing one before the overwrite is silently discarded whenever the restored content predates that write (every restore-to-an-older-backup, by definition), and writing one after requires a connection to whatever database is now live, which may need a credential this process never had. The manifest's `pre_restore_safety` entry, with its own `created_at`, is the durable record instead.
 
 **What this doesn't change.** The month-close backup gate, correction versioning, and the single-machine caveat (§9.3) all continue to apply to `period_close` rows exactly as before.
 

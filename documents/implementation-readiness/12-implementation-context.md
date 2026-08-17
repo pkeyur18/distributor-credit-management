@@ -34,7 +34,7 @@ Three containers: **Presentation** (React/TS in WebView) → **Tauri IPC** (type
 
 Modules: M1 Member Directory, M2 Business Volume Entry, M3 Calculation Engine (no exposed commands — purely internal), M4 Member Detail & Chart, M5 Monthly Close, M6 Reports & Exports, M7 Settings, M8 Authentication, M9 Audit Log.
 
-Full detail: [05-data-model-specification.md](05-data-model-specification.md) (entities), [04-api-specification.md](04-api-specification.md) (40-command IPC surface).
+Full detail: [05-data-model-specification.md](05-data-model-specification.md) (entities), [04-api-specification.md](04-api-specification.md) (42-command IPC surface).
 
 ## 5. The Calculation Model — the project's core logic
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-export-monthly"
+description = "Enables the export_monthly command without any pre-configured scope."
+commands.allow = ["export_monthly"]
+
+[[permission]]
+identifier = "deny-export-monthly"
+description = "Denies the export_monthly command without any pre-configured scope."
+commands.deny = ["export_monthly"]

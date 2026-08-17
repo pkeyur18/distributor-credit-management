@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-add-closed-month-entry"
+description = "Enables the add_closed_month_entry command without any pre-configured scope."
+commands.allow = ["add_closed_month_entry"]
+
+[[permission]]
+identifier = "deny-add-closed-month-entry"
+description = "Denies the add_closed_month_entry command without any pre-configured scope."
+commands.deny = ["add_closed_month_entry"]

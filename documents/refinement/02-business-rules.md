@@ -140,8 +140,8 @@ Direct children only, both for counting and for paying.
 **Implementation:** Backup write-then-verify (existence + checksum + readability) happens inside the same transactional boundary as the abort decision.
 
 ### Rule-19 — Every export carries basic fields
-**Rule:** Every exported report includes name, ID, phone number, volume, and Business Volume, regardless of which optional columns are selected.
-**⚠️ See [06](06-decision-log-and-open-items.md) O1** — this rule names five always-present fields including *volume* (Total Business Volume); Rule-33/V6.1 name only four. Not yet reconciled — client answer needed.
+**Rule:** Every exported report includes name, ID, phone number, Business Volume, and Total Business Volume, regardless of which optional columns are selected.
+**Resolved 8 Aug 2026** ([06](06-decision-log-and-open-items.md) C9, D-1): five mandatory columns, matching this rule's own wording. Rule-33 is amended below to match.
 
 ### Rule-20 — Persistent reset alert
 **Rule:** Raised as soon as the month being closed has ended. Appears as **both** an undismissable banner on every screen and a notification-list entry. Clears **only** on successful completion of the reset — no snooze, no dismiss. Multiple outstanding months are all listed; only the oldest can be closed; each closes separately with its own backup and snapshot.
@@ -206,7 +206,8 @@ Direct children only, both for counting and for paying.
 **Rule:** If onboarding would exceed the configured maximum depth, the system **warns but allows**. Consistent with Rule-1's advisory-only pattern.
 
 ### Rule-33 — Configurable export columns
-**Rule:** Every field is offered as an export column, with the client's four defaults (name, ID, phone, Business Volume) pre-ticked. Full optional list: email, address, reference number, introducer name, hierarchy level, direct legs count, Total Business Volume, slab %, Rewards, royalty earned, joining date, active/inactive status.
+**Rule:** Every field is offered as an export column. The five mandatory columns (Rule-19: name, ID, phone, Business Volume, Total Business Volume) are pre-ticked and untickable. Full optional list: email, address, reference number, introducer name, hierarchy level, direct legs count, slab %, Rewards, royalty earned, joining date, active/inactive status.
+**Amended 8 Aug 2026** ([06](06-decision-log-and-open-items.md) C9, D-1): Total Business Volume moves from this optional list to Rule-19's mandatory set.
 
 ### Rule-34 — Phone number uniqueness
 **Rule:** A phone number identifies exactly one member, **unique across active and inactive members alike**. A match on an inactive member offers **reactivation** instead of erroring — preserving the original 6-digit ID, hierarchy position, and full history. A duplicate record is never created.
@@ -249,13 +250,14 @@ The entry screen always names the month it is recording into. An attempt to reco
 **Rule:** The reset zeroes **everything** — Business Volume, TBV, Rewards, royalty all go to 0. Before anything is cleared, an immutable snapshot of the closing period is written per member: Business Volume, TBV, slab %, Rewards, royalty earned, active/inactive status. **All yearly reporting is built exclusively from snapshots, never from live values.**
 **Qualification:** "Immutable" means the snapshot is never *silently* altered — it does **not** mean a closed month can never be corrected. Rule-39 is the actual, later mechanism for correcting a closed month: a new snapshot **version** is written; version 1 is never touched.
 
-### Rule-39 — Entries editable/reversible at any time, including closed months **[NEW/EXTENDS Rule-38]**
+### Rule-39 — Entries editable/reversible at any time, including closed months **[NEW/EXTENDS Rule-38; AMENDED 15 Aug 2026 — extended to creation]**
 **Rule:** An entry can be edited at any time, in any month, open or closed. Editing a closed-month entry rewrites that month's permanent record by writing a **new, versioned snapshot** — the original backup/snapshot version is **never overwritten**. Reporting always reads the latest version. A UI warning is shown before a closed-month edit ("Editing a record recalculates the affected chain and writes a new snapshot version — the original record is never overwritten").
-**Source:** RQ-7, 4 Aug 2026 — a deliberate reversal of the "permanent, uncorrectable once closed" framing, which the client's own validation document states was the architect's gloss on Rule-38, not the client's actual requirement.
+**Amendment (15 Aug 2026):** The correction panel's "Add record" action extends this same mechanism to **creation** — a brand-new entry can be added into an already-closed month, not only an existing one edited. It writes the same kind of new, versioned snapshot, is subject to the same validation and UI warning, and leaves every earlier version byte-identical. `record_entry` is unchanged and still refuses closed periods outright (Rule-36) — a new, dedicated command exists for this correction-panel-only path.
+**Source:** RQ-7, 4 Aug 2026 — a deliberate reversal of the "permanent, uncorrectable once closed" framing, which the client's own validation document states was the architect's gloss on Rule-38, not the client's actual requirement. The 15 Aug 2026 amendment brings the correction panel's UI (already offering "Add record" in the prototype) in line with the previously edit-only backend.
 **Applies to:** M2, M5.
 **Validation:** Same as Rule-16/16a for the corrected value; date must fall within the target month's bounds.
-**Implementation:** `edit_entry` is the **single** mechanism for both live and closed-month corrections — `reverse_entry` is dropped as a separate command, confirmed dead. Every correction writes an `audit_log` row and a new `monthly_snapshots`/`backups` version.
-**Test:** Edit an entry in a closed month; confirm a new snapshot version is created, the original version's data is byte-identical to before, and the yearly-average export reads the new version.
+**Implementation:** `edit_entry` and `add_closed_month_entry` (API-45) are the two mechanisms for closed-month corrections — the former for an existing entry, the latter for a new one; `reverse_entry` is dropped as a separate command, confirmed dead. Every correction writes an `audit_log` row and a new `monthly_snapshots`/`backups` version.
+**Test:** Edit an entry in a closed month; confirm a new snapshot version is created, the original version's data is byte-identical to before, and the yearly-average export reads the new version. Same, for adding a new entry into a closed month via `add_closed_month_entry`.
 
 ### Rule-40 — Consent capture **[NEW]**
 **Rule:** Add Member requires a mandatory consent checkbox; the date is auto-captured. Save is refused until it is ticked.
@@ -522,7 +524,7 @@ All six totals reconcile: **65 / 62 / 510 / 1,000 / 980 / 10**, matching the cli
 | 9 | Royalty rate | 1% | Rule-10 |
 | 10 | Yearly cycle start/end | 1 Jan – 31 Dec | Rule-23 |
 | 11 | Low-contribution threshold | 100 | Rule-24 |
-| 12 | Default export columns | name, ID, phone, Business Volume | Rule-33 |
+| 12 | Default export columns | name, ID, phone, Business Volume, Total Business Volume | Rule-33 |
 | 13 | Session inactivity timeout | **15 minutes** *(no source default — see O3)* | §11.3 |
 | 14 | Whole-console backup schedule | Off | Rule-43 |
 | 15 | Whole-console backup retention count | 10 | Rule-43 |
