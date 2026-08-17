@@ -490,7 +490,6 @@ function ReportingCard({
   const toast = useToast();
   const [start, setStart] = useState(settings.yearlyCycle.start);
   const [end, setEnd] = useState(settings.yearlyCycle.end);
-  const [threshold, setThreshold] = useState(centsToDisplay(settings.lowContributionThreshold));
   const [columns, setColumns] = useState<Set<string>>(new Set(settings.defaultExportColumns));
   const [saving, setSaving] = useState(false);
 
@@ -504,16 +503,10 @@ function ReportingCard({
   }
 
   async function save() {
-    const lowContributionThreshold = displayToCents(threshold);
-    if (lowContributionThreshold === null) {
-      toast.add({ title: "Enter a valid low-contribution threshold", type: "danger" });
-      return;
-    }
     setSaving(true);
     try {
       const updated = await updateSettings({
         yearlyCycle: { start, end },
-        lowContributionThreshold,
         defaultExportColumns: [
           ...MANDATORY_EXPORT_COLUMNS.map((c) => c.key),
           ...OPTIONAL_EXPORT_COLUMNS.filter((c) => columns.has(c.key)).map((c) => c.key),
@@ -532,7 +525,7 @@ function ReportingCard({
     <SectionCard
       id="settings-card-reporting"
       title="Reporting"
-      description="Controls the yearly cycle and the low-contribution report"
+      description="Controls the yearly cycle used for reports and default export columns"
     >
       <div className="grid grid-cols-3 gap-3">
         <div>
@@ -563,17 +556,6 @@ function ReportingCard({
             onChange={(e) => setEnd(e.target.value)}
           />
         </div>
-        <div>
-          <label htmlFor="low-threshold-setting" className="text-label mb-1 block">
-            Low-contribution threshold
-          </label>
-          <Input
-            id="low-threshold-setting"
-            className="num"
-            value={threshold}
-            onChange={(e) => setThreshold(e.target.value)}
-          />
-        </div>
       </div>
       <div className="mt-3.5">
         <div className="text-label mb-1.5">Default export columns</div>
@@ -598,6 +580,59 @@ function ReportingCard({
       </div>
       <Button className="mt-3.5" disabled={saving} onClick={save}>
         Save reporting settings
+      </Button>
+    </SectionCard>
+  );
+}
+
+function LowContributionThresholdCard({
+  settings,
+  onSettingsChange,
+}: {
+  settings: SettingsData;
+  onSettingsChange: (next: SettingsData) => void;
+}) {
+  const toast = useToast();
+  const [threshold, setThreshold] = useState(centsToDisplay(settings.lowContributionThreshold));
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const lowContributionThreshold = displayToCents(threshold);
+    if (lowContributionThreshold === null) {
+      toast.add({ title: "Enter a valid low-contribution threshold", type: "danger" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateSettings({ lowContributionThreshold });
+      onSettingsChange(updated);
+      toast.add({ title: "Threshold saved", type: "success" });
+    } catch (raw) {
+      toast.add({ title: errorMessage(raw), type: "danger" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionCard
+      id="settings-card-low-contribution"
+      title="Low-contribution threshold"
+      description="Default minimum yearly Business Volume used to flag low-contribution members in the Low-contribution report. Override per export on the Reports screen."
+    >
+      <div className="max-w-40">
+        <label htmlFor="low-threshold-setting" className="text-label mb-1 block">
+          Threshold
+        </label>
+        <Input
+          id="low-threshold-setting"
+          className="num"
+          value={threshold}
+          onChange={(e) => setThreshold(e.target.value)}
+        />
+      </div>
+      <Button className="mt-3.5" disabled={saving} onClick={save}>
+        Save threshold
       </Button>
     </SectionCard>
   );
@@ -901,6 +936,7 @@ const SETTINGS_NAV_ITEMS = [
   { id: "settings-card-royalty", label: "Royalty" },
   { id: "settings-card-structure", label: "Structure" },
   { id: "settings-card-reporting", label: "Reporting" },
+  { id: "settings-card-low-contribution", label: "Low-contribution threshold" },
   { id: "settings-card-session", label: "Session" },
   { id: "settings-card-backup", label: "Backup schedule" },
   { id: "settings-card-restore", label: "Restore" },
@@ -996,6 +1032,7 @@ export function Settings() {
           <RoyaltyCard settings={settings} onSettingsChange={setSettings} />
           <StructureGuidanceCard settings={settings} onSettingsChange={setSettings} />
           <ReportingCard settings={settings} onSettingsChange={setSettings} />
+          <LowContributionThresholdCard settings={settings} onSettingsChange={setSettings} />
           <SessionCard settings={settings} onSettingsChange={setSettings} />
           <BackupScheduleCard
             backupSettings={backupSettings}
