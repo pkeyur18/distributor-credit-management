@@ -1,0 +1,41 @@
+name: Sync main to develop
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-main-to-develop:
+    name: sync-main-to-develop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for existing open sync PR
+        id: existing
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          count=$(gh pr list --repo ${{ github.repository }} --base develop --head main --state open --json number --jq 'length')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Open sync PR
+        if: steps.existing.outputs.count == '0'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create --repo ${{ github.repository }} --base develop --head main \
+            --title "chore: sync main into develop" \
+            --body "Automated sync of main into develop so develop doesn't drift behind main after a release or hotfix." \
+          || echo "no diff between main and develop, nothing to sync"
+
+      - name: Enable auto-merge on sync PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          number=$(gh pr list --repo ${{ github.repository }} --base develop --head main --state open --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh pr merge --auto --merge --repo ${{ github.repository }} "$number"
+          fi
