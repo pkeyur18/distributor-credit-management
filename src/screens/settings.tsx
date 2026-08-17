@@ -480,6 +480,19 @@ const MONTH_START_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
   label: new Date(2000, i, 1).toLocaleDateString(undefined, { month: "long" }),
 }));
 
+const MONTH_END_OPTIONS = Array.from({ length: 12 }, (_, i) => {
+  const lastDay = new Date(2001, i + 1, 0).getDate();
+  return {
+    value: `${String(i + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+    label: new Date(2000, i, 1).toLocaleDateString(undefined, { month: "long" }),
+  };
+});
+
+function monthEndOptionFor(end: string): string {
+  const month = end.slice(0, 2);
+  return MONTH_END_OPTIONS.find((o) => o.value.startsWith(month))?.value ?? MONTH_END_OPTIONS[11].value;
+}
+
 function ReportingCard({
   settings,
   onSettingsChange,
@@ -489,7 +502,7 @@ function ReportingCard({
 }) {
   const toast = useToast();
   const [start, setStart] = useState(settings.yearlyCycle.start);
-  const [end, setEnd] = useState(settings.yearlyCycle.end);
+  const [end, setEnd] = useState(monthEndOptionFor(settings.yearlyCycle.end));
   const [columns, setColumns] = useState<Set<string>>(new Set(settings.defaultExportColumns));
   const [saving, setSaving] = useState(false);
 
@@ -549,12 +562,18 @@ function ReportingCard({
           <label htmlFor="cycle-end" className="text-label mb-1 block">
             Yearly cycle ends
           </label>
-          <Input
+          <select
             id="cycle-end"
-            placeholder="MM-DD"
+            className="h-8.5 w-full rounded-sm border border-border bg-surface px-2.5 text-body text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
             value={end}
             onChange={(e) => setEnd(e.target.value)}
-          />
+          >
+            {MONTH_END_OPTIONS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
       <div className="mt-3.5">
