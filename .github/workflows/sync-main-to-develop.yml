@@ -33,7 +33,7 @@ jobs:
 
       - name: Enable auto-merge on sync PR
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
         run: |
           number=$(gh pr list --repo ${{ github.repository }} --base develop --head main --state open --json number --jq '.[0].number')
           if [ -n "$number" ]; then
