@@ -25,7 +25,7 @@ jobs:
   sync-version-on-release-pr:
     name: sync-version-on-release-pr
     needs: release-please
-    if: needs.release-please.outputs.release_created != 'true'
+    if: success() && needs.release-please.outputs.release_created != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Find open release-please PR
@@ -33,7 +33,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          branch=$(gh pr list --base main --state open --json headRefName \
+          branch=$(gh pr list --repo ${{ github.repository }} --base main --state open --json headRefName \
             --jq '[.[] | select(.headRefName | startswith("release-please--branches--main"))][0].headRefName')
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
 
