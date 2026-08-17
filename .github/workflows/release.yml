@@ -21,6 +21,7 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          target-branch: main
 
   sync-version-on-release-pr:
     name: sync-version-on-release-pr
@@ -61,6 +62,12 @@ jobs:
             git commit -m "chore: sync Cargo.toml and tauri.conf.json version"
             git push origin HEAD:${{ steps.find-pr.outputs.branch }}
           fi
+
+      - name: Enable auto-merge on release PR
+        if: steps.find-pr.outputs.branch != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --auto --merge --repo ${{ github.repository }} "${{ steps.find-pr.outputs.branch }}"
 
   build-installers:
     name: build-installers

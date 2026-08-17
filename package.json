@@ -1,7 +1,7 @@
 {
   "name": "bvconsole",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.1.0",
   "type": "module",
   "overrides": {
     "serialize-javascript": "^7.1.0"
