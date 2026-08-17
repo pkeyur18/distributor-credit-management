@@ -480,6 +480,19 @@ const MONTH_START_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
   label: new Date(2000, i, 1).toLocaleDateString(undefined, { month: "long" }),
 }));
 
+const MONTH_END_OPTIONS = Array.from({ length: 12 }, (_, i) => {
+  const lastDay = new Date(2001, i + 1, 0).getDate();
+  return {
+    value: `${String(i + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+    label: new Date(2000, i, 1).toLocaleDateString(undefined, { month: "long" }),
+  };
+});
+
+function monthEndOptionFor(end: string): string {
+  const month = end.slice(0, 2);
+  return MONTH_END_OPTIONS.find((o) => o.value.startsWith(month))?.value ?? MONTH_END_OPTIONS[11].value;
+}
+
 function ReportingCard({
   settings,
   onSettingsChange,
@@ -489,8 +502,7 @@ function ReportingCard({
 }) {
   const toast = useToast();
   const [start, setStart] = useState(settings.yearlyCycle.start);
-  const [end, setEnd] = useState(settings.yearlyCycle.end);
-  const [threshold, setThreshold] = useState(centsToDisplay(settings.lowContributionThreshold));
+  const [end, setEnd] = useState(monthEndOptionFor(settings.yearlyCycle.end));
   const [columns, setColumns] = useState<Set<string>>(new Set(settings.defaultExportColumns));
   const [saving, setSaving] = useState(false);
 
@@ -504,16 +516,10 @@ function ReportingCard({
   }
 
   async function save() {
-    const lowContributionThreshold = displayToCents(threshold);
-    if (lowContributionThreshold === null) {
-      toast.add({ title: "Enter a valid low-contribution threshold", type: "danger" });
-      return;
-    }
     setSaving(true);
     try {
       const updated = await updateSettings({
         yearlyCycle: { start, end },
-        lowContributionThreshold,
         defaultExportColumns: [
           ...MANDATORY_EXPORT_COLUMNS.map((c) => c.key),
           ...OPTIONAL_EXPORT_COLUMNS.filter((c) => columns.has(c.key)).map((c) => c.key),
@@ -532,7 +538,7 @@ function ReportingCard({
     <SectionCard
       id="settings-card-reporting"
       title="Reporting"
-      description="Controls the yearly cycle and the low-contribution report"
+      description="Controls the yearly cycle used for reports and default export columns"
     >
       <div className="grid grid-cols-3 gap-3">
         <div>
@@ -556,23 +562,18 @@ function ReportingCard({
           <label htmlFor="cycle-end" className="text-label mb-1 block">
             Yearly cycle ends
           </label>
-          <Input
+          <select
             id="cycle-end"
-            placeholder="MM-DD"
+            className="h-8.5 w-full rounded-sm border border-border bg-surface px-2.5 text-body text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
             value={end}
             onChange={(e) => setEnd(e.target.value)}
-          />
-        </div>
-        <div>
-          <label htmlFor="low-threshold-setting" className="text-label mb-1 block">
-            Low-contribution threshold
-          </label>
-          <Input
-            id="low-threshold-setting"
-            className="num"
-            value={threshold}
-            onChange={(e) => setThreshold(e.target.value)}
-          />
+          >
+            {MONTH_END_OPTIONS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
       <div className="mt-3.5">
@@ -598,6 +599,59 @@ function ReportingCard({
       </div>
       <Button className="mt-3.5" disabled={saving} onClick={save}>
         Save reporting settings
+      </Button>
+    </SectionCard>
+  );
+}
+
+function LowContributionThresholdCard({
+  settings,
+  onSettingsChange,
+}: {
+  settings: SettingsData;
+  onSettingsChange: (next: SettingsData) => void;
+}) {
+  const toast = useToast();
+  const [threshold, setThreshold] = useState(centsToDisplay(settings.lowContributionThreshold));
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const lowContributionThreshold = displayToCents(threshold);
+    if (lowContributionThreshold === null) {
+      toast.add({ title: "Enter a valid low-contribution threshold", type: "danger" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateSettings({ lowContributionThreshold });
+      onSettingsChange(updated);
+      toast.add({ title: "Threshold saved", type: "success" });
+    } catch (raw) {
+      toast.add({ title: errorMessage(raw), type: "danger" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionCard
+      id="settings-card-low-contribution"
+      title="Low-contribution threshold"
+      description="Default minimum yearly Business Volume used to flag low-contribution members in the Low-contribution report. Override per export on the Reports screen."
+    >
+      <div className="max-w-40">
+        <label htmlFor="low-threshold-setting" className="text-label mb-1 block">
+          Threshold
+        </label>
+        <Input
+          id="low-threshold-setting"
+          className="num"
+          value={threshold}
+          onChange={(e) => setThreshold(e.target.value)}
+        />
+      </div>
+      <Button className="mt-3.5" disabled={saving} onClick={save}>
+        Save threshold
       </Button>
     </SectionCard>
   );
@@ -901,6 +955,7 @@ const SETTINGS_NAV_ITEMS = [
   { id: "settings-card-royalty", label: "Royalty" },
   { id: "settings-card-structure", label: "Structure" },
   { id: "settings-card-reporting", label: "Reporting" },
+  { id: "settings-card-low-contribution", label: "Low-contribution threshold" },
   { id: "settings-card-session", label: "Session" },
   { id: "settings-card-backup", label: "Backup schedule" },
   { id: "settings-card-restore", label: "Restore" },
@@ -996,6 +1051,7 @@ export function Settings() {
           <RoyaltyCard settings={settings} onSettingsChange={setSettings} />
           <StructureGuidanceCard settings={settings} onSettingsChange={setSettings} />
           <ReportingCard settings={settings} onSettingsChange={setSettings} />
+          <LowContributionThresholdCard settings={settings} onSettingsChange={setSettings} />
           <SessionCard settings={settings} onSettingsChange={setSettings} />
           <BackupScheduleCard
             backupSettings={backupSettings}
