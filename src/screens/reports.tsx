@@ -230,7 +230,7 @@ export function Reports() {
             <div className="text-caption text-muted-text mb-3">
               Always included: {MANDATORY_EXPORT_COLUMNS.map((c) => c.label).join(", ")},
               Active/inactive status (a deactivated row&apos;s colour is never shown without this
-              label — NFR-8)
+              label)
             </div>
             <div className="flex flex-col gap-1.5">
               {OPTIONAL_EXPORT_COLUMNS.filter((c) => c.key !== "active_status").map((c) => (

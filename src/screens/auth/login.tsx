@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { AlertTriangle, Lock } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock } from "lucide-react";
 
 import { AuthBrandMark } from "@/components/auth-brand-mark";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -25,8 +25,17 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [lockedSeconds, setLockedSeconds] = useState<number | null>(null);
-  const { markAuthenticated } = useAuth();
+  const { markAuthenticated, signOutNotice, clearSignOutNotice } = useAuth();
   const navigate = useNavigate();
+
+  // Carries a restore's success confirmation across the forced sign-out
+  // redirect — a toast alone risks being missed at exactly the moment the
+  // operator most needs to know it worked. Cleared on leaving this screen
+  // so it doesn't linger through a later, ordinary sign-out.
+  useEffect(() => {
+    return () => clearSignOutNotice();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (lockedSeconds === null || lockedSeconds <= 0) return;
@@ -92,6 +101,12 @@ export function Login() {
         </AuthBrandMark>
         <h1 className="mt-3.5 text-center text-title">Member Rewards Console</h1>
         <p className="mt-1 text-center text-caption">Sign in to continue</p>
+        {signOutNotice && (
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-caption text-success">
+            <CheckCircle2 className="size-3.5 shrink-0" />
+            {signOutNotice}
+          </p>
+        )}
 
         <div className="mt-4">
           {lockedOut ? (

@@ -13,7 +13,7 @@ import { ChecklistConfirmDialog } from "@/components/checklist-confirm-dialog";
 import { RecalcWarningDialog } from "@/components/recalc-warning-dialog";
 import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/components/ui/toast";
-import { centsToDisplay, displayToCents } from "@/lib/utils";
+import { centsToDisplay, cn, displayToCents } from "@/lib/utils";
 import { getDirectChildrenChart } from "@/lib/ipc/m4-search";
 import {
   addSlabRow,
@@ -699,7 +699,7 @@ function SessionCard({
         <Input id="session-timeout" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
       </div>
       <Button className="mt-3.5" disabled={saving} onClick={save}>
-        Save
+        Save timeout
       </Button>
     </SectionCard>
   );
@@ -821,7 +821,7 @@ function BackupScheduleCard({
       </InputHint>
       <div className="mt-3.5 flex gap-2">
         <Button variant="secondary" onClick={saveRetention}>
-          Save
+          Save retention
         </Button>
         <Button variant="secondary" onClick={saveFolder}>
           Save folder
@@ -870,12 +870,14 @@ function RestoreCard({
       }
       setConfirmTarget(null);
       onRestored();
-      toast.add({ title: "Restored — sign in again", type: "success" });
       // T-M8.6-4: the backend already dropped the session (a restored file
       // may hold a different credential) — the frontend must follow it to
       // sign-in rather than staying on a screen whose next authenticated
-      // call would just fail with `auth_required`.
-      markSignedOut();
+      // call would just fail with `auth_required`. The confirmation rides
+      // to Login as a persistent notice, not a toast: a 3.4s toast racing
+      // this redirect risks the operator missing it at the exact moment
+      // they need to know the restore actually completed.
+      markSignedOut("Restore complete — sign in again.");
     } catch (raw) {
       toast.add({ title: errorMessage(raw), type: "danger" });
     } finally {
@@ -950,28 +952,54 @@ function RestoreCard({
 
 // --- Screen ---
 
-const SETTINGS_NAV_ITEMS = [
-  { id: "settings-card-slab", label: "Slab table" },
-  { id: "settings-card-royalty", label: "Royalty" },
-  { id: "settings-card-structure", label: "Structure" },
-  { id: "settings-card-reporting", label: "Reporting" },
-  { id: "settings-card-low-contribution", label: "Low-contribution threshold" },
-  { id: "settings-card-session", label: "Session" },
-  { id: "settings-card-backup", label: "Backup schedule" },
-  { id: "settings-card-restore", label: "Restore" },
+const SETTINGS_NAV_GROUPS = [
+  {
+    label: "Calculation rules",
+    items: [
+      { id: "settings-card-slab", label: "Slab table" },
+      { id: "settings-card-royalty", label: "Royalty" },
+      { id: "settings-card-structure", label: "Structure" },
+    ],
+  },
+  {
+    label: "Reporting",
+    items: [
+      { id: "settings-card-reporting", label: "Reporting" },
+      { id: "settings-card-low-contribution", label: "Low-contribution threshold" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { id: "settings-card-session", label: "Session" },
+      { id: "settings-card-backup", label: "Backup schedule" },
+      { id: "settings-card-restore", label: "Restore" },
+    ],
+  },
 ];
 
 function SettingsNav() {
   return (
-    <nav className="sticky top-20 flex flex-col gap-0.5">
-      {SETTINGS_NAV_ITEMS.map((item) => (
-        <a
-          key={item.id}
-          href={`#${item.id}`}
-          className="flex h-8 items-center rounded-sm px-2.5 text-[13.5px] text-ink hover:bg-bg"
+    <nav className="sticky top-20 flex flex-col gap-4">
+      {SETTINGS_NAV_GROUPS.map((group, i) => (
+        <div
+          key={group.label}
+          className={cn(
+            "flex flex-col gap-0.5",
+            i > 0 && "border-t border-border pt-3.5",
+          )}
         >
-          {item.label}
-        </a>
+          <div className="text-label text-muted-text px-2.5 pb-1">{group.label}</div>
+          {group.items.map((item) => (
+            <a
+              key={item.id}
+              href={`#${item.id}`}
+              className="flex h-8 items-center rounded-sm px-2.5 text-[13.5px] text-ink transition-[background] duration-100 hover:bg-bg"
+            >
+              {item.label}
+            </a>
+          ))}
+        </div>
       ))}
     </nav>
   );

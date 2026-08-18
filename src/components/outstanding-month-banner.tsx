@@ -35,7 +35,7 @@ export function OutstandingMonthBanner({ alert }: OutstandingMonthBannerProps) {
           borderColor: "color-mix(in srgb, var(--warning) 35%, var(--border))",
         }}
       >
-        <div className="flex items-center gap-2.5 text-[13px]" style={{ color: "var(--text)" }}>
+        <div className="flex items-center gap-2.5 text-[13px]" style={{ color: "var(--ink)" }}>
           <AlertTriangle
             className="h-4.25 w-4.25 shrink-0"
             style={{ color: "var(--warning)" }}

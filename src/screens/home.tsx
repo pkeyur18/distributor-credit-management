@@ -81,27 +81,15 @@ export function Home() {
         </div>
       )}
 
-      {nodes && slabTable && viewMonth && (
-        <StatRow nodes={nodes} slabTable={slabTable} viewMonth={viewMonth} />
-      )}
-
-      {lockStatus && (
-        <MonthSwitcher
-          months={lockStatus.recordablePeriodMonths}
-          value={viewMonth ?? lockStatus.recordablePeriodMonths[0]}
-          onChange={setSelectedMonth}
-        />
-      )}
-
       <div className="mt-4 rounded-lg border border-border bg-surface p-4.5">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.75 top-1/2 size-3.75 -translate-y-1/2 text-muted-text" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-text" />
           <Input
             id="home-search"
             placeholder="Search by name, 6-digit member number or phone"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="pl-8"
+            className="h-11 pl-9 text-[15px]"
           />
         </div>
         <div className="mt-3">
@@ -121,6 +109,21 @@ export function Home() {
           )}
         </div>
       </div>
+
+      {lockStatus && (
+        <MonthSwitcher
+          months={lockStatus.recordablePeriodMonths}
+          value={viewMonth ?? lockStatus.recordablePeriodMonths[0]}
+          onChange={setSelectedMonth}
+        />
+      )}
+
+      {nodes && slabTable && viewMonth && (
+        <>
+          <div className="text-label text-muted-text mt-4">Today's standing</div>
+          <StatRow nodes={nodes} slabTable={slabTable} viewMonth={viewMonth} />
+        </>
+      )}
 
       {nodes && slabTable && (
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
