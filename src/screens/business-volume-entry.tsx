@@ -246,7 +246,8 @@ export function BusinessVolumeEntry() {
                       BusinessVolumeEntry.amount/MemberPeriodFigures below,
                       which stay ×100 integers per ADR-004 — two different,
                       pre-existing conventions live on the wire today. */}
-                    TBV <span className="num">{selected.totalBusinessVolume.toFixed(2)}</span>
+                    Total Business Volume{" "}
+                    <span className="num">{selected.totalBusinessVolume.toFixed(2)}</span>
                   </span>
                   <Pill variant="slab">{selected.slabPct}%</Pill>
                 </div>

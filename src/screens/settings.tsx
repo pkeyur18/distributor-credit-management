@@ -699,7 +699,7 @@ function SessionCard({
         <Input id="session-timeout" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
       </div>
       <Button className="mt-3.5" disabled={saving} onClick={save}>
-        Save
+        Save timeout
       </Button>
     </SectionCard>
   );
@@ -821,7 +821,7 @@ function BackupScheduleCard({
       </InputHint>
       <div className="mt-3.5 flex gap-2">
         <Button variant="secondary" onClick={saveRetention}>
-          Save
+          Save retention
         </Button>
         <Button variant="secondary" onClick={saveFolder}>
           Save folder
