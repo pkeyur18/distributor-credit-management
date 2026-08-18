@@ -221,6 +221,52 @@ describe("MemberModal — add mode", () => {
     expect(onSubmitAdd).not.toHaveBeenCalled();
     expect(onSaved).toHaveBeenCalled();
   });
+
+  it("clears typed fields after close and reopen", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderModal(
+      <MemberModal
+        open
+        onOpenChange={() => {}}
+        mode="add"
+        noMembersYet
+        onSubmitAdd={vi.fn()}
+        onSearchRef={async () => [REF_RESULT]}
+      />,
+    );
+
+    await fillRequiredFields(user);
+    expect(screen.getByLabelText(/^Name/)).toHaveValue("Asha Patel");
+
+    rerender(
+      <ToastProvider>
+        <MemberModal
+          open={false}
+          onOpenChange={() => {}}
+          mode="add"
+          noMembersYet
+          onSubmitAdd={vi.fn()}
+          onSearchRef={async () => [REF_RESULT]}
+        />
+      </ToastProvider>,
+    );
+    rerender(
+      <ToastProvider>
+        <MemberModal
+          open
+          onOpenChange={() => {}}
+          mode="add"
+          noMembersYet
+          onSubmitAdd={vi.fn()}
+          onSearchRef={async () => [REF_RESULT]}
+        />
+      </ToastProvider>,
+    );
+
+    expect(screen.getByLabelText(/^Name/)).toHaveValue("");
+    expect(screen.getByLabelText(/^Phone/)).toHaveValue("");
+    expect(screen.getByLabelText(/^Address/)).toHaveValue("");
+  });
 });
 
 describe("MemberModal — edit mode", () => {
