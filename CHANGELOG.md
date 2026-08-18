@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.3.0...bvconsole-v0.3.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* refactor Settings nav, enhance Home layout, and improve UX ([3c37ecb](https://github.com/pkeyur18/distributor-credit-management/commit/3c37ecbaaddd80513c48b5706adf01120033f6ff))
+
 ## [0.3.0](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.2.0...bvconsole-v0.3.0) (2026-08-17)
 
 
