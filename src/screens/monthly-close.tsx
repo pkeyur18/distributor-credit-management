@@ -212,7 +212,13 @@ function CloseWizard({
             >
               {backupConfirmed && <CheckCircle2 className="h-3.25 w-3.25" />}
             </span>
-            <span>Backup copy generated and confirmed</span>
+            <span>
+              {backupConfirmed
+                ? externalPath
+                  ? "Internal and external backup copies confirmed"
+                  : "Internal backup copy confirmed — no external copy was chosen"
+                : "Backup copy generated and confirmed"}
+            </span>
           </div>
           {backupConfirmed && (
             <p className="mt-2.5 text-label text-muted-text">
