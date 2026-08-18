@@ -54,7 +54,7 @@ proptest! {
         // Every child's own contribution rolls up into the parent's, so
         // parent TBV is always at least as large as any single child's —
         // this is what makes Rule-9's guarantee hold under monotonicity.
-        let figures = compute_node(own_bv, &children, &table, 3, 1);
+        let figures = compute_node(own_bv, &children, &table, 3, 1.0);
         prop_assert!(figures.differential >= 0, "differential total went negative: {}", figures.differential);
 
         for child in &children {

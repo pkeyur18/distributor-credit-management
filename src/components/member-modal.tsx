@@ -105,7 +105,11 @@ function MemberModal({
   // of transient state below, and nothing else ever should.
   const resetKey = open ? `${mode}:${member?.id ?? "new"}` : null;
   const [lastResetKey, setLastResetKey] = useState<string | null>(null);
-  if (resetKey !== null && resetKey !== lastResetKey) {
+  if (resetKey === null && lastResetKey !== null) {
+    // Forget the last-reset identity on close so a same-identity reopen
+    // (e.g. add → add) still triggers the reset branch below.
+    setLastResetKey(null);
+  } else if (resetKey !== null && resetKey !== lastResetKey) {
     setLastResetKey(resetKey);
     if (mode === "edit" && member) {
       setForm({
