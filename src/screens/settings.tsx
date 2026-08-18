@@ -994,7 +994,7 @@ function SettingsNav() {
             <a
               key={item.id}
               href={`#${item.id}`}
-              className="flex h-8 items-center rounded-sm px-2.5 text-[13.5px] text-ink hover:bg-bg"
+              className="flex h-8 items-center rounded-sm px-2.5 text-[13.5px] text-ink transition-[background] duration-100 hover:bg-bg"
             >
               {item.label}
             </a>

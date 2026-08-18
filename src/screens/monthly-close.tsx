@@ -58,7 +58,11 @@ function WizardIconWrap({
   return (
     <div
       className={`mx-auto mb-4.5 flex h-13 w-13 items-center justify-center rounded-2xl ${
-        variant === "success" ? "bg-success-weak text-success" : "bg-accent-weak text-accent"
+        variant === "success"
+          ? // The wizard's one authored moment: this icon only ever appears once
+            // per close, at the single highest-stakes action in the product.
+            "animate-in zoom-in-75 fade-in duration-600 ease-out motion-reduce:animate-none bg-success-weak text-success"
+          : "bg-accent-weak text-accent"
       }`}
     >
       {children}
