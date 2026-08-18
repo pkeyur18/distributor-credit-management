@@ -228,7 +228,15 @@ export function BusinessVolumeEntry() {
                 <div className="mono text-[11px] text-muted-text">
                   #{selected.id} · {selected.phone}
                 </div>
-                <div className="mt-1 flex items-center gap-2 text-caption">
+                <div
+                  // Keyed on the figures themselves, not selected.id: Product
+                  // Principle 1 promises this updates instantly on save, so a
+                  // remount-driven pulse here makes that visible, not just
+                  // true. Re-selecting the same unchanged member replays
+                  // nothing — only an actual figure change does.
+                  key={`${selected.totalBusinessVolume}-${selected.slabPct}`}
+                  className="animate-in fade-in zoom-in-95 mt-1 flex items-center gap-2 text-caption duration-300 motion-reduce:animate-none"
+                >
                   <span>
                     {/* SearchResult.totalBusinessVolume is already a real-unit
                       decimal (search_members converts server-side), unlike

@@ -50,7 +50,7 @@ export function Sidebar() {
               to={to}
               end={to === "/"}
               className={({ isActive }) =>
-                `flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] ${
+                `flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] transition-[background,color] duration-100 ${
                   isActive ? "bg-accent-weak font-semibold text-accent" : "text-ink hover:bg-bg"
                 }`
               }
@@ -70,7 +70,7 @@ export function Sidebar() {
         <button
           type="button"
           onClick={() => setTheme(THEME_CYCLE[theme])}
-          className="flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] text-ink hover:bg-bg"
+          className="flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] text-ink transition-[background] duration-100 hover:bg-bg"
           aria-label={`Theme: ${theme}. Click to change.`}
         >
           <ThemeIcon className="h-4 w-4 opacity-75" />
@@ -79,7 +79,7 @@ export function Sidebar() {
         <button
           type="button"
           onClick={handleLock}
-          className="flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] text-ink hover:bg-bg"
+          className="flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] text-ink transition-[background] duration-100 hover:bg-bg"
         >
           <Lock className="h-4 w-4 opacity-75" />
           Lock session
@@ -87,7 +87,7 @@ export function Sidebar() {
         <button
           type="button"
           onClick={handleSignOut}
-          className="flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] text-ink hover:bg-bg"
+          className="flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] text-ink transition-[background] duration-100 hover:bg-bg"
         >
           <LogOut className="h-4 w-4 opacity-75" />
           Sign out
