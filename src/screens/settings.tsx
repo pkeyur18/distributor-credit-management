@@ -950,28 +950,48 @@ function RestoreCard({
 
 // --- Screen ---
 
-const SETTINGS_NAV_ITEMS = [
-  { id: "settings-card-slab", label: "Slab table" },
-  { id: "settings-card-royalty", label: "Royalty" },
-  { id: "settings-card-structure", label: "Structure" },
-  { id: "settings-card-reporting", label: "Reporting" },
-  { id: "settings-card-low-contribution", label: "Low-contribution threshold" },
-  { id: "settings-card-session", label: "Session" },
-  { id: "settings-card-backup", label: "Backup schedule" },
-  { id: "settings-card-restore", label: "Restore" },
+const SETTINGS_NAV_GROUPS = [
+  {
+    label: "Calculation rules",
+    items: [
+      { id: "settings-card-slab", label: "Slab table" },
+      { id: "settings-card-royalty", label: "Royalty" },
+      { id: "settings-card-structure", label: "Structure" },
+    ],
+  },
+  {
+    label: "Reporting",
+    items: [
+      { id: "settings-card-reporting", label: "Reporting" },
+      { id: "settings-card-low-contribution", label: "Low-contribution threshold" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { id: "settings-card-session", label: "Session" },
+      { id: "settings-card-backup", label: "Backup schedule" },
+      { id: "settings-card-restore", label: "Restore" },
+    ],
+  },
 ];
 
 function SettingsNav() {
   return (
-    <nav className="sticky top-20 flex flex-col gap-0.5">
-      {SETTINGS_NAV_ITEMS.map((item) => (
-        <a
-          key={item.id}
-          href={`#${item.id}`}
-          className="flex h-8 items-center rounded-sm px-2.5 text-[13.5px] text-ink hover:bg-bg"
-        >
-          {item.label}
-        </a>
+    <nav className="sticky top-20 flex flex-col gap-4">
+      {SETTINGS_NAV_GROUPS.map((group) => (
+        <div key={group.label} className="flex flex-col gap-0.5">
+          <div className="text-label text-muted-text px-2.5 pb-1">{group.label}</div>
+          {group.items.map((item) => (
+            <a
+              key={item.id}
+              href={`#${item.id}`}
+              className="flex h-8 items-center rounded-sm px-2.5 text-[13.5px] text-ink hover:bg-bg"
+            >
+              {item.label}
+            </a>
+          ))}
+        </div>
       ))}
     </nav>
   );
