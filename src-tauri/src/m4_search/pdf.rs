@@ -757,7 +757,7 @@ mod tests {
             ],
             royalty: Some(RoyaltyLine {
                 qualifying_children: 1,
-                rate_percent: 5,
+                rate_percent: 5.0,
                 amount: 5_942,
             }),
             rewards_total: 31_827,
@@ -917,7 +917,7 @@ mod tests {
             differentials,
             royalty: Some(RoyaltyLine {
                 qualifying_children: 80,
-                rate_percent: 5,
+                rate_percent: 5.0,
                 amount: 800,
             }),
             rewards_total: 1_600,
@@ -970,7 +970,7 @@ mod tests {
             differentials,
             royalty: Some(RoyaltyLine {
                 qualifying_children: 3,
-                rate_percent: 5,
+                rate_percent: 5.0,
                 amount: 72_598,
             }),
             rewards_total: 169_933,

@@ -214,7 +214,7 @@ pub struct Settings {
     pub level3_width: i64,
     pub level4_width: i64,
     pub royalty_qualifying_count: i64,
-    pub royalty_rate_percent: i64,
+    pub royalty_rate_percent: f64,
     pub yearly_cycle: YearlyCycle,
     pub low_contribution_threshold: i64,
     pub default_export_columns: Vec<String>,
@@ -235,6 +235,15 @@ fn setting_value(conn: &Connection, key: &str) -> Result<String, AppError> {
 }
 
 fn setting_i64(conn: &Connection, key: &str) -> Result<i64, AppError> {
+    setting_value(conn, key)?
+        .parse()
+        .map_err(|_| AppError::Validation {
+            field: key.into(),
+            message: format!("Setting '{key}' is not a valid number."),
+        })
+}
+
+fn setting_f64(conn: &Connection, key: &str) -> Result<f64, AppError> {
     setting_value(conn, key)?
         .parse()
         .map_err(|_| AppError::Validation {
@@ -286,7 +295,7 @@ pub fn get_settings(conn: &Connection) -> Result<Settings, AppError> {
         level3_width: setting_i64(conn, "level_3_width")?,
         level4_width: setting_i64(conn, "level_4_width")?,
         royalty_qualifying_count: setting_i64(conn, "royalty_qualifying_count")?,
-        royalty_rate_percent: setting_i64(conn, "royalty_rate_percent")?,
+        royalty_rate_percent: setting_f64(conn, "royalty_rate_percent")?,
         yearly_cycle,
         low_contribution_threshold: setting_i64(conn, "low_contribution_threshold")?,
         default_export_columns,
@@ -311,7 +320,7 @@ pub struct SettingsPatch {
     pub level3_width: Option<i64>,
     pub level4_width: Option<i64>,
     pub royalty_qualifying_count: Option<i64>,
-    pub royalty_rate_percent: Option<i64>,
+    pub royalty_rate_percent: Option<f64>,
     pub yearly_cycle: Option<YearlyCycle>,
     pub low_contribution_threshold: Option<i64>,
     pub default_export_columns: Option<Vec<String>>,
@@ -841,7 +850,7 @@ mod tests {
         update_settings(
             &conn,
             SettingsPatch {
-                royalty_rate_percent: Some(5),
+                royalty_rate_percent: Some(5.0),
                 ..Default::default()
             },
         )
