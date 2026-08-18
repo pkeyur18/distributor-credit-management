@@ -13,7 +13,7 @@ import { ChecklistConfirmDialog } from "@/components/checklist-confirm-dialog";
 import { RecalcWarningDialog } from "@/components/recalc-warning-dialog";
 import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/components/ui/toast";
-import { centsToDisplay, displayToCents } from "@/lib/utils";
+import { centsToDisplay, cn, displayToCents } from "@/lib/utils";
 import { getDirectChildrenChart } from "@/lib/ipc/m4-search";
 import {
   addSlabRow,
@@ -981,8 +981,14 @@ const SETTINGS_NAV_GROUPS = [
 function SettingsNav() {
   return (
     <nav className="sticky top-20 flex flex-col gap-4">
-      {SETTINGS_NAV_GROUPS.map((group) => (
-        <div key={group.label} className="flex flex-col gap-0.5">
+      {SETTINGS_NAV_GROUPS.map((group, i) => (
+        <div
+          key={group.label}
+          className={cn(
+            "flex flex-col gap-0.5",
+            i > 0 && "border-t border-border pt-3.5",
+          )}
+        >
           <div className="text-label text-muted-text px-2.5 pb-1">{group.label}</div>
           {group.items.map((item) => (
             <a
