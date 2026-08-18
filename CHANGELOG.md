@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.2](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.3.1...bvconsole-v0.3.2) (2026-08-18)
+
+
+### Bug Fixes
+
+* reset add-member form on reopen after close ([648c85b](https://github.com/pkeyur18/distributor-credit-management/commit/648c85bc0a7187cc46545dab56548469b18d5338))
+* reset add-member form on reopen after close ([8063d73](https://github.com/pkeyur18/distributor-credit-management/commit/8063d73b5179c2ed880f8ceded573cf24fdb8c3f))
+* royalty rate percent accepts decimal values (e.g. 1.50, 1.25) ([427dfa9](https://github.com/pkeyur18/distributor-credit-management/commit/427dfa9ea853fa015a8f25b792ee657bf1bafbe3))
+* royalty rate percent accepts decimal values (e.g. 1.50, 1.25) ([299339a](https://github.com/pkeyur18/distributor-credit-management/commit/299339ac3f26172106428e1f2e4eddf95d6326c3))
+
 ## [0.3.1](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.3.0...bvconsole-v0.3.1) (2026-08-18)
 
 
