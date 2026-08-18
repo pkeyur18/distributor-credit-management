@@ -19,6 +19,7 @@ import {
 import { SearchResultsList } from "@/components/search-results-list";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { usePagination, TablePagination } from "@/components/ui/pagination";
 import { useMemberSearch } from "@/lib/use-member-search";
 import { listBackups, type ClosedMonthBackup } from "@/lib/ipc/m6-reports";
 import { getMemberDetail } from "@/lib/ipc/m4-search";
@@ -36,8 +37,6 @@ import {
 import { Breadcrumb } from "@/components/breadcrumb";
 import { useBackTarget, useRouteLabel } from "@/lib/navigation-history";
 
-const PAGE_SIZES = [10, 25, 50] as const;
-
 // US-M2.2 (§5.5), Rule-39 (amended 15 Aug 2026 to extend to creation) —
 // `edit_entry`/`add_closed_month_entry` are the two correction mechanisms.
 // Matches ui-prototype-v2.html's `renderCorrectionPanel()`: pick the closed
@@ -51,8 +50,7 @@ export function CorrectionPanel() {
   const [selected, setSelected] = useState<SearchResult | null>(null);
   const [historicalSlabPct, setHistoricalSlabPct] = useState<number | null>(null);
   const [entries, setEntries] = useState<PeriodEntryRecord[]>([]);
-  const [entriesPage, setEntriesPage] = useState(0);
-  const [entriesPageSize, setEntriesPageSize] = useState<number>(PAGE_SIZES[0]);
+  const pagination = usePagination(entries);
   const [modal, setModal] = useState<{ entry: PeriodEntryRecord | null } | null>(null);
   const toast = useToast();
   const backTarget = useBackTarget();
@@ -81,8 +79,9 @@ export function CorrectionPanel() {
     if (!selected || !ym) return;
     listPeriodEntries(ym).then((result) => {
       setEntries(result.entries.filter((e) => e.memberId === selected.id));
-      setEntriesPage(0);
+      pagination.setPage(0);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, ym]);
 
   function handleMonthChange(month: string) {
@@ -94,11 +93,6 @@ export function CorrectionPanel() {
     const result = await listPeriodEntries(ym);
     setEntries(result.entries.filter((e) => e.memberId === selected.id));
   }
-
-  const totalPages = Math.max(1, Math.ceil(entries.length / entriesPageSize));
-  const currentPage = Math.min(entriesPage, totalPages - 1);
-  const rangeStart = currentPage * entriesPageSize;
-  const pageRows = entries.slice(rangeStart, rangeStart + entriesPageSize);
 
   return (
     <>
@@ -213,7 +207,7 @@ export function CorrectionPanel() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {pageRows.map((e) => (
+                      {pagination.pageItems.map((e) => (
                         <TableRow key={`${e.id}-${e.updatedAt ?? e.createdAt}`}>
                           <TableCell>{e.entryDate}</TableCell>
                           <TableCell numeric>
@@ -234,48 +228,7 @@ export function CorrectionPanel() {
                     </TableBody>
                   </Table>
                 </TableWrap>
-                <div className="mt-2.5 flex items-center justify-between">
-                  <span className="text-caption">
-                    Showing {rangeStart + 1}–
-                    {Math.min(rangeStart + entriesPageSize, entries.length)} of {entries.length}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <label htmlFor="correction-page-size" className="text-caption">
-                      Rows per page
-                    </label>
-                    <select
-                      id="correction-page-size"
-                      className="h-7.5 w-auto rounded-sm border border-border bg-surface px-2 text-body text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
-                      value={entriesPageSize}
-                      onChange={(e) => {
-                        setEntriesPageSize(Number(e.target.value));
-                        setEntriesPage(0);
-                      }}
-                    >
-                      {PAGE_SIZES.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={currentPage === 0}
-                      onClick={() => setEntriesPage((p) => p - 1)}
-                    >
-                      Prev
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={currentPage >= totalPages - 1}
-                      onClick={() => setEntriesPage((p) => p + 1)}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
+                <TablePagination idPrefix="correction" pagination={pagination} />
               </>
             )}
           </div>

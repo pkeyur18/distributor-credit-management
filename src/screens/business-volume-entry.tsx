@@ -19,6 +19,7 @@ import { SearchResultsList } from "@/components/search-results-list";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { usePagination, TablePagination } from "@/components/ui/pagination";
 import { useMemberSearch } from "@/lib/use-member-search";
 import { searchMembers } from "@/lib/ipc/m1-members";
 import {
@@ -41,8 +42,6 @@ import {
 } from "@/lib/utils";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { useBackTarget, useRouteLabel } from "@/lib/navigation-history";
-
-const PAGE_SIZES = [10, 25, 50] as const;
 
 // US-M2.1 (§5.4). API-41's `list_period_entries` backs the table below and
 // the two summary nodes above the lock-status banner — all three read the
@@ -67,8 +66,7 @@ export function BusinessVolumeEntry() {
   // read 0 until the first fetch resolves, then replace with real
   // figures — an explicit product decision, not an oversight).
   const [periodEntries, setPeriodEntries] = useState<PeriodEntryRecord[]>([]);
-  const [entriesPage, setEntriesPage] = useState(0);
-  const [entriesPageSize, setEntriesPageSize] = useState<number>(PAGE_SIZES[0]);
+  const pagination = usePagination(periodEntries);
   const toast = useToast();
   const bounds = monthBounds(recordingMonth);
   const [searchParams] = useSearchParams();
@@ -120,8 +118,9 @@ export function BusinessVolumeEntry() {
   useEffect(() => {
     listPeriodEntries(recordingMonth).then((result) => {
       setPeriodEntries(result.entries);
-      setEntriesPage(0);
+      pagination.setPage(0);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordingMonth]);
 
   const cents = displayToCents(amountInput);
@@ -153,7 +152,7 @@ export function BusinessVolumeEntry() {
       if (match) setSelected(match);
       const refreshedEntries = await listPeriodEntries(recordingMonth);
       setPeriodEntries(refreshedEntries.entries);
-      setEntriesPage(0);
+      pagination.setPage(0);
     } catch (raw) {
       const presented = toErrorPresentation(raw);
       // T-M2.4-2: a period-eligibility refusal is about the date, not the
@@ -172,16 +171,6 @@ export function BusinessVolumeEntry() {
       setSaving(false);
     }
   }
-
-  // Already sorted server-side (entry_date desc, id desc) — paginated here,
-  // not re-sorted.
-  const totalEntriesPages = Math.max(1, Math.ceil(periodEntries.length / entriesPageSize));
-  const currentEntriesPage = Math.min(entriesPage, totalEntriesPages - 1);
-  const entriesRangeStart = currentEntriesPage * entriesPageSize;
-  const entriesPageRows = periodEntries.slice(
-    entriesRangeStart,
-    entriesRangeStart + entriesPageSize,
-  );
 
   // Raw entry-record counts (not distinct members), per the confirmed
   // definition — a member with two entries this month counts as two here.
@@ -359,7 +348,7 @@ export function BusinessVolumeEntry() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {entriesPageRows.map((e) => (
+                    {pagination.pageItems.map((e) => (
                       <TableRow key={`${e.id}-${e.updatedAt ?? e.createdAt}`}>
                         <TableCell primary>{e.memberName}</TableCell>
                         <TableCell className="mono">{e.memberId}</TableCell>
@@ -372,49 +361,7 @@ export function BusinessVolumeEntry() {
                   </TableBody>
                 </Table>
               </TableWrap>
-              <div className="mt-2.5 flex items-center justify-between">
-                <span className="text-caption">
-                  Showing {entriesRangeStart + 1}–
-                  {Math.min(entriesRangeStart + entriesPageSize, periodEntries.length)} of{" "}
-                  {periodEntries.length}
-                </span>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="entries-page-size" className="text-caption">
-                    Rows per page
-                  </label>
-                  <select
-                    id="entries-page-size"
-                    className="h-7.5 w-auto rounded-sm border border-border bg-surface px-2 text-body text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
-                    value={entriesPageSize}
-                    onChange={(e) => {
-                      setEntriesPageSize(Number(e.target.value));
-                      setEntriesPage(0);
-                    }}
-                  >
-                    {PAGE_SIZES.map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
-                  </select>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={currentEntriesPage === 0}
-                    onClick={() => setEntriesPage((p) => p - 1)}
-                  >
-                    Prev
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={currentEntriesPage >= totalEntriesPages - 1}
-                    onClick={() => setEntriesPage((p) => p + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
+              <TablePagination idPrefix="entries" pagination={pagination} />
             </>
           )}
         </div>
