@@ -111,6 +111,17 @@ fn setting_i64(conn: &Connection, key: &str) -> Result<i64, AppError> {
     })
 }
 
+fn setting_f64(conn: &Connection, key: &str) -> Result<f64, AppError> {
+    let value: String =
+        conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+            r.get(0)
+        })?;
+    value.parse().map_err(|_| AppError::Validation {
+        field: key.into(),
+        message: format!("setting '{key}' is not a valid number"),
+    })
+}
+
 fn upsert_totals(
     conn: &Connection,
     member_id: i64,
@@ -153,7 +164,7 @@ fn walk_chain(
     period_id: i64,
     slabs: &[(i64, i64)],
     royalty_min_children: i64,
-    royalty_rate_percent: i64,
+    royalty_rate_percent: f64,
 ) -> Result<(), AppError> {
     for &id in chain {
         let business_volume = business_volume_of(conn, id, period_month)?;
@@ -197,7 +208,7 @@ pub fn recalculate_chain(
     let period_month = period_month_of(conn, period_id)?;
     let slabs = slab_table(conn)?;
     let royalty_min_children = setting_i64(conn, "royalty_qualifying_count")?;
-    let royalty_rate_percent = setting_i64(conn, "royalty_rate_percent")?;
+    let royalty_rate_percent = setting_f64(conn, "royalty_rate_percent")?;
 
     if conn.is_autocommit() {
         let tx = conn.unchecked_transaction()?;
@@ -251,7 +262,7 @@ fn recompute_open_period_rows(conn: &Connection, period_id: i64) -> Result<(), A
     let period_month = period_month_of(conn, period_id)?;
     let slabs = slab_table(conn)?;
     let royalty_min_children = setting_i64(conn, "royalty_qualifying_count")?;
-    let royalty_rate_percent = setting_i64(conn, "royalty_rate_percent")?;
+    let royalty_rate_percent = setting_f64(conn, "royalty_rate_percent")?;
 
     for id in open_period_member_ids(conn, period_id)? {
         let business_volume = business_volume_of(conn, id, &period_month)?;
@@ -304,7 +315,7 @@ pub struct CandidateSettings {
     pub slab_thresholds: Option<Vec<i64>>,
     pub slab_percentages: Option<Vec<i64>>,
     pub royalty_qualifying_count: Option<i64>,
-    pub royalty_rate_percent: Option<i64>,
+    pub royalty_rate_percent: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -427,7 +438,7 @@ pub fn preview_settings_impact(
     let royalty_rate_percent = candidate
         .royalty_rate_percent
         .map(Ok)
-        .unwrap_or_else(|| setting_i64(conn, "royalty_rate_percent"))?;
+        .unwrap_or_else(|| setting_f64(conn, "royalty_rate_percent"))?;
 
     let mut rewards_before_total = 0;
     let mut rewards_after_total = 0;
@@ -585,7 +596,7 @@ fn walk_chain_into_snapshot(
     period_id: i64,
     slabs: &[(i64, i64)],
     royalty_min_children: i64,
-    royalty_rate_percent: i64,
+    royalty_rate_percent: f64,
     created_at: &str,
 ) -> Result<(), AppError> {
     for &id in chain {
@@ -632,7 +643,7 @@ pub fn write_correction_snapshot(
     let period_month = period_month_of(conn, period_id)?;
     let slabs = slab_table(conn)?;
     let royalty_min_children = setting_i64(conn, "royalty_qualifying_count")?;
-    let royalty_rate_percent = setting_i64(conn, "royalty_rate_percent")?;
+    let royalty_rate_percent = setting_f64(conn, "royalty_rate_percent")?;
     let created_at = chrono::Local::now().date_naive().to_string();
 
     if conn.is_autocommit() {

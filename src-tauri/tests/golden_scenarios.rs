@@ -20,7 +20,7 @@ const SLABS: &[(i64, i64)] = &[
     (10_000, 14),
 ];
 const ROYALTY_MIN_CHILDREN: i64 = 3;
-const ROYALTY_RATE_PERCENT: i64 = 1;
+const ROYALTY_RATE_PERCENT: f64 = 1.0;
 
 /// Rule-5's post-order walk over a fixture tree, through the real engine.
 fn evaluate(tree: &MemberFixture) -> bvconsole_lib::m3_calc::engine::NodeFigures {

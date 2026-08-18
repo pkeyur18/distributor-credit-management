@@ -123,7 +123,7 @@ fn top_slab_percentage(conn: &Connection) -> Result<i64, AppError> {
     )?)
 }
 
-fn royalty_rate_percent(conn: &Connection) -> Result<i64, AppError> {
+fn royalty_rate_percent(conn: &Connection) -> Result<f64, AppError> {
     let value: String = conn.query_row(
         "SELECT value FROM settings WHERE key = 'royalty_rate_percent'",
         [],
@@ -131,7 +131,7 @@ fn royalty_rate_percent(conn: &Connection) -> Result<i64, AppError> {
     )?;
     value.parse().map_err(|_| AppError::Validation {
         field: "royalty_rate_percent".into(),
-        message: "setting 'royalty_rate_percent' is not a valid integer".into(),
+        message: "setting 'royalty_rate_percent' is not a valid number".into(),
     })
 }
 
@@ -163,7 +163,7 @@ pub struct DifferentialLine {
 #[serde(rename_all = "camelCase")]
 pub struct RoyaltyLine {
     pub qualifying_children: i64,
-    pub rate_percent: i64,
+    pub rate_percent: f64,
     pub amount: i64,
 }
 
