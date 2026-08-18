@@ -1,6 +1,6 @@
 [package]
 name = "bvconsole"
-version = "0.3.1"
+version = "0.3.2"
 description = "Member Rewards Console"
 authors = ["Keyur Patel"]
 edition = "2021"
