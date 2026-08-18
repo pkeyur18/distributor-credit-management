@@ -127,6 +127,71 @@ pub fn compute_node(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Regression proof for existing deployments: every already-saved
+        /// whole-percent royalty rate (1%, 5%, ...) must still produce the
+        /// exact same royalty figure it did before `round_half_up_f64`
+        /// replaced `round_half_up_div100` on this term. Volume range goes
+        /// to 100 billion ×100-fixed-point units (i.e. ~₹1 trillion of real
+        /// money) — several orders of magnitude past any realistic Total
+        /// Business Volume and still far under f64's 2^53 exact-integer
+        /// ceiling, so this is not a narrow spot-check.
+        #[test]
+        fn f64_royalty_math_matches_the_old_i64_path_for_whole_percent_rates(
+            pct in 0i64..100,
+            volume in 0i64..100_000_000_000i64,
+        ) {
+            let old = round_half_up_div100(pct * volume);
+            let new = round_half_up_f64(pct as f64 * volume as f64 / 100.0);
+            prop_assert_eq!(old, new, "diverged for pct={} volume={}", pct, volume);
+        }
+
+        /// The reported bug's actual scenario (1.50%, 1.25%, ...): checks
+        /// the f64 path against an independent, float-free ground truth
+        /// computed in i128 straight from the definition "rate_hundredths /
+        /// 100 percent of volume" — not against the code under test.
+        #[test]
+        fn f64_royalty_math_matches_exact_integer_math_for_two_decimal_rates(
+            rate_hundredths in 0i64..10_000,
+            volume in 0i64..100_000_000_000i64,
+        ) {
+            let rate_percent = rate_hundredths as f64 / 100.0;
+            let got = round_half_up_f64(rate_percent * volume as f64 / 100.0);
+            let exact = (rate_hundredths as i128 * volume as i128 + 5_000) / 10_000;
+            prop_assert_eq!(got, exact as i64, "rate={} ({:.2}%) volume={}", rate_hundredths, rate_percent, volume);
+        }
+    }
+
+    /// Deterministic boundary/tie cases the random property tests above
+    /// aren't guaranteed to land on exactly: an exact .5 tie, a rate whose
+    /// decimal isn't exactly representable in binary (0.33%), a max-realistic
+    /// volume, and zero at both ends.
+    #[test]
+    fn round_half_up_f64_boundary_cases() {
+        // 1% of 150 = 1.5 exactly -> ties round up, matching round_half_up_div100.
+        assert_eq!(round_half_up_f64(1.0 * 150.0 / 100.0), 2);
+        assert_eq!(round_half_up_div100(150), 2);
+
+        // 0.33% (not exactly representable in binary) of 10,000 = 33.00 exactly.
+        assert_eq!(round_half_up_f64(0.33 * 10_000.0 / 100.0), 33);
+
+        // 1.25% (exactly representable: 1.25 = 1 + 1/4) of 10,000 = 125.
+        assert_eq!(round_half_up_f64(1.25 * 10_000.0 / 100.0), 125);
+
+        // 99.99% of 100 billion ×100-fixed-point units (~₹1 trillion real
+        // money) — far past any realistic Total Business Volume.
+        let exact = (9_999i128 * 100_000_000_000i128 + 5_000) / 10_000;
+        assert_eq!(
+            round_half_up_f64(99.99 * 100_000_000_000.0 / 100.0),
+            exact as i64
+        );
+
+        // Zero at both ends.
+        assert_eq!(round_half_up_f64(0.0 * 0.0 / 100.0), 0);
+        assert_eq!(round_half_up_f64(5.0 * 0.0 / 100.0), 0);
+    }
 
     // §4.3 default slab table, real units (not ×100 — see the module doc
     // comment; slab_lookup is unit-agnostic as long as thresholds and tbv

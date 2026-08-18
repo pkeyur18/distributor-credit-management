@@ -870,6 +870,86 @@ mod tests {
     }
 
     #[test]
+    fn update_settings_accepts_a_decimal_royalty_rate_and_it_reaches_stored_royalty() {
+        // The reported bug's exact scenario: saving "1.50" from the Settings
+        // screen used to fail outright (serde couldn't deserialize a
+        // fractional JSON number into an i64 field) before this field
+        // became f64.
+        let conn = seeded();
+        let month = chrono::Local::now().format("%Y-%m").to_string();
+        conn.execute(
+            "INSERT INTO periods (period_month, status) VALUES (?1, 'open')",
+            [&month],
+        )
+        .unwrap();
+        let period: i64 = conn.last_insert_rowid();
+        let parent = insert_member(&conn, None);
+        let mut children = Vec::new();
+        for _ in 0..3 {
+            let child = insert_member(&conn, Some(parent));
+            insert_entry(&conn, child, &month, 1_000_000);
+            m3_calc::recalculate_chain(&conn, child, period).unwrap();
+            children.push(child);
+        }
+
+        let updated = update_settings(
+            &conn,
+            SettingsPatch {
+                royalty_rate_percent: Some(1.5),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            updated.royalty_rate_percent, 1.5,
+            "decimal rate must round-trip exactly through the settings table"
+        );
+
+        let stored_royalty: i64 = conn
+            .query_row(
+                "SELECT royalty FROM member_period_totals WHERE member_id = ?1 AND period_id = ?2",
+                rusqlite::params![parent, period],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        // Independent re-derivation from the children's own stored rows —
+        // not a call into the code under test — replicating the documented
+        // per-leg-then-sum rounding order (each leg's term is rounded
+        // half-up on its own, summed after).
+        let top_slab: i64 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(percentage), 0) FROM slab_table",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let expected: i64 = children
+            .iter()
+            .map(|&child| {
+                let (tbv, slab_pct): (i64, i64) = conn
+                    .query_row(
+                        "SELECT total_business_volume, slab_pct FROM member_period_totals
+                         WHERE member_id = ?1 AND period_id = ?2",
+                        rusqlite::params![child, period],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .unwrap();
+                if slab_pct == top_slab {
+                    ((15i128 * tbv as i128 + 500) / 1000) as i64 // 1.5% = 15/1000
+                } else {
+                    0
+                }
+            })
+            .sum();
+        assert!(
+            expected > 0,
+            "test setup must actually put children on the top slab, or this assertion proves nothing"
+        );
+        assert_eq!(stored_royalty, expected);
+    }
+
+    #[test]
     fn a_structure_guidance_change_does_not_recalculate() {
         // §5.7: structure guidance, reporting and the reference value save
         // silently — no open period is even required for these to succeed.
