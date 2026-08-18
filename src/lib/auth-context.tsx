@@ -30,14 +30,18 @@ interface AuthContextValue {
   markAuthenticated: () => void;
   markLocked: () => void;
   /** A full sign-out: unlike `markLocked`, routes straight back to Login
-   * rather than the "resume where you left off" Locked screen. */
-  markSignedOut: () => void;
+   * rather than the "resume where you left off" Locked screen. `notice`
+   * survives the redirect (unlike a toast) so Login can still show it. */
+  markSignedOut: (notice?: string) => void;
+  signOutNotice: string | null;
+  clearSignOutNotice: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>("loading");
+  const [signOutNotice, setSignOutNotice] = useState<string | null>(null);
 
   useEffect(() => {
     checkDataReadable()
@@ -51,7 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         state,
         markAuthenticated: () => setState("authenticated"),
         markLocked: () => setState("locked"),
-        markSignedOut: () => setState("needs-login"),
+        markSignedOut: (notice) => {
+          setSignOutNotice(notice ?? null);
+          setState("needs-login");
+        },
+        signOutNotice,
+        clearSignOutNotice: () => setSignOutNotice(null),
       }}
     >
       {children}

@@ -870,12 +870,14 @@ function RestoreCard({
       }
       setConfirmTarget(null);
       onRestored();
-      toast.add({ title: "Restored — sign in again", type: "success" });
       // T-M8.6-4: the backend already dropped the session (a restored file
       // may hold a different credential) — the frontend must follow it to
       // sign-in rather than staying on a screen whose next authenticated
-      // call would just fail with `auth_required`.
-      markSignedOut();
+      // call would just fail with `auth_required`. The confirmation rides
+      // to Login as a persistent notice, not a toast: a 3.4s toast racing
+      // this redirect risks the operator missing it at the exact moment
+      // they need to know the restore actually completed.
+      markSignedOut("Restore complete — sign in again.");
     } catch (raw) {
       toast.add({ title: errorMessage(raw), type: "danger" });
     } finally {
