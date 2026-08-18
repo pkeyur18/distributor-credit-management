@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 
@@ -74,6 +74,15 @@ export function BusinessVolumeEntry() {
   const [searchParams] = useSearchParams();
   const backTarget = useBackTarget();
   useRouteLabel("Volume entry");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Recording BV back-to-back for different members is the product's
+  // declared most-frequent action; without this, "Change" cleared the
+  // selection but left the operator to click into the search box before
+  // they could type — an extra click on every entry after the first.
+  useEffect(() => {
+    if (!selected) searchInputRef.current?.focus();
+  }, [selected]);
 
   // T-M4.1-5: Member Detail's "Record volume" action opens this screen
   // pre-selected on that member (?member=<id>) rather than empty.
@@ -252,6 +261,7 @@ export function BusinessVolumeEntry() {
                 Member
               </label>
               <Input
+                ref={searchInputRef}
                 id="entry-search"
                 placeholder="Search by name, 6-digit member number or phone"
                 value={query}
