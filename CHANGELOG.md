@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.3](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.3.2...bvconsole-v0.3.3) (2026-08-19)
+
+
+### Documentation
+
+* rewrite README for comprehensive project overview and details ([828fa19](https://github.com/pkeyur18/distributor-credit-management/commit/828fa19a2658bc7af57d89aa200febc1151d1304))
+* rewrite README with accurate project overview ([3e8b6cc](https://github.com/pkeyur18/distributor-credit-management/commit/3e8b6ccc9fd44307fd369b1398f5d5453943e154))
+* rewrite README with accurate project overview ([12fe308](https://github.com/pkeyur18/distributor-credit-management/commit/12fe308f86b77c8e580b4ca4239c7fd051cb1947))
+
 ## [0.3.2](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.3.1...bvconsole-v0.3.2) (2026-08-18)
 
 
