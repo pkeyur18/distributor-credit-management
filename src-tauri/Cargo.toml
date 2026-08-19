@@ -50,7 +50,19 @@ rust_xlsxwriter = "0.90.1"
 # direct-legs table has no fixed row count, and printpdf alone would need
 # hand-rolled page-break logic for it.
 genpdf = "0.2.0"
-eframe = "0.36.1"
+# glow (OpenGL), not the default wgpu backend — wgpu-hal 30.0.0's DX12 path
+# and its own gpu-allocator dependency disagree on windows-core's version
+# (0.62.2 vs 0.61.2), which fails to compile for the Windows target (confirmed
+# via CI; macOS doesn't hit that code path so it built fine locally there).
+eframe = { version = "0.36.1", default-features = false, features = [
+    "accesskit",
+    "default_fonts",
+    "glow",
+    "links",
+    "wayland",
+    "web_screen_reader",
+    "x11",
+] }
 egui = "0.36.1"
 rfd = "0.17.2"
 
