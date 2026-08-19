@@ -19,6 +19,7 @@ pub mod m9_audit;
 pub mod paths;
 pub mod qa_dataset;
 pub mod session;
+pub mod test_data_shared;
 
 use db_state::DbState;
 use paths::AppPaths;
