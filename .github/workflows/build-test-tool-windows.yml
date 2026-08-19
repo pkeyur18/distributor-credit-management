@@ -1,0 +1,31 @@
+# Builds test_tool.exe for the client. Scoped to feature/client-test-tool
+# only — this branch (and this file) never merges to develop or main.
+name: Build test tool (Windows)
+
+on:
+  push:
+    branches: [feature/client-test-tool]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build test_tool.exe
+        run: cargo build --release --bin test_tool
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test_tool-windows
+          path: src-tauri/target/release/test_tool.exe
