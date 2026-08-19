@@ -63,11 +63,54 @@ impl eframe::App for TestToolApp {
 
         ui.separator();
 
-        if ui.button("Import CSV...").clicked() {
-            self.status = "import not wired yet".to_string();
+        if ui.button("Choose CSV...").clicked() {
+            if let Some(path) = rfd::FileDialog::new().add_filter("CSV", &["csv"]).pick_file() {
+                self.pending_csv = Some(path);
+            }
+        }
+        ui.label(match &self.pending_csv {
+            Some(p) => format!("Selected: {}", p.display()),
+            None => "No CSV selected".to_string(),
+        });
+
+        ui.label("PIN/password:");
+        ui.add(egui::TextEdit::singleline(&mut self.credential).password(true));
+
+        ui.label("Closed months (comma-separated YYYY-MM, optional):");
+        ui.text_edit_singleline(&mut self.closed_months_input);
+
+        if ui.button("Run Import").clicked() {
+            self.status = run_import(&self.credential, &self.pending_csv, &self.closed_months_input);
         }
 
         ui.separator();
         ui.label(&self.status);
+    }
+}
+
+fn run_import(credential: &str, csv_path: &Option<PathBuf>, closed_months_input: &str) -> String {
+    let Some(csv_path) = csv_path else {
+        return "pick a CSV file first".to_string();
+    };
+    let content = match std::fs::read_to_string(csv_path) {
+        Ok(c) => c,
+        Err(e) => return format!("reading {}: {e}", csv_path.display()),
+    };
+    let closed_months: std::collections::HashSet<String> = closed_months_input
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let app_data_dir = test_data_shared::default_app_data_dir();
+    let conn = match test_data_shared::unlock_db(&app_data_dir, credential) {
+        Ok(c) => c,
+        Err(e) => return format!("unlock failed: {e}"),
+    };
+    match test_data_shared::import_csv(&conn, &content, &closed_months) {
+        Ok(summary) => format!(
+            "imported {} member(s), {} closed-month entries across {} month(s), {} open-period entries",
+            summary.members, summary.closed_entries, summary.closed_months, summary.open_entries
+        ),
+        Err(e) => format!("import failed: {e}"),
     }
 }
