@@ -38,7 +38,27 @@ impl eframe::App for TestToolApp {
         ui.separator();
 
         if ui.button("Reset Test Data").clicked() {
-            self.status = "reset not wired yet".to_string();
+            let confirmed = rfd::MessageDialog::new()
+                .set_title("Reset Test Data")
+                .set_description(
+                    "This deletes console.db and backups (keeps your PIN/password). \
+                     Close the main app first. Continue?",
+                )
+                .set_buttons(rfd::MessageButtons::YesNo)
+                .show();
+            if confirmed == rfd::MessageDialogResult::Yes {
+                let app_data_dir = test_data_shared::default_app_data_dir();
+                self.status = match test_data_shared::reset_data(&app_data_dir) {
+                    Ok(deleted) if deleted.is_empty() => {
+                        "nothing to reset — no app data found".to_string()
+                    }
+                    Ok(deleted) => format!(
+                        "reset done — {} item(s) removed. Log in with your PIN/password to start fresh.",
+                        deleted.len()
+                    ),
+                    Err(e) => format!("reset failed: {e}"),
+                };
+            }
         }
 
         ui.separator();
