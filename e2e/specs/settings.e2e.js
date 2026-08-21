@@ -101,7 +101,7 @@ describe("Settings", () => {
 
     const dialog = $('div[role="dialog"]');
     await dialog.waitForExist({ timeout: 3000 });
-    await expect(dialog.$("button=Cancel")).toHaveFocus();
+    await expect(dialog.$("button=Cancel")).toBeFocused();
     const confirmButton = dialog.$("button=Restore");
     await expect(confirmButton).toBeDisabled();
 
