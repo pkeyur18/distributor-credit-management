@@ -1,11 +1,18 @@
-import { navigateTo, idOfPhone } from "../helpers/seed.js";
+import { navigateTo, idOfPhone, login, FIRST_RUN_PIN } from "../helpers/seed.js";
 
 // T-M4.2-6 — the inactive-node treatment on the Structure chart (Rule-28:
 // deactivation has zero calculation effect, but the node must still show
 // the distinct colour plus a labelled pill, per T-M1.3-4). Runs after
-// business-volume-entry.e2e.js in the same shared session and deactivates
-// the member that spec already onboarded ("Asha Patel"), then confirms the
-// pill survives the trip from Member Detail into the Structure chart.
+// business-volume-entry.e2e.js against the same real app-data directory
+// and deactivates the member that spec already onboarded ("Asha Patel"),
+// then confirms the pill survives the trip from Member Detail into the
+// Structure chart. wdio starts a fresh process per spec file, so this
+// file logs back in for itself first — covers both describe blocks below,
+// since they share this one file/session.
+before(async () => {
+  await login(FIRST_RUN_PIN);
+});
+
 describe("Structure — inactive-node treatment", () => {
   it("shows the Inactive pill on a deactivated member's node", async () => {
     await navigateTo("Home");

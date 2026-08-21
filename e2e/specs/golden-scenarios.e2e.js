@@ -1,4 +1,4 @@
-import { addMember, navigateTo, recordEntry } from "../helpers/seed.js";
+import { addMember, navigateTo, recordEntry, login, FIRST_RUN_PIN } from "../helpers/seed.js";
 
 // US-M4.1/M4.2/M4.4 (S8) — the project's go/no-go exit gate (M-5,
 // 02-roadmap.md): "all six golden totals reproduce through the real UI,"
@@ -99,6 +99,12 @@ async function rewardsThisPeriod(memberName) {
   await row.click();
   return $('//div[text()="Rewards this period"]/following-sibling::div[1]').getText();
 }
+
+// wdio starts a fresh process per spec file, so this file logs back in
+// for itself before touching anything (helpers/seed.js's `login`).
+before(async () => {
+  await login(FIRST_RUN_PIN);
+});
 
 describe("Golden scenarios reproduce through the real UI", () => {
   it("all six scenario totals match Rewards this period on Member Detail", async () => {

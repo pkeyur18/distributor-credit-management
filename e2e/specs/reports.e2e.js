@@ -1,14 +1,20 @@
-import { navigateTo } from "../helpers/seed.js";
+import { navigateTo, login, FIRST_RUN_PIN } from "../helpers/seed.js";
 
-// US-M6.1/M6.2/M6.3/M6.4 (S13). Runs after business-volume-entry.e2e.js in
-// the same shared session, reusing its root member/entry rather than
-// re-onboarding. Every export button opens a native OS save dialog on
-// click, which WebdriverIO/tauri-driver cannot drive (the same constraint
-// settings.e2e.js's restore-from-file flow already works around by never
-// clicking the button that opens one) — so this spec covers everything
-// reachable up to that point: the screen renders, the column picker and
-// threshold field behave, and the closed-month card's conditional
-// rendering is correct, without ever triggering a dialog.
+// US-M6.1/M6.2/M6.3/M6.4 (S13). Runs after business-volume-entry.e2e.js
+// against the same real app-data directory, reusing its root member/entry
+// rather than re-onboarding — wdio starts a fresh process per spec file
+// though, so this file logs back in for itself first. Every export button
+// opens a native OS save dialog on click, which WebdriverIO/tauri-driver
+// cannot drive (the same constraint settings.e2e.js's restore-from-file
+// flow already works around by never clicking the button that opens one)
+// — so this spec covers everything reachable up to that point: the screen
+// renders, the column picker and threshold field behave, and the
+// closed-month card's conditional rendering is correct, without ever
+// triggering a dialog.
+before(async () => {
+  await login(FIRST_RUN_PIN);
+});
+
 describe("Reports", () => {
   it("renders the three always-available cards with an editable column picker", async () => {
     await navigateTo("Reports");

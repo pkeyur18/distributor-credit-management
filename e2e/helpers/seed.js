@@ -20,6 +20,21 @@ export async function completeFirstRunSetup(pin) {
   await $("button=Enter the console").click();
 }
 
+// PIN set once by completeFirstRunSetup, above — every other spec *file*
+// gets its own fresh wdio session (and so its own fresh app process; the
+// on-disk app-data survives across them, but the in-memory login session
+// does not), landing on Login rather than still-authenticated. Every spec
+// file but the first one needs this as its very first action.
+export const FIRST_RUN_PIN = "482913";
+
+export async function login(pin) {
+  // Same cold-start reality as completeFirstRunSetup — this is also a
+  // fresh process launch.
+  await $("h1*=Member Rewards Console").waitForExist({ timeout: 45000 });
+  await browser.keys(pin.split(""));
+  await $("nav").waitForExist({ timeout: 5000 });
+}
+
 export async function navigateTo(navLabel) {
   await $("nav").$(`a=${navLabel}`).click();
 }

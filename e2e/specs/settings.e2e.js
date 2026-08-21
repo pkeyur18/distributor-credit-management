@@ -1,8 +1,14 @@
-import { navigateTo } from "../helpers/seed.js";
+import { navigateTo, login, FIRST_RUN_PIN } from "../helpers/seed.js";
 
-// US-M7.1/M7.2/M7.4 (S10). Runs in the same shared session as every other
-// spec (no setup call here — see helpers/seed.js's own doc comment) and
-// only touches settings state, which no earlier spec depends on.
+// US-M7.1/M7.2/M7.4 (S10). Runs against the same real app-data directory
+// as every other spec (no setup call here — see helpers/seed.js's own doc
+// comment) and only touches settings state, which no earlier spec depends
+// on. wdio starts a fresh process per spec file though, so this file logs
+// back in for itself first.
+before(async () => {
+  await login(FIRST_RUN_PIN);
+});
+
 describe("Settings", () => {
   it("saves a royalty setting change", async () => {
     await navigateTo("Settings");

@@ -1,11 +1,19 @@
-import { completeFirstRunSetup, addRootMember, addMember, navigateTo } from "../helpers/seed.js";
+import {
+  completeFirstRunSetup,
+  addRootMember,
+  addMember,
+  navigateTo,
+  FIRST_RUN_PIN,
+} from "../helpers/seed.js";
 
-// Specs in this directory share one running app instance and one login
-// session (see helpers/seed.js's own doc comment) — first-run setup can
-// only ever happen once per instance, so every test after the first one
-// in this describe block must build on the state earlier tests already
-// left behind rather than calling completeFirstRunSetup/addRootMember a
-// second time.
+// Specs in this directory share one real app-data directory (see
+// helpers/seed.js's own doc comment) — first-run setup can only ever
+// happen once against it, so every test after the first one in this
+// describe block must build on the state earlier tests already left
+// behind rather than calling completeFirstRunSetup/addRootMember a second
+// time. The login *session* is not shared, though: wdio starts a fresh
+// process per spec file, so every other file logs back in for itself
+// (helpers/seed.js's `login`).
 
 // US-M2.1 (S7) — the golden path this whole harness exists to catch:
 // record a Business Volume entry through the real UI and confirm the
@@ -15,7 +23,7 @@ import { completeFirstRunSetup, addRootMember, addMember, navigateTo } from "../
 // hierarchy (see helpers/seed.js's own doc comment).
 describe("Business Volume Entry", () => {
   it("records an entry against a newly onboarded member", async () => {
-    await completeFirstRunSetup("482913");
+    await completeFirstRunSetup(FIRST_RUN_PIN);
     const rootId = await addRootMember({
       name: "Root Member",
       phone: "9876500001",

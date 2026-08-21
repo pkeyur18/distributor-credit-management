@@ -1,11 +1,17 @@
-import { navigateTo, addMember, idOfPhone } from "../helpers/seed.js";
+import { navigateTo, addMember, idOfPhone, login, FIRST_RUN_PIN } from "../helpers/seed.js";
 
 // US-M4.3 (§5.3a/§6.13, Rule-45). Runs right after business-volume-entry.e2e.js
-// in the same shared session, which leaves exactly one member ("Asha Patel")
-// beneath "Root Member" — below the 60-descendant gate (V4.5), so the first
-// case here covers the immediate-open path. It then seeds past the gate
-// itself (no seed-via-file shortcut exists in this project — see
-// helpers/seed.js's own doc comment) to cover the confirmation path.
+// against the same real app-data directory, which leaves exactly one member
+// ("Asha Patel") beneath "Root Member" — below the 60-descendant gate
+// (V4.5), so the first case here covers the immediate-open path. It then
+// seeds past the gate itself (no seed-via-file shortcut exists in this
+// project — see helpers/seed.js's own doc comment) to cover the
+// confirmation path. wdio starts a fresh process per spec file, so this
+// file logs back in for itself before touching anything.
+before(async () => {
+  await login(FIRST_RUN_PIN);
+});
+
 describe("Full Hierarchy Window", () => {
   it("opens immediately on a small network, read-only, three fields per node", async () => {
     await navigateTo("Structure");
