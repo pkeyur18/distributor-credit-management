@@ -15,7 +15,11 @@ describe("Settings", () => {
     await $("#royalty-min").waitForExist({ timeout: 3000 });
     await $("#royalty-min").setValue("4");
     await $("button=Save royalty settings").click();
-    await $("div*=Royalty settings saved").waitForExist({ timeout: 3000 });
+    // A bare `*=` (no tag prefix) compiles to WebDriver's "partial link
+    // text" strategy, which only matches <a> elements — the toast title
+    // renders as an <h2> (@base-ui/react's Toast.Title), so this needs
+    // the tag explicit, not just dropped.
+    await $("h2*=Royalty settings saved").waitForExist({ timeout: 3000 });
   });
 
   it("T-M7.1-4: disables removing the last remaining slab row, and refuses it if reached anyway", async () => {
@@ -53,20 +57,23 @@ describe("Settings", () => {
     // No monotonicity check (ADR-009) — the recalc-warning dialog appears for
     // every slab save; confirming it completing with the success toast
     // (not a validation refusal) is the assertion.
-    await $("div*=Slab table saved").waitForExist({ timeout: 3000 });
+    await $("h2*=Slab table saved").waitForExist({ timeout: 3000 });
   });
 
   it("T-M7.4-2: the backup schedule segmented control saves immediately, no separate Save step", async () => {
     await navigateTo("Settings");
     await $("button=Weekly").click();
-    await $("div*=Backup schedule set to weekly").waitForExist({ timeout: 3000 });
+    await $("h2*=Backup schedule set to weekly").waitForExist({ timeout: 3000 });
   });
 
   it("T-M7.4-4: \"Back up now\" produces a manual backup at the top of the Restore card's list", async () => {
     await navigateTo("Settings");
     await $("button=Back up now").click();
-    await $("div*=Console backed up").waitForExist({ timeout: 3000 });
-    await $("=Manual —").waitForExist({ timeout: 3000 });
+    await $("h2*=Console backed up").waitForExist({ timeout: 3000 });
+    // Same "no tag = link text only" trap, plus the actual text is "Manual
+    // — {date}" (a prefix, not the whole string) — needs both the <span>
+    // tag (restore-option-list.tsx) and a partial match.
+    await $("span*=Manual —").waitForExist({ timeout: 3000 });
   });
 
   it("T-M7.4-6: restore confirmation follows the checklist pattern — Cancel first, disabled until checked", async () => {

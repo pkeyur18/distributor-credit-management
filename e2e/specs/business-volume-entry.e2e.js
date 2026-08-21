@@ -76,6 +76,7 @@ describe("Business Volume Entry", () => {
     // has touched a second period, so exactly one month (the current one)
     // is still recordable.
     await navigateTo("Volume Entry");
-    await expect($("*=Showing figures for")).not.toExist();
+    // Bare `*=` only matches <a> elements — this text is a <span> (month-switcher.tsx).
+    await expect($("span*=Showing figures for")).not.toExist();
   });
 });

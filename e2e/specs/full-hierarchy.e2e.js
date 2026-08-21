@@ -31,7 +31,8 @@ describe("Full Hierarchy Window", () => {
     await $("p*=2 members").waitForExist({ timeout: 3000 });
     // Read-only: no leg-count/expand affordance, which only renders when
     // StructureTreeNode is interactive (structure-tree-node.tsx).
-    await expect($("=No legs beneath")).not.toBeExisting();
+    // Bare `=` only matches <a> elements — this text is a <span>.
+    await expect($("span=No legs beneath")).not.toBeExisting();
 
     await $('input[placeholder="Find a member by name or number"]').setValue("Asha");
     // The 2px indigo ring (outline-accent) lands on the matched node's
@@ -62,7 +63,8 @@ describe("Full Hierarchy Window", () => {
 
     const dialog = $('div[role="dialog"]');
     await dialog.waitForExist({ timeout: 3000 });
-    await dialog.$("*=61 members").waitForExist({ timeout: 3000 });
+    // Bare `*=` only matches <a> elements — this text is a <p> (structure.tsx).
+    await dialog.$("p*=61 members").waitForExist({ timeout: 3000 });
 
     await dialog.$("button=Cancel").click();
     await dialog.waitForExist({ timeout: 3000, reverse: true });

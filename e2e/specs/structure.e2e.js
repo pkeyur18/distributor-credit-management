@@ -30,7 +30,9 @@ describe("Structure — inactive-node treatment", () => {
     await reactivateButton.waitForExist({ timeout: 3000 });
 
     await $("button=View in structure").click();
-    await $("=Inactive").waitForExist({ timeout: 3000 });
+    // A bare `=` (no tag prefix) compiles to WebDriver's "link text"
+    // strategy, matching only <a> elements — the pill is a <span>.
+    await $("span=Inactive").waitForExist({ timeout: 3000 });
   });
 });
 
@@ -53,7 +55,9 @@ describe("Back-navigation breadcrumbs", () => {
       { timeout: 3000 },
     );
 
-    const backLink = $("*=Back to Structure");
+    // Bare `*=` only matches <a> elements — the breadcrumb's back control
+    // is a <button> (breadcrumb.tsx).
+    const backLink = $("button*=Back to Structure");
     await backLink.waitForExist({ timeout: 3000 });
     await backLink.click();
 
@@ -81,13 +85,13 @@ describe("Back-navigation breadcrumbs", () => {
       timeout: 3000,
     });
 
-    const backLink = $("*=Back to Asha Patel");
+    const backLink = $("button*=Back to Asha Patel");
     await backLink.waitForExist({ timeout: 3000 });
     await backLink.click();
 
     await browser.waitUntil(async () => (await browser.getUrl()).includes("/member/"), {
       timeout: 3000,
     });
-    await expect($("*=Asha Patel")).toExist();
+    await expect($("div*=Asha Patel")).toExist();
   });
 });

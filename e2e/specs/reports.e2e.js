@@ -19,9 +19,12 @@ describe("Reports", () => {
   it("renders the three always-available cards with an editable column picker", async () => {
     await navigateTo("Reports");
 
-    await $("=Monthly data").waitForExist({ timeout: 3000 });
-    await $("=Yearly average").waitForExist({ timeout: 3000 });
-    await $("=Low-contribution report").waitForExist({ timeout: 3000 });
+    // A bare `=`/`*=` (no tag prefix) compiles to WebDriver's "link text"
+    // strategy, which only ever matches <a> elements — CardTitle renders
+    // an <h3>, so these must carry the tag explicitly.
+    await $("h3=Monthly data").waitForExist({ timeout: 3000 });
+    await $("h3=Yearly average").waitForExist({ timeout: 3000 });
+    await $("h3=Low-contribution report").waitForExist({ timeout: 3000 });
 
     // T-M6.1-3: the optional column picker (Rule-33), not including
     // Active/inactive status — that one is force-included server-side
@@ -51,7 +54,7 @@ describe("Reports", () => {
     // Nothing in this shared session has ever closed a period, so
     // list_backups returns empty and the whole card must not render.
     await navigateTo("Reports");
-    await $("=Monthly data").waitForExist({ timeout: 3000 });
-    await expect($("=Closed month snapshot")).not.toExist();
+    await $("h3=Monthly data").waitForExist({ timeout: 3000 });
+    await expect($("h3=Closed month snapshot")).not.toExist();
   });
 });

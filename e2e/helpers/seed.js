@@ -66,6 +66,12 @@ export async function addRootMember({ name, phone, address }) {
   await $("#member-address").setValue(address);
   await $("#member-consent").click();
   await $("button=Save").click();
+  // The dialog's backdrop is `fixed inset-0` and fades out on close (see
+  // ui/dialog.tsx) — it covers the whole viewport, including the sidebar,
+  // for the length of that transition. idOfPhone below clicks the nav
+  // immediately; without this wait that click races the fade-out and,
+  // under sustained load (many members added back-to-back), loses.
+  await $('div[role="dialog"]').waitForExist({ timeout: 3000, reverse: true });
   return idOfPhone(phone);
 }
 
@@ -84,6 +90,8 @@ export async function addMember({ name, phone, address, referenceId }) {
   await resultRow.click();
   await $("#member-consent").click();
   await $("button=Save").click();
+  // Same race as addRootMember, above.
+  await $('div[role="dialog"]').waitForExist({ timeout: 3000, reverse: true });
   return idOfPhone(phone);
 }
 
