@@ -16,7 +16,8 @@
     "sync-version": "node scripts/sync-version.mjs",
     "vocab-grep": "node scripts/vocabulary-grep.mjs",
     "test": "vitest run && node --test scripts/*.test.mjs",
-    "test:e2e": "wdio run e2e/wdio.conf.js"
+    "test:e2e": "wdio run e2e/wdio.conf.js",
+    "test:e2e:perf": "wdio run e2e/wdio.perf.conf.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
