@@ -36,7 +36,13 @@ export async function login(pin) {
 }
 
 export async function navigateTo(navLabel) {
-  await $("nav").$(`a=${navLabel}`).click();
+  // waitForClickable polls webdriverio's own isElementClickable check,
+  // which does a real elementFromPoint overlap test — so this waits out
+  // any transient overlay (a closing dialog's backdrop, mid-transition)
+  // sitting on top of the nav link instead of racing it.
+  const link = $("nav").$(`a=${navLabel}`);
+  await link.waitForClickable({ timeout: 10000 });
+  await link.click();
 }
 
 // T-M1.1-1: member IDs are random (100001-999999), never sequential — a
@@ -66,12 +72,6 @@ export async function addRootMember({ name, phone, address }) {
   await $("#member-address").setValue(address);
   await $("#member-consent").click();
   await $("button=Save").click();
-  // The dialog's backdrop is `fixed inset-0` and fades out on close (see
-  // ui/dialog.tsx) — it covers the whole viewport, including the sidebar,
-  // for the length of that transition. idOfPhone below clicks the nav
-  // immediately; without this wait that click races the fade-out and,
-  // under sustained load (many members added back-to-back), loses.
-  await $('div[role="dialog"]').waitForExist({ timeout: 3000, reverse: true });
   return idOfPhone(phone);
 }
 
@@ -90,8 +90,6 @@ export async function addMember({ name, phone, address, referenceId }) {
   await resultRow.click();
   await $("#member-consent").click();
   await $("button=Save").click();
-  // Same race as addRootMember, above.
-  await $('div[role="dialog"]').waitForExist({ timeout: 3000, reverse: true });
   return idOfPhone(phone);
 }
 
