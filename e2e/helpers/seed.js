@@ -36,19 +36,19 @@ export async function login(pin) {
 }
 
 export async function navigateTo(navLabel) {
-  // waitForClickable polls webdriverio's own isElementClickable check,
-  // which does a real elementFromPoint overlap test — so this waits out
-  // any transient overlay (a closing dialog's backdrop, mid-transition)
-  // sitting on top of the nav link instead of racing it.
-  // 10s wasn't enough in the loop-heavy specs (60 add-member cycles in
-  // full-hierarchy.e2e.js, many in golden-scenarios.e2e.js) — a closing
-  // dialog's backdrop only unmounts once base-ui observes its exit
-  // animation finish (getAnimations()-based), which gets slower/less
-  // reliable the longer a sustained run goes under CI's headless,
-  // software-rendered WebKit.
+  // A closing dialog's backdrop only unmounts once base-ui observes its
+  // exit animation finish (getAnimations()-based) — under CI's headless,
+  // software-rendered WebKit, sustained loops (60 add-member cycles in
+  // full-hierarchy.e2e.js, many in golden-scenarios.e2e.js) show that
+  // resolving less and less reliably the longer the run goes, so a
+  // backdrop can end up genuinely never leaving the DOM. No timeout budget
+  // fixes that if it's not actually transient. A real click() is native
+  // WebDriver, which refuses when elementFromPoint sees that (invisible
+  // but still hit-testable) backdrop on top — a JS-dispatched click
+  // bypasses that check entirely and reaches the link regardless.
   const link = $("nav").$(`a=${navLabel}`);
-  await link.waitForClickable({ timeout: 30000 });
-  await link.click();
+  await link.waitForExist({ timeout: 10000 });
+  await browser.execute((el) => el.click(), link);
 }
 
 // T-M1.1-1: member IDs are random (100001-999999), never sequential — a

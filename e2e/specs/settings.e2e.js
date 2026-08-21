@@ -71,7 +71,9 @@ describe("Settings", () => {
 
   it("T-M7.4-2: the backup schedule segmented control saves immediately, no separate Save step", async () => {
     await navigateTo("Settings");
-    await $("button=Weekly").click();
+    // SegmentedControl's options are base-ui Radio.Root, which renders a
+    // <span> (role="radio"), never a <button>.
+    await $("span=Weekly").click();
     await $("h2*=Backup schedule set to weekly").waitForExist({ timeout: 3000 });
   });
 
@@ -87,6 +89,13 @@ describe("Settings", () => {
 
   it("T-M7.4-6: restore confirmation follows the checklist pattern — Cancel first, disabled until checked", async () => {
     await navigateTo("Settings");
+    // The restore button reads "Restore from selected backup" until a
+    // radio option is actually chosen (restore-option-list.tsx) — nothing
+    // is pre-selected by default (destructive/"cannot be undone" action,
+    // deliberately not one-clickable). Select the manual backup first,
+    // same as an operator would.
+    await $("span*=Manual —").waitForExist({ timeout: 3000 });
+    await $("span*=Manual —").click();
     await $("button*=Restore from Manual").waitForExist({ timeout: 3000 });
     await $("button*=Restore from Manual").click();
 
