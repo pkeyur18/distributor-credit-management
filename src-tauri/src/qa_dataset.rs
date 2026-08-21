@@ -250,12 +250,21 @@ fn generate_closed_month(
         .and_then(|next| next.pred_opt())
         .expect("last day of month");
 
-    conn.execute(
+    // One transaction for the whole month: `per_month` entries plus their
+    // chain recalcs plus the close snapshot/zero pass, all as a single
+    // commit rather than one fsync per row. `recalculate_chain` already
+    // detects the non-autocommit connection and skips its own per-call
+    // transaction, so nesting is free.
+    let tx = conn
+        .unchecked_transaction()
+        .expect("begin historical month transaction");
+
+    tx.execute(
         "INSERT INTO periods (period_month, status, ended_at, closed_at) VALUES (?1, 'closed', ?2, ?2)",
         rusqlite::params![period_month, last_day.to_string()],
     )
     .expect("insert historical period row");
-    let period_id = conn.last_insert_rowid();
+    let period_id = tx.last_insert_rowid();
 
     for _ in 0..per_month {
         let member_id = member_ids[rng.random_range(0..member_ids.len())];
@@ -265,7 +274,7 @@ fn generate_closed_month(
         // (ADR-004) — a plain random cents value already satisfies both.
         let amount = rng.random_range(100..=500_000i64);
 
-        conn.execute(
+        tx.execute(
             "INSERT INTO business_volume_entries (member_id, amount, entry_date, period_month, created_at)
              VALUES (?1, ?2, ?3, ?4, ?4)",
             rusqlite::params![
@@ -276,12 +285,13 @@ fn generate_closed_month(
             ],
         )
         .expect("insert historical entry");
-        m3_calc::recalculate_chain(conn, member_id, period_id).expect("recalculate_chain");
+        m3_calc::recalculate_chain(&tx, member_id, period_id).expect("recalculate_chain");
     }
 
-    m5_close::write_period_close_snapshots(conn, period_id, &last_day.to_string())
+    m5_close::write_period_close_snapshots(&tx, period_id, &last_day.to_string())
         .expect("write historical snapshots");
-    m5_close::zero_period_totals(conn, period_id).expect("zero historical totals");
+    m5_close::zero_period_totals(&tx, period_id).expect("zero historical totals");
+    tx.commit().expect("commit historical month transaction");
 }
 
 fn generate_current_month(
