@@ -13,13 +13,23 @@
 //! Targets are NFR-1's three fixed numbers, unconditional on volume:
 //! screen render < 2s (frontend-only — nothing here can measure a paint,
 //! see T-QA.6-3's WebdriverIO test for the one NFR-1 leg this file can't
-//! cover), recalculation < 2s, extract < 30s.
+//! cover), recalculation < 2s, extract < 30s. `run_at_scale` also times
+//! three operations NFR-1 doesn't name, each held to the closest-shaped
+//! existing budget rather than a new number: period close (snapshot +
+//! zero) and backup/restore (full-file copy) against the closest-shaped
+//! budgets — close isn't a per-member recalculation, so it gets the
+//! recalculation budget; backup/restore is a bulk file operation, so it
+//! gets the export budget — and cold start (close + reopen the connection,
+//! same as `unlock_session` does on every launch) against the screen
+//! budget, since PIN entry to a ready console is a screen becoming usable.
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use bvconsole_lib::backup;
 use bvconsole_lib::db;
 use bvconsole_lib::m1_members;
 use bvconsole_lib::m2_entries::{self, RecordEntryInput};
+use bvconsole_lib::m5_close;
 use bvconsole_lib::m6_reports::{self, ExportLowContributionInput, ExportMonthlyInput};
 use bvconsole_lib::qa_dataset::generate_dataset_into;
 
@@ -159,6 +169,88 @@ fn run_at_scale(label: &str, scale: usize) {
     assert!(
         !results.is_empty(),
         "the fragment came from a real member's own phone number"
+    );
+
+    // --- period close: snapshot + zero every member's totals for the
+    // current (open) period. Deliberately last — it zeroes
+    // `member_period_totals`, which `load_live_export_rows` above just
+    // read, so nothing later in this function may depend on live current-
+    // period data. Not one of NFR-1's three named legs — the close
+    // pipeline does no per-member chain recalculation (totals are already
+    // live-maintained by `record_entry` above), just one join query plus a
+    // snapshot insert and a zeroing update per member — so it's held to
+    // the same 2s recalculation budget as the closest-shaped named leg,
+    // not a newly invented number. Wrapped in one transaction, same as
+    // the real close path (`confirm_backup_and_close`) always runs it
+    // under — calling these two functions raw on an autocommit connection
+    // gives every row its own fsync and times something no real close
+    // ever does.
+    let period_id: i64 = conn
+        .query_row("SELECT id FROM periods WHERE status = 'open'", [], |r| {
+            r.get(0)
+        })
+        .expect("current open period must exist");
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let start = Instant::now();
+    let tx = conn
+        .unchecked_transaction()
+        .expect("begin close transaction");
+    m5_close::write_period_close_snapshots(&tx, period_id, &today).expect("write snapshots");
+    m5_close::zero_period_totals(&tx, period_id).expect("zero totals");
+    tx.commit().expect("commit close transaction");
+    let close_elapsed = start.elapsed();
+    eprintln!("[{label}] period close (snapshot + zero): {close_elapsed:?}");
+    assert!(
+        close_elapsed < RECALC_BUDGET,
+        "{label}: period close took {close_elapsed:?}, budget is {RECALC_BUDGET:?}"
+    );
+
+    // --- backup + restore: full-file copy at ceiling size. No NFR-1 leg
+    // names this; held to the export budget by analogy, same reasoning as
+    // period close reusing the recalculation budget above — this is a
+    // bulk file operation, not a screen or a recalculation.
+    let backup_app_data_dir = std::env::temp_dir().join(format!("bvconsole-perf-appdata-{label}"));
+    std::fs::create_dir_all(&backup_app_data_dir).expect("create backup app-data dir");
+
+    let start = Instant::now();
+    let version =
+        backup::write_backup_copy(&conn, &dir.0, &backup_app_data_dir, period_id, "manual")
+            .expect("write_backup_copy");
+    let backup_elapsed = start.elapsed();
+    eprintln!("[{label}] backup (full-file copy): {backup_elapsed:?}");
+    assert!(
+        backup_elapsed < EXPORT_BUDGET,
+        "{label}: backup took {backup_elapsed:?}, budget is {EXPORT_BUDGET:?}"
+    );
+
+    let backup_file_path = backup_app_data_dir
+        .join("backups")
+        .join(format!("period-{period_id}-v{version}.db"));
+    let start = Instant::now();
+    backup::restore_from_backup_file(Some(&conn), &dir.0, &backup_app_data_dir, &backup_file_path)
+        .expect("restore_from_backup_file");
+    let restore_elapsed = start.elapsed();
+    eprintln!("[{label}] restore (full-file copy): {restore_elapsed:?}");
+    assert!(
+        restore_elapsed < EXPORT_BUDGET,
+        "{label}: restore took {restore_elapsed:?}, budget is {EXPORT_BUDGET:?}"
+    );
+    let _ = std::fs::remove_dir_all(&backup_app_data_dir);
+
+    // --- cold start: close and reopen fresh, as `unlock_session` does on
+    // every launch (not just first-run) — key check + migration against
+    // the real on-disk file. No NFR-1 leg names this either; held to the
+    // screen budget by analogy, since PIN entry to a ready console is a
+    // screen becoming usable.
+    drop(conn);
+    let start = Instant::now();
+    let reopened = db::open_encrypted(&dir.0, "perf-test-key").expect("cold-start open_encrypted");
+    let cold_start_elapsed = start.elapsed();
+    drop(reopened);
+    eprintln!("[{label}] cold start (reopen): {cold_start_elapsed:?}");
+    assert!(
+        cold_start_elapsed < RECALC_BUDGET,
+        "{label}: cold start took {cold_start_elapsed:?}, budget is {RECALC_BUDGET:?}"
     );
 }
 

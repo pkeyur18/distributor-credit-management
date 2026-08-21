@@ -115,14 +115,14 @@ Default slab table (threshold → percentage):
 
 Compute bottom-up (leaves first, root last) for every month independently — nothing carries over between months, rewards never add back into business_volume or total_business_volume for any member including the earner. Round only the FINAL values in the output to 2 decimal places; do not round any intermediate term.
 
-Also append a THIRD file, closed_months.txt: one YYYY-MM per line, listing every calendar month in {{START_DATE}}..{{END_DATE}} EXCEPT the one containing {{END_DATE}} itself (that one stays "open"/current). This is the exact value to pass to the import tool's --closed-months flag.
+Also append a THIRD file, closed_months.txt: a single line, comma-separated, listing every calendar month in {{START_DATE}}..{{END_DATE}} EXCEPT the one containing {{END_DATE}} itself (that one stays "open"/current), e.g. `2026-06,2026-07,2026-08`. This is the exact value to pass to the import tool's --closed-months flag.
 
 Output all three files ready to download.
 ~~~
 
 ## Verification approach (once CSVs exist — not part of this analysis task, just so the plan is complete)
 
-1. `cargo run --bin import_test_data -- --csv test_data.csv --credential <pin-or-password> --closed-months $(cat closed_months.txt | tr '\n' ',')`
+1. `cargo run --bin import_test_data -- --csv test_data.csv --credential <pin-or-password> --closed-months $(cat closed_months.txt)`
 2. For each closed month: compare `expected_results.csv` rows for that month against `monthly_snapshots` (version = MAX(version) per member/period) in `console.db`.
 3. For the current open month: compare against live `member_period_totals`.
 4. Cross-check the six golden scenarios in `02-business-rules.md` §5 still reconcile (65/62/510/1,000/980/10) independently of the generated data — regression guard, not part of the generated set.

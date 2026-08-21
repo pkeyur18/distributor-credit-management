@@ -1,11 +1,19 @@
-import { completeFirstRunSetup, addRootMember, addMember, navigateTo } from "../helpers/seed.js";
+import {
+  completeFirstRunSetup,
+  addRootMember,
+  addMember,
+  navigateTo,
+  FIRST_RUN_PIN,
+} from "../helpers/seed.js";
 
-// Specs in this directory share one running app instance and one login
-// session (see helpers/seed.js's own doc comment) — first-run setup can
-// only ever happen once per instance, so every test after the first one
-// in this describe block must build on the state earlier tests already
-// left behind rather than calling completeFirstRunSetup/addRootMember a
-// second time.
+// Specs in this directory share one real app-data directory (see
+// helpers/seed.js's own doc comment) — first-run setup can only ever
+// happen once against it, so every test after the first one in this
+// describe block must build on the state earlier tests already left
+// behind rather than calling completeFirstRunSetup/addRootMember a second
+// time. The login *session* is not shared, though: wdio starts a fresh
+// process per spec file, so every other file logs back in for itself
+// (helpers/seed.js's `login`).
 
 // US-M2.1 (S7) — the golden path this whole harness exists to catch:
 // record a Business Volume entry through the real UI and confirm the
@@ -15,7 +23,7 @@ import { completeFirstRunSetup, addRootMember, addMember, navigateTo } from "../
 // hierarchy (see helpers/seed.js's own doc comment).
 describe("Business Volume Entry", () => {
   it("records an entry against a newly onboarded member", async () => {
-    await completeFirstRunSetup("482913");
+    await completeFirstRunSetup(FIRST_RUN_PIN);
     const rootId = await addRootMember({
       name: "Root Member",
       phone: "9876500001",
@@ -30,7 +38,13 @@ describe("Business Volume Entry", () => {
 
     await navigateTo("Volume Entry");
     await $("#entry-search").setValue("Asha");
-    const result = $("button*=Asha Patel");
+    // Not a plain `button*=` substring match: addMember leaves the browser
+    // on Asha's own Member Detail page, so this screen's breadcrumb reads
+    // "‹ Back to Asha Patel" — a button matching the same substring, above
+    // the search results in the DOM, that a bare match would click instead.
+    const result = $(
+      './/button[contains(., "Asha Patel") and not(starts-with(normalize-space(.), "Back to"))]',
+    );
     await result.waitForExist({ timeout: 3000 });
     await result.click();
 
@@ -62,6 +76,7 @@ describe("Business Volume Entry", () => {
     // has touched a second period, so exactly one month (the current one)
     // is still recordable.
     await navigateTo("Volume Entry");
-    await expect($("*=Showing figures for")).not.toExist();
+    // Bare `*=` only matches <a> elements — this text is a <span> (month-switcher.tsx).
+    await expect($("span*=Showing figures for")).not.toExist();
   });
 });

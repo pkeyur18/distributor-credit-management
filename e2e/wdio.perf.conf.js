@@ -1,16 +1,14 @@
-// T-QA.3-1 — tauri-driver + WebdriverIO harness. `tauri-driver` is a Rust
-// binary (`cargo install tauri-driver`), not an npm package, so it isn't a
-// devDependency here — this config spawns it as a subprocess and proxies
-// every WebDriver session through it, per Tauri's own documented pattern.
+// Separate config from wdio.conf.js, deliberately: this suite needs the
+// real OS app-data directory pre-seeded with 25,000 members *before* the
+// app process launches (see tests/e2e_seed.rs), not the fresh-unseeded-
+// per-suite-run assumption wdio.conf.js's specs rely on. Kept in its own
+// `specs-perf/` directory so the regular `npm run test:e2e` never picks
+// this up — it's slow (builds a 25,000-member dataset) and belongs on the
+// weekly schedule (see .github/workflows/perf-ceiling.yml), not every PR.
 //
-// D-8: `tauri-driver` speaks to WebView2 (Windows) and webkit2gtk (Linux)
-// only — WKWebView (macOS) exposes no WebDriver, so this suite cannot run
-// on macOS at all, by construction, not by omission. `T-QA.3-3`'s manual
-// checklist (documents/qa/macos-manual-verification-checklist.md) is that
-// platform's actual coverage; this file was authored and reviewed on macOS
-// but has not been executed anywhere in this repository's history yet — it
-// needs a Windows or Linux machine (or CI runner) with `tauri-driver`
-// installed to run for the first time.
+// Same platform constraint as wdio.conf.js: Windows/Linux only (WKWebView
+// has no WebDriver), and only ever safe to run on a throwaway CI runner —
+// the seed step writes into the real app-data directory.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -29,7 +27,7 @@ export const config = {
   // explicit target — this is where tauri-driver listens by default.
   hostname: "127.0.0.1",
   port: 4444,
-  specs: ["./specs/**/*.e2e.js"],
+  specs: ["./specs-perf/**/*.e2e.js"],
   maxInstances: 1,
   capabilities: [
     {
@@ -39,17 +37,8 @@ export const config = {
   ],
   reporters: ["spec"],
   framework: "mocha",
-  // The first test of the run does cold-start Setup (observed ~30s+ just
-  // for the webview to appear under CI's xvfb/no-GPU webkit2gtk) on top of
-  // its own onboarding flow — 60s left it no room. full-hierarchy.e2e.js's
-  // 60-member gate test is the other extreme: ~120 nav clicks, each
-  // capable of a real 30s wait (navigateTo's own waitForClickable) if a
-  // closing dialog's backdrop is slow to clear.
-  mochaOpts: { ui: "bdd", timeout: 300_000 },
+  mochaOpts: { ui: "bdd", timeout: 120_000 },
 
-  // Each spec starts from a fresh, unseeded app-data directory — set once
-  // per suite run, not per test, since `create_root_member` is callable
-  // exactly once (AC-7) and most specs build on a prior spec's state.
   onPrepare: () => {
     // Plain `cargo build` never enables `tauri`'s `custom-protocol` feature
     // (only the `tauri` CLI does that) — without it the binary always runs
@@ -59,6 +48,23 @@ export const config = {
       cwd: path.join(repoRoot, "src-tauri"),
       stdio: "inherit",
     });
+    const seed = spawnSync(
+      "cargo",
+      [
+        "test",
+        "--release",
+        "--test",
+        "e2e_seed",
+        "seed_the_real_app_data_directory_for_e2e_perf_at_scale",
+        "--",
+        "--ignored",
+        "--nocapture",
+      ],
+      { cwd: path.join(repoRoot, "src-tauri"), stdio: "inherit" },
+    );
+    if (seed.status !== 0) {
+      throw new Error("seeding the real app-data directory failed — see output above");
+    }
   },
   beforeSession: () => {
     tauriDriver = spawn("tauri-driver", [], {
@@ -69,9 +75,6 @@ export const config = {
     tauriDriver?.kill();
   },
 
-  // T-QA.3-4: one screenshot per failing test, kept under a per-run
-  // timestamped directory — never overwritten by the next run, unlike a
-  // fixed filename would be.
   afterTest: async function (test, _context, { passed }) {
     if (passed) return;
     const dir = path.join(__dirname, "screenshots", runStamp);
