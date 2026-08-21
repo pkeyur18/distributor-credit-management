@@ -104,5 +104,8 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: DB performance tests (NFR-1/NFR-2)
-        run: cargo test --release --test performance -- --ignored --nocapture --test-threads=1
+      - name: DB performance tests (NFR-1/NFR-2, realistic scale)
+        # Ceiling-scale (25,000 members/200k entries) skipped here — it
+        # alone takes ~6-7 minutes; runs weekly instead, see
+        # perf-ceiling.yml.
+        run: cargo test --release --test performance -- --ignored --nocapture --test-threads=1 --skip ceiling_scale
