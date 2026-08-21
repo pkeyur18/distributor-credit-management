@@ -1,11 +1,17 @@
-import { navigateTo, addMember, idOfPhone } from "../helpers/seed.js";
+import { navigateTo, addMember, idOfPhone, login, FIRST_RUN_PIN } from "../helpers/seed.js";
 
 // US-M4.3 (§5.3a/§6.13, Rule-45). Runs right after business-volume-entry.e2e.js
-// in the same shared session, which leaves exactly one member ("Asha Patel")
-// beneath "Root Member" — below the 60-descendant gate (V4.5), so the first
-// case here covers the immediate-open path. It then seeds past the gate
-// itself (no seed-via-file shortcut exists in this project — see
-// helpers/seed.js's own doc comment) to cover the confirmation path.
+// against the same real app-data directory, which leaves exactly one member
+// ("Asha Patel") beneath "Root Member" — below the 60-descendant gate
+// (V4.5), so the first case here covers the immediate-open path. It then
+// seeds past the gate itself (no seed-via-file shortcut exists in this
+// project — see helpers/seed.js's own doc comment) to cover the
+// confirmation path. wdio starts a fresh process per spec file, so this
+// file logs back in for itself before touching anything.
+before(async () => {
+  await login(FIRST_RUN_PIN);
+});
+
 describe("Full Hierarchy Window", () => {
   it("opens immediately on a small network, read-only, three fields per node", async () => {
     await navigateTo("Structure");
@@ -25,7 +31,8 @@ describe("Full Hierarchy Window", () => {
     await $("p*=2 members").waitForExist({ timeout: 3000 });
     // Read-only: no leg-count/expand affordance, which only renders when
     // StructureTreeNode is interactive (structure-tree-node.tsx).
-    await expect($("=No legs beneath")).not.toBeExisting();
+    // Bare `=` only matches <a> elements — this text is a <span>.
+    await expect($("span=No legs beneath")).not.toBeExisting();
 
     await $('input[placeholder="Find a member by name or number"]').setValue("Asha");
     // The 2px indigo ring (outline-accent) lands on the matched node's
@@ -56,7 +63,8 @@ describe("Full Hierarchy Window", () => {
 
     const dialog = $('div[role="dialog"]');
     await dialog.waitForExist({ timeout: 3000 });
-    await dialog.$("*=61 members").waitForExist({ timeout: 3000 });
+    // Bare `*=` only matches <a> elements — this text is a <p> (structure.tsx).
+    await dialog.$("p*=61 members").waitForExist({ timeout: 3000 });
 
     await dialog.$("button=Cancel").click();
     await dialog.waitForExist({ timeout: 3000, reverse: true });
