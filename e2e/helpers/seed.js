@@ -48,7 +48,10 @@ export async function navigateTo(navLabel) {
   // bypasses that check entirely and reaches the link regardless.
   const link = $("nav").$(`a=${navLabel}`);
   await link.waitForExist({ timeout: 10000 });
-  await browser.execute((el) => el.click(), link);
+  // execute() needs an actually-resolved element reference to serialize
+  // into the page context, not the lazy chainable promise `$()` returns.
+  const resolvedLink = await link;
+  await browser.execute((el) => el.click(), resolvedLink);
 }
 
 // T-M1.1-1: member IDs are random (100001-999999), never sequential — a
