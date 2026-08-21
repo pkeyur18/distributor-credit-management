@@ -30,7 +30,10 @@ use bvconsole_lib::db;
 use bvconsole_lib::m1_members;
 use bvconsole_lib::m2_entries::{self, RecordEntryInput};
 use bvconsole_lib::m5_close;
-use bvconsole_lib::m6_reports::{self, ExportLowContributionInput, ExportMonthlyInput};
+use bvconsole_lib::m6_reports::{
+    self, ExportLowContributionInput, ExportMonthlyInput, MonthlySortField, SortDirection,
+    YearlySortField,
+};
 use bvconsole_lib::qa_dataset::generate_dataset_into;
 
 struct TempDb(PathBuf);
@@ -99,6 +102,8 @@ fn run_at_scale(label: &str, scale: usize) {
         ExportMonthlyInput {
             period_month: period_month.clone(),
             optional_columns: vec![],
+            sort_field: MonthlySortField::Name,
+            sort_direction: SortDirection::Asc,
             output_path: dir
                 .0
                 .with_extension("monthly.xlsx")
@@ -118,6 +123,8 @@ fn run_at_scale(label: &str, scale: usize) {
     m6_reports::export_yearly_average(
         &conn,
         &dir.0.with_extension("yearly.xlsx").to_string_lossy(),
+        YearlySortField::Name,
+        SortDirection::Asc,
     )
     .expect("export_yearly_average");
     let yearly_elapsed = start.elapsed();
@@ -132,6 +139,8 @@ fn run_at_scale(label: &str, scale: usize) {
         &conn,
         ExportLowContributionInput {
             threshold: None,
+            sort_field: YearlySortField::Name,
+            sort_direction: SortDirection::Asc,
             output_path: dir
                 .0
                 .with_extension("low.xlsx")

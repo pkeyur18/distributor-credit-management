@@ -18,12 +18,6 @@ pub struct ExportResult {
     pub file_path: String,
 }
 
-/// One member's row of exportable data — identity fields always come from
-/// the live `members` table (a snapshot only ever carries figures + a
-/// point-in-time active flag, per Rule-38), while the five financial
-/// fields come from whichever source the caller resolved (live
-/// `member_period_totals` for an open/awaiting_close month,
-/// `monthly_snapshots` at `MAX(version)` for a closed one — T-M6.1-4).
 /// Sort field/direction pair the operator picks in the Reports tab before
 /// exporting — one dropdown per report card, always driving that report's
 /// exported `.xlsx` row order. `MonthlySortField`/`YearlySortField` are
@@ -71,7 +65,11 @@ fn sort_monthly_rows(rows: &mut [MemberExportRow], field: MonthlySortField, dir:
             MonthlySortField::SlabPct => a.slab_pct.cmp(&b.slab_pct),
             MonthlySortField::Rewards => a.rewards.cmp(&b.rewards),
         };
-        let ord = if dir == SortDirection::Desc { ord.reverse() } else { ord };
+        let ord = if dir == SortDirection::Desc {
+            ord.reverse()
+        } else {
+            ord
+        };
         ord.then_with(|| a.id.cmp(&b.id))
     });
 }
@@ -89,11 +87,21 @@ fn sort_yearly_rows(rows: &mut [YearlyAverageRow], field: YearlySortField, dir: 
                 .partial_cmp(&b.avg_total_business_volume)
                 .unwrap_or(std::cmp::Ordering::Equal),
         };
-        let ord = if dir == SortDirection::Desc { ord.reverse() } else { ord };
+        let ord = if dir == SortDirection::Desc {
+            ord.reverse()
+        } else {
+            ord
+        };
         ord.then_with(|| a.id.cmp(&b.id))
     });
 }
 
+/// One member's row of exportable data — identity fields always come from
+/// the live `members` table (a snapshot only ever carries figures + a
+/// point-in-time active flag, per Rule-38), while the five financial
+/// fields come from whichever source the caller resolved (live
+/// `member_period_totals` for an open/awaiting_close month,
+/// `monthly_snapshots` at `MAX(version)` for a closed one — T-M6.1-4).
 struct MemberExportRow {
     id: i64,
     name: String,
@@ -842,7 +850,14 @@ mod tests {
         }
     }
 
-    fn export_row(id: i64, name: &str, bv: i64, tbv: i64, slab_pct: i64, rewards: i64) -> MemberExportRow {
+    fn export_row(
+        id: i64,
+        name: &str,
+        bv: i64,
+        tbv: i64,
+        slab_pct: i64,
+        rewards: i64,
+    ) -> MemberExportRow {
         MemberExportRow {
             id,
             name: name.into(),
@@ -869,7 +884,11 @@ mod tests {
             export_row(1, "Bob", 300, 300, 8, 50),
             export_row(2, "Alice", 100, 100, 12, 10),
         ];
-        sort_monthly_rows(&mut rows, MonthlySortField::BusinessVolume, SortDirection::Asc);
+        sort_monthly_rows(
+            &mut rows,
+            MonthlySortField::BusinessVolume,
+            SortDirection::Asc,
+        );
         assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![2, 1]);
 
         sort_monthly_rows(&mut rows, MonthlySortField::Rewards, SortDirection::Desc);
@@ -878,15 +897,25 @@ mod tests {
 
     #[test]
     fn sort_monthly_rows_name_is_case_insensitive() {
-        let mut rows = vec![export_row(1, "bob", 0, 0, 0, 0), export_row(2, "Alice", 0, 0, 0, 0)];
+        let mut rows = vec![
+            export_row(1, "bob", 0, 0, 0, 0),
+            export_row(2, "Alice", 0, 0, 0, 0),
+        ];
         sort_monthly_rows(&mut rows, MonthlySortField::Name, SortDirection::Asc);
         assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![2, 1]);
     }
 
     #[test]
     fn sort_monthly_rows_ties_break_on_id() {
-        let mut rows = vec![export_row(2, "Same", 50, 50, 0, 0), export_row(1, "Same", 50, 50, 0, 0)];
-        sort_monthly_rows(&mut rows, MonthlySortField::BusinessVolume, SortDirection::Asc);
+        let mut rows = vec![
+            export_row(2, "Same", 50, 50, 0, 0),
+            export_row(1, "Same", 50, 50, 0, 0),
+        ];
+        sort_monthly_rows(
+            &mut rows,
+            MonthlySortField::BusinessVolume,
+            SortDirection::Asc,
+        );
         assert_eq!(
             rows.iter().map(|r| r.id).collect::<Vec<_>>(),
             vec![1, 2],
@@ -907,7 +936,10 @@ mod tests {
 
     #[test]
     fn sort_yearly_rows_sorts_by_the_chosen_field_and_direction() {
-        let mut rows = vec![yearly_row(1, "Bob", 300.0, 300.0), yearly_row(2, "Alice", 100.0, 100.0)];
+        let mut rows = vec![
+            yearly_row(1, "Bob", 300.0, 300.0),
+            yearly_row(2, "Alice", 100.0, 100.0),
+        ];
         sort_yearly_rows(
             &mut rows,
             YearlySortField::AvgTotalBusinessVolume,
@@ -946,7 +978,11 @@ mod tests {
         .unwrap();
 
         let mut rows = load_live_export_rows(&conn, period).unwrap();
-        sort_monthly_rows(&mut rows, MonthlySortField::BusinessVolume, SortDirection::Desc);
+        sort_monthly_rows(
+            &mut rows,
+            MonthlySortField::BusinessVolume,
+            SortDirection::Desc,
+        );
         assert_eq!(rows[0].id, high, "highest Business Volume first");
         assert_eq!(rows[1].id, low);
         std::fs::remove_dir_all(output_path.parent().unwrap()).ok();
