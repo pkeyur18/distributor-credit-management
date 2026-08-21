@@ -19,7 +19,11 @@
 // click bypasses that check entirely and reaches the real target
 // regardless. Used everywhere in this file a click could plausibly race a
 // closing dialog.
+// Waits for existence itself — plain click() carries that implicitly, so
+// callers switched over from it (nearly everywhere below) would otherwise
+// silently lose the wait they had before.
 async function jsClick(el) {
+  await el.waitForExist({ timeout: 10000 });
   const resolved = await el;
   await browser.execute((e) => e.click(), resolved);
 }
