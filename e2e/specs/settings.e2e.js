@@ -80,6 +80,6 @@ describe("Settings", () => {
     // Cancel is a true no-op: closing without confirming must not restore.
     await dialog.$("button=Cancel").click();
     await expect(dialog).not.toBeExisting();
-    await $("nav a=Settings").waitForExist({ timeout: 3000 });
+    await $("nav").$("a=Settings").waitForExist({ timeout: 3000 });
   });
 });

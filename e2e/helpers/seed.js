@@ -7,6 +7,10 @@
 // as much an implicit exercise of US-M8.1/US-M1.1's UI paths as they are
 // setup.
 export async function completeFirstRunSetup(pin) {
+  // Setup only renders after the app's first checkDataReadable() IPC
+  // round-trip resolves (auth-context.tsx) — on a cold-started release
+  // binary in CI that can outrun wdio's default 3s implicit wait.
+  await $("#setup-pin").waitForExist({ timeout: 15000 });
   await $("#setup-pin").setValue(pin);
   await $("#setup-pin2").setValue(pin);
   await $("button=Continue").click();
@@ -15,7 +19,7 @@ export async function completeFirstRunSetup(pin) {
 }
 
 export async function navigateTo(navLabel) {
-  await $(`nav a=${navLabel}`).click();
+  await $("nav").$(`a=${navLabel}`).click();
 }
 
 // T-M1.1-1: member IDs are random (100001-999999), never sequential — a
