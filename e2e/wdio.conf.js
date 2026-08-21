@@ -48,7 +48,11 @@ export const config = {
   // per suite run, not per test, since `create_root_member` is callable
   // exactly once (AC-7) and most specs build on a prior spec's state.
   onPrepare: () => {
-    spawnSync("cargo", ["build", "--release"], {
+    // Plain `cargo build` never enables `tauri`'s `custom-protocol` feature
+    // (only the `tauri` CLI does that) — without it the binary always runs
+    // in dev mode, per tauri's own build.rs (`dev = !custom_protocol`), and
+    // tries to load http://localhost:1420 instead of the bundled frontend.
+    spawnSync("cargo", ["build", "--release", "--features", "tauri/custom-protocol"], {
       cwd: path.join(repoRoot, "src-tauri"),
       stdio: "inherit",
     });
