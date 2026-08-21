@@ -39,7 +39,10 @@ export const config = {
   ],
   reporters: ["spec"],
   framework: "mocha",
-  mochaOpts: { ui: "bdd", timeout: 60_000 },
+  // The first test of the run does cold-start Setup (observed ~30s+ just
+  // for the webview to appear under CI's xvfb/no-GPU webkit2gtk) on top of
+  // its own onboarding flow — 60s left it no room.
+  mochaOpts: { ui: "bdd", timeout: 120_000 },
 
   // Each spec starts from a fresh, unseeded app-data directory — set once
   // per suite run, not per test, since `create_root_member` is callable

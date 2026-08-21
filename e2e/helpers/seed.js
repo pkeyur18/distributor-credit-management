@@ -7,10 +7,12 @@
 // as much an implicit exercise of US-M8.1/US-M1.1's UI paths as they are
 // setup.
 export async function completeFirstRunSetup(pin) {
-  // Setup only renders after the app's first checkDataReadable() IPC
-  // round-trip resolves (auth-context.tsx) — on a cold-started release
-  // binary in CI that can outrun wdio's default 3s implicit wait.
-  await $("#setup-pin").waitForExist({ timeout: 15000 });
+  // Setup only renders once the webview has loaded and mounted (the
+  // check_data_readable round-trip itself is trivial sync fs I/O, not the
+  // bottleneck) — CI's xvfb/no-GPU webkit2gtk cold start alone has been
+  // observed taking ~30s before the window even exists, on top of bundle
+  // parse/mount. 15s wasn't enough; give it real headroom.
+  await $("#setup-pin").waitForExist({ timeout: 45000 });
   await $("#setup-pin").setValue(pin);
   await $("#setup-pin2").setValue(pin);
   await $("button=Continue").click();
