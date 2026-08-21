@@ -78,7 +78,14 @@ export async function addMember({ name, phone, address, referenceId }) {
 export async function recordEntry({ memberName, amount }) {
   await navigateTo("Volume Entry");
   await $("#entry-search").setValue(memberName);
-  const result = $(`button*=${memberName}`);
+  // Plain `button*=${memberName}` also matches the page's own "‹ Back to
+  // {memberName}" breadcrumb whenever the member just came from their own
+  // Detail page (addMember/idOfPhone leave you there) — that breadcrumb
+  // sits above the search results, so a bare substring match clicks it
+  // instead and bounces back to Member Detail. Exclude it explicitly.
+  const result = $(
+    `.//button[contains(., "${memberName}") and not(starts-with(normalize-space(.), "Back to"))]`,
+  );
   await result.waitForExist({ timeout: 3000 });
   await result.click();
   await $("#entry-amount").setValue(amount);

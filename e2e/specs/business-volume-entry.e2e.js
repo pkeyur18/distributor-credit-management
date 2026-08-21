@@ -30,7 +30,13 @@ describe("Business Volume Entry", () => {
 
     await navigateTo("Volume Entry");
     await $("#entry-search").setValue("Asha");
-    const result = $("button*=Asha Patel");
+    // Not a plain `button*=` substring match: addMember leaves the browser
+    // on Asha's own Member Detail page, so this screen's breadcrumb reads
+    // "‹ Back to Asha Patel" — a button matching the same substring, above
+    // the search results in the DOM, that a bare match would click instead.
+    const result = $(
+      './/button[contains(., "Asha Patel") and not(starts-with(normalize-space(.), "Back to"))]',
+    );
     await result.waitForExist({ timeout: 3000 });
     await result.click();
 
