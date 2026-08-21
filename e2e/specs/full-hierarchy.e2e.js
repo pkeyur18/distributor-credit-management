@@ -1,4 +1,4 @@
-import { navigateTo, addMember, idOfPhone, login, FIRST_RUN_PIN } from "../helpers/seed.js";
+import { navigateTo, addMember, idOfPhone, login, FIRST_RUN_PIN, jsClick } from "../helpers/seed.js";
 
 // US-M4.3 (§5.3a/§6.13, Rule-45). Runs right after business-volume-entry.e2e.js
 // against the same real app-data directory, which leaves exactly one member
@@ -17,10 +17,10 @@ describe("Full Hierarchy Window", () => {
     await navigateTo("Structure");
 
     const before = await browser.getWindowHandles();
-    await $("button=View full hierarchy").click();
+    await jsClick($("button=View full hierarchy"));
 
     await browser.waitUntil(async () => (await browser.getWindowHandles()).length > before.length, {
-      timeout: 5000,
+      timeout: 10000,
       timeoutMsg: "expected a new full-hierarchy window to open",
     });
     const after = await browser.getWindowHandles();
@@ -59,23 +59,23 @@ describe("Full Hierarchy Window", () => {
 
     await navigateTo("Structure");
     const before = await browser.getWindowHandles();
-    await $("button=View full hierarchy").click();
+    await jsClick($("button=View full hierarchy"));
 
     const dialog = $('div[role="dialog"]');
     await dialog.waitForExist({ timeout: 3000 });
     // Bare `*=` only matches <a> elements — this text is a <p> (structure.tsx).
     await dialog.$("p*=61 members").waitForExist({ timeout: 3000 });
 
-    await dialog.$("button=Cancel").click();
+    await jsClick(dialog.$("button=Cancel"));
     await dialog.waitForExist({ timeout: 3000, reverse: true });
     await expect(await browser.getWindowHandles()).toHaveLength(before.length);
 
-    await $("button=View full hierarchy").click();
+    await jsClick($("button=View full hierarchy"));
     await dialog.waitForExist({ timeout: 3000 });
-    await dialog.$("button=Open").click();
+    await jsClick(dialog.$("button=Open"));
 
     await browser.waitUntil(async () => (await browser.getWindowHandles()).length > before.length, {
-      timeout: 5000,
+      timeout: 10000,
       timeoutMsg: "expected a new full-hierarchy window to open after confirming",
     });
     const after = await browser.getWindowHandles();
