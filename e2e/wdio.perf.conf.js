@@ -23,6 +23,10 @@ const runStamp = new Date().toISOString().replace(/[:.]/g, "-");
 let tauriDriver;
 
 export const config = {
+  // No browserName in capabilities (tauri:options only), so wdio needs an
+  // explicit target — this is where tauri-driver listens by default.
+  hostname: "127.0.0.1",
+  port: 4444,
   specs: ["./specs-perf/**/*.e2e.js"],
   maxInstances: 1,
   capabilities: [
