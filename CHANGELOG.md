@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.3.4](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.3.3...bvconsole-v0.3.4) (2026-08-21)
+
+
+### Bug Fixes
+
+* **e2e:** apply the JS-click workaround to every click in seed.js, fix toBeFocused ([be81bcb](https://github.com/pkeyur18/distributor-credit-management/commit/be81bcbf1f0808273bb1ad8f37bd95994eddd55d))
+* **e2e:** build the release binary with tauri's custom-protocol feature ([f2ec2b8](https://github.com/pkeyur18/distributor-credit-management/commit/f2ec2b8c21971e34b5cc7a219417459cd0520bf9))
+* **e2e:** confirm the royalty recalc dialog, give sustained loops more headroom ([3a6a684](https://github.com/pkeyur18/distributor-credit-management/commit/3a6a684c502da1c9a5813380ffc95f8ab6f8f4eb))
+* **e2e:** give cold-start room to breathe, capture screenshots on failure ([e08d221](https://github.com/pkeyur18/distributor-credit-management/commit/e08d221504c60c7697bf3fdf269283be99dbf61f))
+* **e2e:** JS-dispatched nav click, fix remaining Radio.Root selectors ([40dc1fc](https://github.com/pkeyur18/distributor-credit-management/commit/40dc1fc3304c87d322f1b834765f4e76ee8b36c6))
+* **e2e:** jsClick waits for existence itself ([4854905](https://github.com/pkeyur18/distributor-credit-management/commit/48549059a76e219f646fc2ec765dc9dd5197cbcd))
+* **e2e:** log back in at the start of every spec file after the first ([ab73760](https://github.com/pkeyur18/distributor-credit-management/commit/ab73760ccc3be667465362bb532c75f327e6c751))
+* **e2e:** point wdio at tauri-driver's hostname/port ([9055f53](https://github.com/pkeyur18/distributor-credit-management/commit/9055f5383cf951088ebf38c10f89251eea677476))
+* **e2e:** resolve the element before passing it to execute() ([9b37134](https://github.com/pkeyur18/distributor-credit-management/commit/9b3713457ecf7224d9b7c2c1b28ab07eda8cffcd))
+* **e2e:** scope nav selectors correctly and wait for cold-start setup screen ([904bab7](https://github.com/pkeyur18/distributor-credit-management/commit/904bab7df5245e3a568cd18334415a0dda0c7725))
+* **e2e:** stop the search-result selector from matching the breadcrumb ([ff5a1f6](https://github.com/pkeyur18/distributor-credit-management/commit/ff5a1f6b3cea20cbabed84ca6b6d359ce0475700))
+* **e2e:** use waitForClickable instead of a fixed dialog-close wait ([018401e](https://github.com/pkeyur18/distributor-credit-management/commit/018401e67cdb829c0d87e41e2dde7acfc19bad7b))
+* **e2e:** wait for the Add Member dialog to close, fix bare =/*= selectors ([fbcdb42](https://github.com/pkeyur18/distributor-credit-management/commit/fbcdb42ec45fc4a2c290abbd0a685116d6ea35e3))
+
+
+### Performance
+
+* add CI gate for DB performance tests, fix unwrapped-autocommit close path ([a75ac66](https://github.com/pkeyur18/distributor-credit-management/commit/a75ac66befd49ebfe4b83e99aa66d745169a2f61))
+* add CI gate for DB performance tests, fix unwrapped-autocommit close path ([6abbf4b](https://github.com/pkeyur18/distributor-credit-management/commit/6abbf4b7dacc22f2b8241ad4ba96e898db164a79))
+* add cold-start and backup/restore timing to the perf harness ([efbb84e](https://github.com/pkeyur18/distributor-credit-management/commit/efbb84ee919f7963d40855a7cd8404890024b3ff))
+* add cold-start and backup/restore timing to the perf harness ([75823a8](https://github.com/pkeyur18/distributor-credit-management/commit/75823a85bb8520701d957eecc7aea8bdc40135ad))
+* add E2E app-data seeding for UI-perf-at-scale spec ([5f3246e](https://github.com/pkeyur18/distributor-credit-management/commit/5f3246e35a5786713b6871bcc6e2eed057570f4e))
+* enhance CI with DB performance tests and E2E UI validations ([055fb40](https://github.com/pkeyur18/distributor-credit-management/commit/055fb4070ae83940d2819b665adfa83e97a72f25))
+
+
+### Documentation
+
+* fix closed_months.txt format in test-data-generation prompt ([15e8911](https://github.com/pkeyur18/distributor-credit-management/commit/15e8911d8e1b0217b04794695806e2012ad1f686))
+
 ## [0.3.3](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.3.2...bvconsole-v0.3.3) (2026-08-19)
 
 
