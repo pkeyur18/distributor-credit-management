@@ -41,8 +41,11 @@ export const config = {
   framework: "mocha",
   // The first test of the run does cold-start Setup (observed ~30s+ just
   // for the webview to appear under CI's xvfb/no-GPU webkit2gtk) on top of
-  // its own onboarding flow — 60s left it no room.
-  mochaOpts: { ui: "bdd", timeout: 120_000 },
+  // its own onboarding flow — 60s left it no room. full-hierarchy.e2e.js's
+  // 60-member gate test is the other extreme: ~120 nav clicks, each
+  // capable of a real 30s wait (navigateTo's own waitForClickable) if a
+  // closing dialog's backdrop is slow to clear.
+  mochaOpts: { ui: "bdd", timeout: 300_000 },
 
   // Each spec starts from a fresh, unseeded app-data directory — set once
   // per suite run, not per test, since `create_root_member` is callable

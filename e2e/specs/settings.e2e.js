@@ -15,6 +15,15 @@ describe("Settings", () => {
     await $("#royalty-min").waitForExist({ timeout: 3000 });
     await $("#royalty-min").setValue("4");
     await $("button=Save royalty settings").click();
+    // A Royalty save always goes through the same mid-period recalc
+    // warning a Slab table save does (useRecalcWarning, settings.tsx) —
+    // there is no direct-save path. Confirm it, same as the slab table
+    // test below.
+    const dialog = $('div[role="dialog"]');
+    await dialog.waitForExist({ timeout: 3000 });
+    const confirmButton = dialog.$("button*=Save and re-work");
+    await confirmButton.waitForEnabled({ timeout: 3000 });
+    await confirmButton.click();
     // A bare `*=` (no tag prefix) compiles to WebDriver's "partial link
     // text" strategy, which only matches <a> elements — the toast title
     // renders as an <h2> (@base-ui/react's Toast.Title), so this needs

@@ -40,8 +40,14 @@ export async function navigateTo(navLabel) {
   // which does a real elementFromPoint overlap test — so this waits out
   // any transient overlay (a closing dialog's backdrop, mid-transition)
   // sitting on top of the nav link instead of racing it.
+  // 10s wasn't enough in the loop-heavy specs (60 add-member cycles in
+  // full-hierarchy.e2e.js, many in golden-scenarios.e2e.js) — a closing
+  // dialog's backdrop only unmounts once base-ui observes its exit
+  // animation finish (getAnimations()-based), which gets slower/less
+  // reliable the longer a sustained run goes under CI's headless,
+  // software-rendered WebKit.
   const link = $("nav").$(`a=${navLabel}`);
-  await link.waitForClickable({ timeout: 10000 });
+  await link.waitForClickable({ timeout: 30000 });
   await link.click();
 }
 
