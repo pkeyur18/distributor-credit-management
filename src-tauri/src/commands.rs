@@ -370,13 +370,15 @@ pub fn export_yearly_average(
     session: tauri::State<'_, SessionState>,
     db: tauri::State<'_, DbState>,
     output_path: String,
+    sort_field: m6_reports::YearlySortField,
+    sort_direction: m6_reports::SortDirection,
 ) -> Result<m6_reports::ExportResult, AppError> {
     require_session(&session)?;
     let guard = locked_conn(&db);
     let conn = guard.as_ref().expect(
         "an authenticated session implies an open database connection — see S5's login flow",
     );
-    m6_reports::export_yearly_average(conn, &output_path)
+    m6_reports::export_yearly_average(conn, &output_path, sort_field, sort_direction)
 }
 
 /// API-18.
