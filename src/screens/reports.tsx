@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { ArrowDown, ArrowUp, Download } from "lucide-react";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,7 +30,10 @@ import {
   previewYearlyAverage,
   type ClosedMonthBackup,
   type MonthlyPreviewRow,
+  type MonthlySortField,
+  type SortDirection,
   type YearlyAveragePreviewRow,
+  type YearlySortField,
 } from "@/lib/ipc/m6-reports";
 import { getSettings } from "@/lib/ipc/m7-settings";
 import { MANDATORY_EXPORT_COLUMNS, OPTIONAL_EXPORT_COLUMNS } from "@/lib/export-columns";
@@ -40,6 +43,118 @@ import { centsToDisplay, cn, displayToCents, monthLabel } from "@/lib/utils";
 const MONTHLY_PREVIEW_LIMIT = 6;
 const YEARLY_PREVIEW_LIMIT = 6;
 const LOW_CONTRIBUTION_PREVIEW_LIMIT = 8;
+
+const MONTHLY_SORT_OPTIONS: { value: MonthlySortField; label: string }[] = [
+  { value: "name", label: "Name" },
+  { value: "businessVolume", label: "Business Volume" },
+  { value: "totalBusinessVolume", label: "Total Business Volume" },
+  { value: "slabPct", label: "Slab %" },
+  { value: "rewards", label: "Rewards" },
+];
+
+const YEARLY_SORT_OPTIONS: { value: YearlySortField; label: string }[] = [
+  { value: "name", label: "Name" },
+  { value: "avgBusinessVolume", label: "Average Business Volume" },
+  { value: "avgTotalBusinessVolume", label: "Average Total Business Volume" },
+];
+
+function compareMonthlyPreview(
+  a: MonthlyPreviewRow,
+  b: MonthlyPreviewRow,
+  field: MonthlySortField,
+  direction: SortDirection,
+): number {
+  // Rewards isn't a column this preview table shows (mod.rs's
+  // preview_monthly_data doc comment) — reordering by it here would look
+  // arbitrary, so a Rewards sort choice only ever affects the exported file.
+  if (field === "rewards") return b.totalBusinessVolume - a.totalBusinessVolume;
+  let cmp: number;
+  switch (field) {
+    case "name":
+      cmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      break;
+    case "businessVolume":
+      cmp = a.businessVolume - b.businessVolume;
+      break;
+    case "totalBusinessVolume":
+      cmp = a.totalBusinessVolume - b.totalBusinessVolume;
+      break;
+    case "slabPct":
+      cmp = a.slabPct - b.slabPct;
+      break;
+  }
+  if (direction === "desc") cmp = -cmp;
+  return cmp !== 0 ? cmp : a.id - b.id;
+}
+
+function compareYearlyPreview(
+  a: YearlyAveragePreviewRow,
+  b: YearlyAveragePreviewRow,
+  field: YearlySortField,
+  direction: SortDirection,
+  // The Low-Contribution card's own table never shows Average Total
+  // Business Volume — same reasoning as Rewards above, that field only
+  // ever affects the exported file for that card.
+  hasTotalBvColumn: boolean,
+): number {
+  if (field === "avgTotalBusinessVolume" && !hasTotalBvColumn) {
+    return a.avgBusinessVolume - b.avgBusinessVolume;
+  }
+  let cmp: number;
+  switch (field) {
+    case "name":
+      cmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      break;
+    case "avgBusinessVolume":
+      cmp = a.avgBusinessVolume - b.avgBusinessVolume;
+      break;
+    case "avgTotalBusinessVolume":
+      cmp = a.avgTotalBusinessVolume - b.avgTotalBusinessVolume;
+      break;
+  }
+  if (direction === "desc") cmp = -cmp;
+  return cmp !== 0 ? cmp : a.id - b.id;
+}
+
+function SortControl<F extends string>({
+  field,
+  onFieldChange,
+  direction,
+  onDirectionChange,
+  options,
+}: {
+  field: F;
+  onFieldChange: (field: F) => void;
+  direction: SortDirection;
+  onDirectionChange: (direction: SortDirection) => void;
+  options: { value: F; label: string }[];
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-label">Sort</span>
+      <select
+        className="h-6.75 rounded-sm border border-border bg-surface px-2 text-[12.5px] font-[550] text-ink outline-none focus:border-accent focus:ring-3 focus:ring-accent-weak"
+        value={field}
+        onChange={(e) => onFieldChange(e.target.value as F)}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="w-6.75 px-0"
+        aria-label={direction === "asc" ? "Sorted ascending, click for descending" : "Sorted descending, click for ascending"}
+        onClick={() => onDirectionChange(direction === "asc" ? "desc" : "asc")}
+      >
+        {direction === "asc" ? <ArrowUp /> : <ArrowDown />}
+      </Button>
+    </div>
+  );
+}
 
 // US-M6.1 (§5.8). Rule-19/D-1's five mandatory columns are always included
 // (T-M6.1-2) — the picker below only ever offers Rule-33's optional list,
@@ -63,6 +178,12 @@ export function Reports() {
   const [exportingBackup, setExportingBackup] = useState(false);
   const [monthlyPreview, setMonthlyPreview] = useState<MonthlyPreviewRow[]>([]);
   const [yearlyAverages, setYearlyAverages] = useState<YearlyAveragePreviewRow[] | null>(null);
+  const [monthlySortField, setMonthlySortField] = useState<MonthlySortField>("name");
+  const [monthlySortDirection, setMonthlySortDirection] = useState<SortDirection>("asc");
+  const [yearlySortField, setYearlySortField] = useState<YearlySortField>("name");
+  const [yearlySortDirection, setYearlySortDirection] = useState<SortDirection>("asc");
+  const [lowContribSortField, setLowContribSortField] = useState<YearlySortField>("name");
+  const [lowContribSortDirection, setLowContribSortDirection] = useState<SortDirection>("asc");
   const toast = useToast();
 
   useEffect(() => {
@@ -105,6 +226,8 @@ export function Reports() {
       await exportMonthly({
         periodMonth: viewMonth,
         optionalColumns: Array.from(columns),
+        sortField: monthlySortField,
+        sortDirection: monthlySortDirection,
         outputPath,
       });
       toast.add({ title: "Monthly data exported", type: "success" });
@@ -123,7 +246,7 @@ export function Reports() {
     if (!outputPath) return;
     setExportingYearly(true);
     try {
-      await exportYearlyAverage(outputPath);
+      await exportYearlyAverage(outputPath, yearlySortField, yearlySortDirection);
       toast.add({ title: "Yearly average exported", type: "success" });
     } catch (raw) {
       toast.add({ title: toErrorPresentation(raw).message, type: "danger" });
@@ -143,6 +266,8 @@ export function Reports() {
     try {
       await exportLowContribution({
         threshold: threshold ?? undefined,
+        sortField: lowContribSortField,
+        sortDirection: lowContribSortDirection,
         outputPath,
       });
       toast.add({ title: "Low-contribution report exported", type: "success" });
@@ -183,11 +308,11 @@ export function Reports() {
   const thresholdCents = displayToCents(thresholdInput) ?? 0;
   const belowThreshold = (yearlyAverages ?? [])
     .filter((d) => d.avgBusinessVolume < thresholdCents)
-    .sort((a, b) => a.avgBusinessVolume - b.avgBusinessVolume);
+    .sort((a, b) => compareYearlyPreview(a, b, lowContribSortField, lowContribSortDirection, false));
 
   const yearlyTop = (yearlyAverages ?? [])
     .slice()
-    .sort((a, b) => b.avgTotalBusinessVolume - a.avgTotalBusinessVolume)
+    .sort((a, b) => compareYearlyPreview(a, b, yearlySortField, yearlySortDirection, true))
     .slice(0, YEARLY_PREVIEW_LIMIT);
 
   return (
@@ -205,15 +330,24 @@ export function Reports() {
               {viewMonth ? monthLabel(viewMonth) : ""} · current live figures
             </CardDescription>
           </div>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!viewMonth || exporting}
-            onClick={handleExportMonthly}
-          >
-            <Download />
-            Export .xlsx
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <SortControl
+              field={monthlySortField}
+              onFieldChange={setMonthlySortField}
+              direction={monthlySortDirection}
+              onDirectionChange={setMonthlySortDirection}
+              options={MONTHLY_SORT_OPTIONS}
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!viewMonth || exporting}
+              onClick={handleExportMonthly}
+            >
+              <Download />
+              Export .xlsx
+            </Button>
+          </div>
         </CardHeader>
 
         {lockStatus && (
@@ -257,7 +391,11 @@ export function Reports() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {monthlyPreview.slice(0, MONTHLY_PREVIEW_LIMIT).map((row) => (
+                {monthlyPreview
+                  .slice()
+                  .sort((a, b) => compareMonthlyPreview(a, b, monthlySortField, monthlySortDirection))
+                  .slice(0, MONTHLY_PREVIEW_LIMIT)
+                  .map((row) => (
                   <TableRow key={row.id}>
                     <TableCell primary>{row.name}</TableCell>
                     <TableCell className="mono">{row.id}</TableCell>
@@ -283,15 +421,24 @@ export function Reports() {
               far, never a fixed twelve
             </CardDescription>
           </div>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={exportingYearly}
-            onClick={handleExportYearlyAverage}
-          >
-            <Download />
-            Export .xlsx
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <SortControl
+              field={yearlySortField}
+              onFieldChange={setYearlySortField}
+              direction={yearlySortDirection}
+              onDirectionChange={setYearlySortDirection}
+              options={YEARLY_SORT_OPTIONS}
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={exportingYearly}
+              onClick={handleExportYearlyAverage}
+            >
+              <Download />
+              Export .xlsx
+            </Button>
+          </div>
         </CardHeader>
         <TableWrap>
           <Table>
@@ -325,15 +472,24 @@ export function Reports() {
               Yearly average of own Business Volume, below a threshold
             </CardDescription>
           </div>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={exportingLow}
-            onClick={handleExportLowContribution}
-          >
-            <Download />
-            Export .xlsx
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <SortControl
+              field={lowContribSortField}
+              onFieldChange={setLowContribSortField}
+              direction={lowContribSortDirection}
+              onDirectionChange={setLowContribSortDirection}
+              options={YEARLY_SORT_OPTIONS}
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={exportingLow}
+              onClick={handleExportLowContribution}
+            >
+              <Download />
+              Export .xlsx
+            </Button>
+          </div>
         </CardHeader>
         <label htmlFor="low-threshold" className="text-label mb-1 block">
           Threshold

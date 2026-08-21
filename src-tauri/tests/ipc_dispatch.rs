@@ -269,6 +269,8 @@ fn export_monthly_nested_under_input_succeeds() {
             "input": {
                 "periodMonth": "2026-08",
                 "optionalColumns": [],
+                "sortField": "name",
+                "sortDirection": "asc",
                 "outputPath": std::env::temp_dir().join("y.xlsx").to_str().unwrap()
             }
         })),
@@ -302,6 +304,8 @@ fn export_low_contribution_nested_under_input_succeeds() {
         InvokeBody::Json(json!({
             "input": {
                 "threshold": 10000,
+                "sortField": "name",
+                "sortDirection": "asc",
                 "outputPath": std::env::temp_dir().join("w.xlsx").to_str().unwrap()
             }
         })),
@@ -316,7 +320,9 @@ fn export_yearly_average_flat_scalar_payload_succeeds() {
     let result = invoke_reports(
         "export_yearly_average",
         InvokeBody::Json(json!({
-            "outputPath": std::env::temp_dir().join("v.xlsx").to_str().unwrap()
+            "outputPath": std::env::temp_dir().join("v.xlsx").to_str().unwrap(),
+            "sortField": "name",
+            "sortDirection": "asc"
         })),
     );
     assert!(result.is_ok(), "expected success, got: {result:?}");

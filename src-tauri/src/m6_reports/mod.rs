@@ -18,6 +18,84 @@ pub struct ExportResult {
     pub file_path: String,
 }
 
+/// Sort field/direction pair the operator picks in the Reports tab before
+/// exporting — one dropdown per report card, always driving that report's
+/// exported `.xlsx` row order. `MonthlySortField`/`YearlySortField` are
+/// separate enums rather than one shared enum because the two reports
+/// genuinely don't share a field set (a yearly-average row has no
+/// `slab_pct`/`rewards` at all) — an invalid combination should be
+/// unrepresentable, not a runtime validation error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SortDirection {
+    Asc,
+    Desc,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MonthlySortField {
+    Name,
+    BusinessVolume,
+    TotalBusinessVolume,
+    SlabPct,
+    Rewards,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum YearlySortField {
+    Name,
+    AvgBusinessVolume,
+    AvgTotalBusinessVolume,
+}
+
+/// Name compares case-insensitively (an operator sorting by name expects
+/// "bob" and "Zoe" ordered by letter, not by ASCII case); every field then
+/// ties on `id` so two equal values (or two same-named members) always
+/// land in the same stable order run to run.
+fn sort_monthly_rows(rows: &mut [MemberExportRow], field: MonthlySortField, dir: SortDirection) {
+    rows.sort_by(|a, b| {
+        let ord = match field {
+            MonthlySortField::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            MonthlySortField::BusinessVolume => a.business_volume.cmp(&b.business_volume),
+            MonthlySortField::TotalBusinessVolume => {
+                a.total_business_volume.cmp(&b.total_business_volume)
+            }
+            MonthlySortField::SlabPct => a.slab_pct.cmp(&b.slab_pct),
+            MonthlySortField::Rewards => a.rewards.cmp(&b.rewards),
+        };
+        let ord = if dir == SortDirection::Desc {
+            ord.reverse()
+        } else {
+            ord
+        };
+        ord.then_with(|| a.id.cmp(&b.id))
+    });
+}
+
+fn sort_yearly_rows(rows: &mut [YearlyAverageRow], field: YearlySortField, dir: SortDirection) {
+    rows.sort_by(|a, b| {
+        let ord = match field {
+            YearlySortField::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            YearlySortField::AvgBusinessVolume => a
+                .avg_business_volume
+                .partial_cmp(&b.avg_business_volume)
+                .unwrap_or(std::cmp::Ordering::Equal),
+            YearlySortField::AvgTotalBusinessVolume => a
+                .avg_total_business_volume
+                .partial_cmp(&b.avg_total_business_volume)
+                .unwrap_or(std::cmp::Ordering::Equal),
+        };
+        let ord = if dir == SortDirection::Desc {
+            ord.reverse()
+        } else {
+            ord
+        };
+        ord.then_with(|| a.id.cmp(&b.id))
+    });
+}
+
 /// One member's row of exportable data — identity fields always come from
 /// the live `members` table (a snapshot only ever carries figures + a
 /// point-in-time active flag, per Rule-38), while the five financial
@@ -301,6 +379,8 @@ pub struct ExportMonthlyInput {
     /// untickable.
     #[serde(default)]
     pub optional_columns: Vec<String>,
+    pub sort_field: MonthlySortField,
+    pub sort_direction: SortDirection,
     pub output_path: String,
 }
 
@@ -320,11 +400,12 @@ pub fn export_monthly(
         .iter()
         .map(|k| OptionalColumn::parse(k))
         .collect::<Result<Vec<_>, _>>()?;
-    let rows = if status == "closed" {
+    let mut rows = if status == "closed" {
         load_snapshot_export_rows(conn, period_id)?
     } else {
         load_live_export_rows(conn, period_id)?
     };
+    sort_monthly_rows(&mut rows, input.sort_field, input.sort_direction);
     write_export_xlsx(&rows, &optional, &input.output_path)?;
     Ok(ExportResult {
         file_path: input.output_path,
@@ -357,6 +438,13 @@ pub struct MonthlyPreviewRow {
 /// WebView-never-touches-the-filesystem boundary is untouched — this is
 /// the same shape as `get_member_detail` already returning computed
 /// rewards data to the frontend.
+///
+/// Returned in member-id order — the Reports screen applies whichever sort
+/// the operator picked client-side (reports.tsx), since every field this
+/// preview can display (name/BV/Total BV/Slab %) is already present here.
+/// `rewards` is deliberately not a field on `MonthlyPreviewRow` (it isn't a
+/// column in this table), so a Rewards sort choice reorders only the
+/// exported file, not this preview.
 pub fn preview_monthly_data(
     conn: &Connection,
     period_month: &str,
@@ -367,7 +455,7 @@ pub fn preview_monthly_data(
     } else {
         load_live_export_rows(conn, period_id)?
     };
-    let mut preview: Vec<MonthlyPreviewRow> = rows
+    let preview: Vec<MonthlyPreviewRow> = rows
         .into_iter()
         .map(|r| MonthlyPreviewRow {
             id: r.id,
@@ -377,7 +465,6 @@ pub fn preview_monthly_data(
             slab_pct: r.slab_pct,
         })
         .collect();
-    preview.sort_by_key(|r| std::cmp::Reverse(r.total_business_volume));
     Ok(preview)
 }
 
@@ -437,8 +524,12 @@ pub struct YearlyAveragePreviewRow {
 /// low-contribution "own BV, not Total BV" rule (Rule-24) stays the sole
 /// responsibility of `export_low_contribution` when actually exporting;
 /// this list is presentation only.
+///
+/// Returned in member-id order — the two cards that read this list (Yearly
+/// Average, Low-Contribution) each apply their own sort choice client-side,
+/// since they can disagree on ordering while sharing this one fetch.
 pub fn preview_yearly_average(conn: &Connection) -> Result<Vec<YearlyAveragePreviewRow>, AppError> {
-    let mut rows: Vec<YearlyAveragePreviewRow> = compute_yearly_averages(conn)?
+    let rows: Vec<YearlyAveragePreviewRow> = compute_yearly_averages(conn)?
         .into_iter()
         .map(|r| YearlyAveragePreviewRow {
             id: r.id,
@@ -448,11 +539,6 @@ pub fn preview_yearly_average(conn: &Connection) -> Result<Vec<YearlyAveragePrev
             period_count: r.period_count,
         })
         .collect();
-    rows.sort_by(|a, b| {
-        b.avg_total_business_volume
-            .partial_cmp(&a.avg_total_business_volume)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
     Ok(rows)
 }
 
@@ -463,8 +549,11 @@ pub fn preview_yearly_average(conn: &Connection) -> Result<Vec<YearlyAveragePrev
 pub fn export_yearly_average(
     conn: &Connection,
     output_path: &str,
+    sort_field: YearlySortField,
+    sort_direction: SortDirection,
 ) -> Result<ExportResult, AppError> {
-    let rows = compute_yearly_averages(conn)?;
+    let mut rows = compute_yearly_averages(conn)?;
+    sort_yearly_rows(&mut rows, sort_field, sort_direction);
 
     let mut workbook = Workbook::new();
     let worksheet = workbook.add_worksheet();
@@ -520,6 +609,8 @@ pub struct ExportLowContributionInput {
     /// (default 100.00) — T-M6.3-2's "overridable per run" without
     /// changing the stored setting.
     pub threshold: Option<i64>,
+    pub sort_field: YearlySortField,
+    pub sort_direction: SortDirection,
     pub output_path: String,
 }
 
@@ -538,10 +629,11 @@ pub fn export_low_contribution(
         Some(t) => t,
         None => low_contribution_threshold_setting(conn)?,
     };
-    let rows: Vec<YearlyAverageRow> = compute_yearly_averages(conn)?
+    let mut rows: Vec<YearlyAverageRow> = compute_yearly_averages(conn)?
         .into_iter()
         .filter(|r| r.avg_business_volume < threshold as f64)
         .collect();
+    sort_yearly_rows(&mut rows, input.sort_field, input.sort_direction);
 
     let mut workbook = Workbook::new();
     let worksheet = workbook.add_worksheet();
@@ -758,6 +850,144 @@ mod tests {
         }
     }
 
+    fn export_row(
+        id: i64,
+        name: &str,
+        bv: i64,
+        tbv: i64,
+        slab_pct: i64,
+        rewards: i64,
+    ) -> MemberExportRow {
+        MemberExportRow {
+            id,
+            name: name.into(),
+            phone: "0".into(),
+            email: None,
+            address: "addr".into(),
+            introducer_member_id: None,
+            introducer_name: None,
+            level: 1,
+            leg_count: 0,
+            is_active: true,
+            joining_date: "2026-01-01".into(),
+            business_volume: bv,
+            total_business_volume: tbv,
+            slab_pct,
+            rewards,
+            royalty: 0,
+        }
+    }
+
+    #[test]
+    fn sort_monthly_rows_sorts_by_the_chosen_field_and_direction() {
+        let mut rows = vec![
+            export_row(1, "Bob", 300, 300, 8, 50),
+            export_row(2, "Alice", 100, 100, 12, 10),
+        ];
+        sort_monthly_rows(
+            &mut rows,
+            MonthlySortField::BusinessVolume,
+            SortDirection::Asc,
+        );
+        assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![2, 1]);
+
+        sort_monthly_rows(&mut rows, MonthlySortField::Rewards, SortDirection::Desc);
+        assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![1, 2]);
+    }
+
+    #[test]
+    fn sort_monthly_rows_name_is_case_insensitive() {
+        let mut rows = vec![
+            export_row(1, "bob", 0, 0, 0, 0),
+            export_row(2, "Alice", 0, 0, 0, 0),
+        ];
+        sort_monthly_rows(&mut rows, MonthlySortField::Name, SortDirection::Asc);
+        assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![2, 1]);
+    }
+
+    #[test]
+    fn sort_monthly_rows_ties_break_on_id() {
+        let mut rows = vec![
+            export_row(2, "Same", 50, 50, 0, 0),
+            export_row(1, "Same", 50, 50, 0, 0),
+        ];
+        sort_monthly_rows(
+            &mut rows,
+            MonthlySortField::BusinessVolume,
+            SortDirection::Asc,
+        );
+        assert_eq!(
+            rows.iter().map(|r| r.id).collect::<Vec<_>>(),
+            vec![1, 2],
+            "equal business volume must still resolve to a stable, id-ordered result"
+        );
+    }
+
+    fn yearly_row(id: i64, name: &str, avg_bv: f64, avg_tbv: f64) -> YearlyAverageRow {
+        YearlyAverageRow {
+            id,
+            name: name.into(),
+            phone: "0".into(),
+            avg_business_volume: avg_bv,
+            avg_total_business_volume: avg_tbv,
+            period_count: 1,
+        }
+    }
+
+    #[test]
+    fn sort_yearly_rows_sorts_by_the_chosen_field_and_direction() {
+        let mut rows = vec![
+            yearly_row(1, "Bob", 300.0, 300.0),
+            yearly_row(2, "Alice", 100.0, 100.0),
+        ];
+        sort_yearly_rows(
+            &mut rows,
+            YearlySortField::AvgTotalBusinessVolume,
+            SortDirection::Desc,
+        );
+        assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![1, 2]);
+
+        sort_yearly_rows(&mut rows, YearlySortField::Name, SortDirection::Asc);
+        assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![2, 1]);
+    }
+
+    #[test]
+    fn export_monthly_writes_rows_in_the_requested_sort_order() {
+        // The written .xlsx's cells can't be read back by this crate (see
+        // other export tests' own comments) — assert on the same
+        // sort_monthly_rows call export_monthly makes internally, applied to
+        // the same rows load_live_export_rows produces for this period.
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-08", "open");
+        let low = insert_member(&conn, "Low BV", true, None);
+        let high = insert_member(&conn, "High BV", true, None);
+        insert_totals(&conn, low, period, 10_000, 10_000);
+        insert_totals(&conn, high, period, 90_000, 90_000);
+        let output_path = temp_output_path("monthly-sorted");
+
+        export_monthly(
+            &conn,
+            ExportMonthlyInput {
+                period_month: "2026-08".into(),
+                optional_columns: vec![],
+                sort_field: MonthlySortField::BusinessVolume,
+                sort_direction: SortDirection::Desc,
+                output_path: output_path.to_string_lossy().into_owned(),
+            },
+        )
+        .unwrap();
+
+        let mut rows = load_live_export_rows(&conn, period).unwrap();
+        sort_monthly_rows(
+            &mut rows,
+            MonthlySortField::BusinessVolume,
+            SortDirection::Desc,
+        );
+        assert_eq!(rows[0].id, high, "highest Business Volume first");
+        assert_eq!(rows[1].id, low);
+        std::fs::remove_dir_all(output_path.parent().unwrap()).ok();
+    }
+
     #[test]
     fn optional_column_parse_refuses_an_unknown_key() {
         let err = OptionalColumn::parse("total_business_volume").unwrap_err();
@@ -948,6 +1178,8 @@ mod tests {
             ExportMonthlyInput {
                 period_month: "2026-08".into(),
                 optional_columns: vec![],
+                sort_field: MonthlySortField::Name,
+                sort_direction: SortDirection::Asc,
                 output_path: output_path.to_string_lossy().into_owned(),
             },
         )
@@ -978,6 +1210,8 @@ mod tests {
             ExportMonthlyInput {
                 period_month: "2026-05".into(),
                 optional_columns: vec!["active_status".into()],
+                sort_field: MonthlySortField::Name,
+                sort_direction: SortDirection::Asc,
                 output_path: output_path.to_string_lossy().into_owned(),
             },
         )
@@ -1002,6 +1236,8 @@ mod tests {
             ExportMonthlyInput {
                 period_month: "2099-01".into(),
                 optional_columns: vec![],
+                sort_field: MonthlySortField::Name,
+                sort_direction: SortDirection::Asc,
                 output_path: output_path.to_string_lossy().into_owned(),
             },
         )
@@ -1019,6 +1255,8 @@ mod tests {
             ExportMonthlyInput {
                 period_month: "2026-08".into(),
                 optional_columns: vec!["notARealColumn".into()],
+                sort_field: MonthlySortField::Name,
+                sort_direction: SortDirection::Asc,
                 output_path: output_path.to_string_lossy().into_owned(),
             },
         )
@@ -1027,18 +1265,22 @@ mod tests {
     }
 
     #[test]
-    fn preview_monthly_data_sorts_by_total_business_volume_desc() {
+    fn preview_monthly_data_returns_member_id_order_leaving_sort_to_the_caller() {
+        // Sorting for this preview now happens client-side (reports.tsx) so
+        // the operator's chosen field/direction can drive it without a
+        // round-trip; this only pins the underlying order still being the
+        // plain `ORDER BY m.id` the SQL itself uses.
         let conn = seeded();
         let period = insert_period(&conn, "2026-08", "open");
-        let low = insert_member(&conn, "Low TBV", true, None);
-        let high = insert_member(&conn, "High TBV", true, None);
-        insert_totals(&conn, low, period, 10_000, 10_000);
-        insert_totals(&conn, high, period, 90_000, 90_000);
+        let first = insert_member(&conn, "Zeta", true, None);
+        let second = insert_member(&conn, "Alpha", true, None);
+        insert_totals(&conn, first, period, 10_000, 10_000);
+        insert_totals(&conn, second, period, 90_000, 90_000);
 
         let rows = preview_monthly_data(&conn, "2026-08").unwrap();
         assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].id, high, "highest Total Business Volume first");
-        assert_eq!(rows[1].id, low);
+        assert_eq!(rows[0].id, first, "member-id order, not by any BV field");
+        assert_eq!(rows[1].id, second);
     }
 
     #[test]
@@ -1062,21 +1304,21 @@ mod tests {
     }
 
     #[test]
-    fn preview_yearly_average_sorts_by_avg_total_business_volume_desc() {
+    fn preview_yearly_average_returns_member_id_order_leaving_sort_to_the_caller() {
+        // Both the Yearly Average and Low-Contribution cards read this same
+        // list and can pick different sorts client-side (reports.tsx) — this
+        // only pins the underlying order still being plain member-id order.
         let conn = seeded();
         let period = insert_period(&conn, "2026-05", "closed");
-        let low = insert_member(&conn, "Low Avg", true, None);
-        let high = insert_member(&conn, "High Avg", true, None);
-        insert_snapshot(&conn, low, period, 1, 10_000, 10_000, true);
-        insert_snapshot(&conn, high, period, 1, 90_000, 90_000, true);
+        let first = insert_member(&conn, "Zeta", true, None);
+        let second = insert_member(&conn, "Alpha", true, None);
+        insert_snapshot(&conn, first, period, 1, 10_000, 10_000, true);
+        insert_snapshot(&conn, second, period, 1, 90_000, 90_000, true);
 
         let rows = preview_yearly_average(&conn).unwrap();
         assert_eq!(rows.len(), 2);
-        assert_eq!(
-            rows[0].id, high,
-            "highest average Total Business Volume first"
-        );
-        assert_eq!(rows[1].id, low);
+        assert_eq!(rows[0].id, first, "member-id order, not by any average");
+        assert_eq!(rows[1].id, second);
     }
 
     #[test]
@@ -1156,7 +1398,13 @@ mod tests {
         insert_snapshot(&conn, member, period, 1, 100_000, 100_000, true);
         let output_path = temp_output_path("yearly-average");
 
-        let result = export_yearly_average(&conn, &output_path.to_string_lossy()).unwrap();
+        let result = export_yearly_average(
+            &conn,
+            &output_path.to_string_lossy(),
+            YearlySortField::Name,
+            SortDirection::Asc,
+        )
+        .unwrap();
 
         assert_eq!(result.file_path, output_path.to_string_lossy());
         assert!(output_path.exists());
@@ -1181,6 +1429,8 @@ mod tests {
             &conn,
             ExportLowContributionInput {
                 threshold: Some(10_000), // 100.00
+                sort_field: YearlySortField::Name,
+                sort_direction: SortDirection::Asc,
                 output_path: output_path.to_string_lossy().into_owned(),
             },
         )
@@ -1217,6 +1467,8 @@ mod tests {
             &conn,
             ExportLowContributionInput {
                 threshold: None,
+                sort_field: YearlySortField::Name,
+                sort_direction: SortDirection::Asc,
                 output_path: output_path.to_string_lossy().into_owned(),
             },
         )
@@ -1238,6 +1490,8 @@ mod tests {
             &conn,
             ExportLowContributionInput {
                 threshold: Some(100),
+                sort_field: YearlySortField::Name,
+                sort_direction: SortDirection::Asc,
                 output_path: output_path.to_string_lossy().into_owned(),
             },
         )
