@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.0](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.3.4...bvconsole-v0.4.0) (2026-08-22)
+
+
+### Features
+
+* enhance reports sorting and home distribution charts ([363eaab](https://github.com/pkeyur18/distributor-credit-management/commit/363eaab4a07beb2aeb5e36d1a61f38be782020cf))
+* **home:** add 0% slab bucket, redesign distribution charts ([bc60fb6](https://github.com/pkeyur18/distributor-credit-management/commit/bc60fb6e07a89454621d9479547fa5906e9dfb91))
+* **home:** add 0% slab bucket, redesign distribution charts ([919040f](https://github.com/pkeyur18/distributor-credit-management/commit/919040f780e430c4bdea6b63a19a6ed40c02474e))
+* **reports:** sort exported and previewed report rows ([790ee38](https://github.com/pkeyur18/distributor-credit-management/commit/790ee38bc7017a66256e6f41e8c8746c45a2058c))
+* **reports:** sort exported and previewed report rows ([b3a54fd](https://github.com/pkeyur18/distributor-credit-management/commit/b3a54fd658d1aa32ff537de25ac9b642e054546f))
+
+
+### Bug Fixes
+
+* **e2e:** apply the JS-click workaround to full-hierarchy.e2e.js too ([36f1e14](https://github.com/pkeyur18/distributor-credit-management/commit/36f1e1445076913f487e538ad6f8808b47a6a82c))
+* **reports:** update every export-sort call site, rustfmt ([4aec3b7](https://github.com/pkeyur18/distributor-credit-management/commit/4aec3b7f29987a296ac1a8f40b96598b63a5ad63))
+
 ## [0.3.4](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.3.3...bvconsole-v0.3.4) (2026-08-21)
 
 
