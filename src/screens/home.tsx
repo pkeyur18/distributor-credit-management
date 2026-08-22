@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { MemberModal } from "@/components/member-modal";
 import { PageHeader } from "@/components/page-header";
 import { SearchResultsList } from "@/components/search-results-list";
-import { BarListChart, type BarListRow } from "@/components/bar-list-chart";
+import { ColumnChart, type SlabDatum } from "@/components/column-chart";
+import { RadialRingChart } from "@/components/radial-ring-chart";
 import { EmptyState } from "@/components/empty-state";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { useMemberSearch } from "@/lib/use-member-search";
@@ -213,23 +214,40 @@ function SlabDistributionChart({
   slabTable: SlabRow[];
   metric: "count" | "rewards";
 }) {
-  const buckets = slabTable.map((row) => ({
-    pct: row.percentage,
-    total:
-      metric === "count"
-        ? nodes.filter((n) => n.slabPct === row.percentage).length
-        : nodes.filter((n) => n.slabPct === row.percentage).reduce((sum, n) => sum + n.rewards, 0),
-  }));
-  const max = Math.max(1, ...buckets.map((b) => b.total));
+  // 0% isn't a configured slab row (it's slab_lookup's below-lowest-threshold
+  // fallback, m3_calc/engine.rs) so it's synthesized here rather than read
+  // from slabTable — skipped only if an admin has actually configured a
+  // literal 0% row, to avoid showing the slab twice.
+  const zeroBucket = slabTable.some((row) => row.percentage === 0)
+    ? []
+    : [
+        {
+          pct: 0,
+          total:
+            metric === "count"
+              ? nodes.filter((n) => n.slabPct === 0).length
+              : nodes.filter((n) => n.slabPct === 0).reduce((sum, n) => sum + n.rewards, 0),
+        },
+      ];
+  const buckets = [
+    ...zeroBucket,
+    ...slabTable.map((row) => ({
+      pct: row.percentage,
+      total:
+        metric === "count"
+          ? nodes.filter((n) => n.slabPct === row.percentage).length
+          : nodes.filter((n) => n.slabPct === row.percentage).reduce((sum, n) => sum + n.rewards, 0),
+    })),
+  ];
   const grandTotal = buckets.reduce((sum, b) => sum + b.total, 0);
 
-  const rows: BarListRow[] = buckets.map((b, i) => ({
+  const rows: SlabDatum[] = buckets.map((b, i) => ({
     id: b.pct,
     label: `${b.pct}%`,
-    value: metric === "count" ? b.total : centsToDisplay(b.total),
-    fraction: b.total / max,
+    target: b.total,
     tint: slabTint(i, buckets.length),
   }));
+  const format = (v: number) => (metric === "count" ? String(Math.round(v)) : centsToDisplay(v));
 
   return (
     <div className="rounded-lg border border-border bg-surface p-4.5">
@@ -241,8 +259,10 @@ function SlabDistributionChart({
       </div>
       {buckets.length === 0 ? (
         <EmptyState title="No slabs configured" />
+      ) : metric === "count" ? (
+        <ColumnChart rows={rows} format={format} />
       ) : (
-        <BarListChart size="lg" rows={rows} />
+        <RadialRingChart rows={rows} format={format} totalLabel="this period" />
       )}
     </div>
   );
