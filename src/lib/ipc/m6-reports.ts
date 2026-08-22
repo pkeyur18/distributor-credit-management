@@ -4,10 +4,20 @@ export interface ExportResult {
   filePath: string;
 }
 
+/** Matches `MonthlySortField` (Rust) — the Monthly data export's 5 fields. */
+export type MonthlySortField = "name" | "businessVolume" | "totalBusinessVolume" | "slabPct" | "rewards";
+
+/** Matches `YearlySortField` (Rust) — Yearly Average / Low-Contribution's 3 shared fields. */
+export type YearlySortField = "name" | "avgBusinessVolume" | "avgTotalBusinessVolume";
+
+export type SortDirection = "asc" | "desc";
+
 export interface ExportMonthlyInput {
   periodMonth: string;
   /** Optional columns beyond the five mandatory ones (D-1). */
   optionalColumns?: string[];
+  sortField: MonthlySortField;
+  sortDirection: SortDirection;
   /** Destination path chosen through the native save dialog (ADR-007) — the
    *  WebView never handles raw file content, only the path string itself. */
   outputPath: string;
@@ -21,13 +31,19 @@ export function exportMonthly(input: ExportMonthlyInput): Promise<ExportResult> 
 // API-17 — snapshot-count denominator, displayed alongside the average
 // (Rule-23), divided per member so a late joiner's average isn't dragged
 // down by periods before they existed (T-M6.2-1).
-export function exportYearlyAverage(outputPath: string): Promise<ExportResult> {
-  return invokeCommand("export_yearly_average", { outputPath });
+export function exportYearlyAverage(
+  outputPath: string,
+  sortField: YearlySortField,
+  sortDirection: SortDirection,
+): Promise<ExportResult> {
+  return invokeCommand("export_yearly_average", { outputPath, sortField, sortDirection });
 }
 
 export interface ExportLowContributionInput {
   /** Cents (ADR-004). Omit to read settings.lowContributionThreshold. */
   threshold?: number;
+  sortField: YearlySortField;
+  sortDirection: SortDirection;
   outputPath: string;
 }
 
@@ -65,9 +81,10 @@ export interface MonthlyPreviewRow {
   slabPct: number;
 }
 
-// API-43 — read-only, sorted by Total Business Volume descending. Backs the
-// Reports screen's on-screen "Monthly data" preview table; never touches
-// the filesystem (ADR-007's boundary is unaffected by a plain data return).
+// API-43 — read-only, returned in member-id order; the Reports screen sorts
+// this client-side by whichever field the operator picked. Backs the
+// on-screen "Monthly data" preview table; never touches the filesystem
+// (ADR-007's boundary is unaffected by a plain data return).
 export function previewMonthlyData(periodMonth: string): Promise<MonthlyPreviewRow[]> {
   return invokeCommand("preview_monthly_data", { periodMonth });
 }
@@ -80,12 +97,12 @@ export interface YearlyAveragePreviewRow {
   periodCount: number;
 }
 
-// API-44 — read-only, sorted by average Total Business Volume descending.
-// Backs both the "Yearly average" preview table and the "Low-contribution
-// report" stat-card/table, which filter this same list on own Business
-// Volume client-side as the threshold input changes (no round-trip per
-// keystroke) — Rule-24's "own BV, not Total BV" filter itself stays
-// authoritative only in `export_low_contribution`.
+// API-44 — read-only, returned in member-id order. Backs both the "Yearly
+// average" preview table and the "Low-contribution report" stat-card/table,
+// each of which sorts (and, for the low-contribution card, filters on the
+// threshold input) this same shared list client-side, independently, so the
+// two cards can pick different sort orders — Rule-24's "own BV, not Total
+// BV" filter itself stays authoritative only in `export_low_contribution`.
 export function previewYearlyAverage(): Promise<YearlyAveragePreviewRow[]> {
   return invokeCommand("preview_yearly_average");
 }
