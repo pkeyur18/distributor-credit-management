@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.1](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.4.0...bvconsole-v0.4.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* **ci:** let manual Perf Ceiling runs target the dispatched branch ([9377d05](https://github.com/pkeyur18/distributor-credit-management/commit/9377d05ffa1c24c0baaf9d0ecae078e87e50eb4f))
+* **e2e:** fix CI failures in the new auth and monthly-close specs ([f512c1d](https://github.com/pkeyur18/distributor-credit-management/commit/f512c1d53b043499d56b745dd7ef81875a3e83a2))
+* **e2e:** give the 61/62-member render more time in full-hierarchy spec ([ec6801b](https://github.com/pkeyur18/distributor-credit-management/commit/ec6801bd8cd2ae6a2da19a267799c8d41ffb467d))
+* **e2e:** give the 61/62-member render more time in full-hierarchy spec ([4774916](https://github.com/pkeyur18/distributor-credit-management/commit/47749165e0400ffed14274eb1db4ceec5d1624da))
+* **e2e:** give the lockout-triggering 5th attempt more time ([a4c32f0](https://github.com/pkeyur18/distributor-credit-management/commit/a4c32f060bb300e2a7e5785614e960157f7dfae0))
+* **e2e:** make lockout-ladder test robust to attempt-count drift ([383e5ce](https://github.com/pkeyur18/distributor-credit-management/commit/383e5cef145eb143df8ff393a0cf86dd954fc734))
+* **e2e:** wait out cold start before timing perf-ceiling login budget ([29d563a](https://github.com/pkeyur18/distributor-credit-management/commit/29d563a22a530201e210a4785b7175c48c6e504e))
+* **e2e:** wait out cold start before timing perf-ceiling login budget ([1823614](https://github.com/pkeyur18/distributor-credit-management/commit/1823614cdc730b62e9b45dd2218ce724e46a79c0))
+* **release:** sync Cargo.lock version on release ([53eab80](https://github.com/pkeyur18/distributor-credit-management/commit/53eab808e375809241fcb741189f4998189aa625))
+* **release:** sync Cargo.lock version on release, not just Cargo.toml ([96221e2](https://github.com/pkeyur18/distributor-credit-management/commit/96221e2f14717c260836d0f087c57bdfc6e7774f))
+
 ## [0.4.0](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.3.4...bvconsole-v0.4.0) (2026-08-22)
 
 
