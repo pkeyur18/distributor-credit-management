@@ -120,7 +120,11 @@ describe("Login lockout ladder", () => {
     }
     await pressDigits("000000");
 
-    await $("p=Too many attempts").waitForExist({ timeout: 5000 });
+    // The 5th failure is the one that crosses D-2's lockout threshold —
+    // a longer wait here than the plain-error case above, since this
+    // response also writes the lock to the auth store's sidecar file
+    // (m8_auth::store::AuthStore), not just an in-memory check.
+    await $("p=Too many attempts").waitForExist({ timeout: 10000 });
     const countdown = await $(".text-numeric-lg").getText();
     expect(countdown).toMatch(/^\d+s$/);
     await expect($('button[aria-label="Backspace"]')).not.toExist();
