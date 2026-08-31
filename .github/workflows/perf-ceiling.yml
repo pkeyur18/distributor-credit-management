@@ -9,6 +9,13 @@ on:
     - cron: "0 3 * * 1"
   workflow_dispatch: {}
 
+# schedule always runs against develop (weekly ceiling check); a manual
+# workflow_dispatch checks out whatever ref it was run against instead —
+# `gh workflow run perf-ceiling.yml --ref my-branch` (or the branch picker
+# in the UI) tests that branch, not develop.
+env:
+  CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'develop' }}
+
 jobs:
   perf-ceiling:
     name: perf-ceiling
@@ -19,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: develop
+          ref: ${{ env.CHECKOUT_REF }}
 
       - name: Install Tauri Linux build dependencies
         run: |
@@ -49,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: develop
+          ref: ${{ env.CHECKOUT_REF }}
 
       - name: Install Tauri + WebDriver Linux dependencies
         run: |

@@ -10,20 +10,15 @@ import { navigateTo } from "../helpers/seed.js";
 const KNOWN_PIN = "246810"; // must match tests/e2e_seed.rs's KNOWN_PIN
 const SCREEN_BUDGET_MS = 2000; // NFR-1
 
-async function loginWithKnownPin() {
-  for (const digit of KNOWN_PIN) {
-    await $(`button=${digit}`).click();
-  }
-  await browser.waitUntil(async () => (await browser.getUrl()).endsWith("/"), {
-    timeout: 5000,
-    timeoutMsg: "expected login with the known PIN to land on Home",
-  });
-}
-
 describe("UI performance at ceiling scale (25,000 members)", () => {
   it("logs in and Home renders within budget", async () => {
+    // Cold start (CI's xvfb/no-GPU webkit2gtk has been observed taking
+    // ~30s+ before the webview even exists — see helpers/seed.js's login())
+    // is app-launch time, not part of the login->Home *screen* budget below.
+    // Wait it out before starting the clock.
+    await $("h1*=Member Rewards Console").waitForExist({ timeout: 45000 });
     const start = Date.now();
-    await loginWithKnownPin();
+    await browser.keys(KNOWN_PIN.split(""));
     await $("#home-search").waitForExist({ timeout: 5000 });
     const elapsed = Date.now() - start;
     console.log(`[perf] login -> Home: ${elapsed}ms`);
