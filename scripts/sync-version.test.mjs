@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { updateTauriConfVersion, updateCargoTomlVersion } from "./sync-version.mjs";
+import { updateTauriConfVersion, updateCargoTomlVersion, updateCargoLockVersion } from "./sync-version.mjs";
 
 test("updateTauriConfVersion replaces only the top-level version field", () => {
   const input = JSON.stringify(
@@ -31,4 +31,26 @@ test("updateCargoTomlVersion replaces the [package] version line only", () => {
   assert.match(output, /^\[package\]\nname = "bvconsole"\nversion = "0\.2\.0"/);
   // the tauri dependency's own "version" field must not be touched
   assert.match(output, /tauri = \{ version = "2\.11\.5", features = \[\] \}/);
+});
+
+test("updateCargoLockVersion replaces only the bvconsole [[package]] version", () => {
+  const input = [
+    "[[package]]",
+    'name = "argon2"',
+    'version = "0.5.3"',
+    "",
+    "[[package]]",
+    'name = "bvconsole"',
+    'version = "0.1.0"',
+    "dependencies = [",
+    ' "argon2",',
+    "]",
+    "",
+  ].join("\n");
+
+  const output = updateCargoLockVersion(input, "0.2.0");
+
+  assert.match(output, /name = "bvconsole"\nversion = "0\.2\.0"/);
+  // an unrelated dependency's own version must not be touched
+  assert.match(output, /name = "argon2"\nversion = "0\.5\.3"/);
 });

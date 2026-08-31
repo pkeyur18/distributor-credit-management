@@ -32,6 +32,32 @@ export function updateCargoTomlVersion(toml, version) {
   return lines.join("\n");
 }
 
+// Cargo.lock pins the root crate's own version in its `[[package]] name = "bvconsole"`
+// block. sync-version bumps Cargo.toml but Cargo would otherwise leave this entry
+// stale until the next local `cargo build`, which is exactly the diff-on-every-pull
+// nuisance this keeps in sync instead.
+export function updateCargoLockVersion(lock, version) {
+  const lines = lock.split("\n");
+  let inBvconsole = false;
+  let replaced = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === "[[package]]") {
+      inBvconsole = lines[i + 1]?.trim() === 'name = "bvconsole"';
+      continue;
+    }
+    if (inBvconsole && !replaced && /^version\s*=/.test(line)) {
+      lines[i] = `version = "${version}"`;
+      replaced = true;
+      inBvconsole = false;
+    }
+  }
+  if (!replaced) {
+    throw new Error('no bvconsole [[package]] version line found in Cargo.lock');
+  }
+  return lines.join("\n");
+}
+
 function main() {
   const root = path.resolve(fileURLToPath(import.meta.url), "..", "..");
   const checkOnly = process.argv.includes("--check");
@@ -41,14 +67,17 @@ function main() {
 
   const tauriConfPath = path.join(root, "src-tauri", "tauri.conf.json");
   const cargoTomlPath = path.join(root, "src-tauri", "Cargo.toml");
+  const cargoLockPath = path.join(root, "src-tauri", "Cargo.lock");
 
   const nextTauriConf = updateTauriConfVersion(readFileSync(tauriConfPath, "utf8"), version);
   const nextCargoToml = updateCargoTomlVersion(readFileSync(cargoTomlPath, "utf8"), version);
+  const nextCargoLock = updateCargoLockVersion(readFileSync(cargoLockPath, "utf8"), version);
 
   if (checkOnly) {
     const dirty =
       readFileSync(tauriConfPath, "utf8") !== nextTauriConf ||
-      readFileSync(cargoTomlPath, "utf8") !== nextCargoToml;
+      readFileSync(cargoTomlPath, "utf8") !== nextCargoToml ||
+      readFileSync(cargoLockPath, "utf8") !== nextCargoLock;
     if (dirty) {
       console.error(`version out of sync: package.json says ${version}`);
       process.exit(1);
@@ -59,7 +88,8 @@ function main() {
 
   writeFileSync(tauriConfPath, nextTauriConf);
   writeFileSync(cargoTomlPath, nextCargoToml);
-  console.log(`synced tauri.conf.json and Cargo.toml to ${version}`);
+  writeFileSync(cargoLockPath, nextCargoLock);
+  console.log(`synced tauri.conf.json, Cargo.toml, and Cargo.lock to ${version}`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
