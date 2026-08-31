@@ -133,3 +133,189 @@ impl Serialize for AppError {
         state.end()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn to_json(err: &AppError) -> serde_json::Value {
+        serde_json::to_value(err).unwrap()
+    }
+
+    // T-UI.5-2 (src/lib/ipc/errors.ts) reads these `kind` strings — a
+    // rename here silently breaks the frontend's presentation mapping
+    // without either side's own tests catching it, since they never run
+    // against each other. This is the seam test. `"export"` is the one
+    // kind with no dedicated frontend case (`AppErrorKind` in errors.ts
+    // has no `export` entry) — it falls through to the generic "unknown"
+    // presentation there, which still surfaces this struct's own message,
+    // so that's accepted behaviour, asserted here as-is rather than a gap
+    // this test should paper over.
+    #[test]
+    fn every_kind_string_is_the_frontends_expected_wire_value() {
+        assert_eq!(
+            to_json(&AppError::Database(rusqlite::Error::InvalidQuery))["kind"],
+            "database"
+        );
+        assert_eq!(
+            to_json(&AppError::Io(std::io::Error::other("boom")))["kind"],
+            "io"
+        );
+        assert_eq!(
+            to_json(&AppError::Validation {
+                field: "name".into(),
+                message: "Name is required.".into()
+            })["kind"],
+            "validation"
+        );
+        assert_eq!(
+            to_json(&AppError::NotFound {
+                message: "not found".into()
+            })["kind"],
+            "not_found"
+        );
+        assert_eq!(
+            to_json(&AppError::Conflict {
+                message: "conflict".into()
+            })["kind"],
+            "conflict"
+        );
+        assert_eq!(to_json(&AppError::AuthRequired)["kind"], "auth_required");
+        assert_eq!(
+            to_json(&AppError::NotImplemented { command: "foo" })["kind"],
+            "not_implemented"
+        );
+        assert_eq!(
+            to_json(&AppError::InvalidCredential {
+                attempts_remaining: 3
+            })["kind"],
+            "invalid_credential"
+        );
+        assert_eq!(
+            to_json(&AppError::AccountLocked {
+                retry_after_seconds: 30
+            })["kind"],
+            "account_locked"
+        );
+        assert_eq!(
+            to_json(&AppError::PeriodNotAcceptingEntries {
+                month: "August 2026".into(),
+                blocking_month: "June 2026".into()
+            })["kind"],
+            "period_not_accepting_entries"
+        );
+        assert_eq!(
+            to_json(&AppError::PeriodClosed {
+                month: "May 2026".into()
+            })["kind"],
+            "period_closed"
+        );
+        assert_eq!(
+            to_json(&AppError::Export("bad sheet".into()))["kind"],
+            "export"
+        );
+        assert_eq!(
+            to_json(&AppError::DataUnreadable)["kind"],
+            "data_unreadable"
+        );
+    }
+
+    #[test]
+    fn validation_carries_its_field_and_message_others_null_out_field() {
+        let err = AppError::Validation {
+            field: "phone".into(),
+            message: "Enter a valid phone number.".into(),
+        };
+        assert_eq!(
+            to_json(&err),
+            json!({
+                "kind": "validation",
+                "message": "validation error: phone: Enter a valid phone number.",
+                "field": "phone",
+                "retryAfterSeconds": null,
+                "attemptsRemaining": null,
+                "month": null,
+                "blockingMonth": null,
+            })
+        );
+
+        // Every other variant's `field` is explicitly null, never absent —
+        // the frontend's RawAppError reads `err.field` unconditionally.
+        assert_eq!(
+            to_json(&AppError::AuthRequired)["field"],
+            serde_json::Value::Null
+        );
+    }
+
+    #[test]
+    fn account_locked_carries_its_countdown_others_null_out_retry_after_seconds() {
+        let err = AppError::AccountLocked {
+            retry_after_seconds: 45,
+        };
+        assert_eq!(to_json(&err)["retryAfterSeconds"], 45);
+        assert_eq!(
+            to_json(&AppError::AuthRequired)["retryAfterSeconds"],
+            serde_json::Value::Null
+        );
+    }
+
+    #[test]
+    fn invalid_credential_carries_attempts_remaining_and_never_the_credential_itself() {
+        let err = AppError::InvalidCredential {
+            attempts_remaining: 2,
+        };
+        let value = to_json(&err);
+        assert_eq!(value["attemptsRemaining"], 2);
+        // Rule-29: the message is always the same generic sentence,
+        // regardless of which credential type or part was wrong — nothing
+        // about the actual PIN/password ever reaches this struct to leak.
+        assert_eq!(value["message"], "incorrect PIN or password");
+    }
+
+    #[test]
+    fn period_not_accepting_entries_carries_both_month_and_blocking_month() {
+        let err = AppError::PeriodNotAcceptingEntries {
+            month: "August 2026".into(),
+            blocking_month: "June 2026".into(),
+        };
+        let value = to_json(&err);
+        assert_eq!(value["month"], "August 2026");
+        assert_eq!(value["blockingMonth"], "June 2026");
+        assert_eq!(
+            value["message"],
+            "August 2026 isn't open for entry until June 2026 is closed"
+        );
+    }
+
+    #[test]
+    fn period_closed_carries_month_but_never_blocking_month() {
+        let err = AppError::PeriodClosed {
+            month: "May 2026".into(),
+        };
+        let value = to_json(&err);
+        assert_eq!(value["month"], "May 2026");
+        assert_eq!(value["blockingMonth"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn database_and_io_errors_wrap_the_underlying_error_via_from() {
+        let db_err: AppError = rusqlite::Error::InvalidQuery.into();
+        assert!(matches!(db_err, AppError::Database(_)));
+
+        let io_err: AppError = std::io::Error::other("disk full").into();
+        assert!(matches!(io_err, AppError::Io(_)));
+        assert_eq!(to_json(&io_err)["message"], "io error: disk full");
+    }
+
+    #[test]
+    fn not_implemented_names_the_command_in_its_message() {
+        let err = AppError::NotImplemented {
+            command: "some_future_command",
+        };
+        assert_eq!(
+            to_json(&err)["message"],
+            "not implemented: some_future_command"
+        );
+    }
+}
