@@ -64,7 +64,9 @@ describe("Full Hierarchy Window", () => {
     const dialog = $('div[role="dialog"]');
     await dialog.waitForExist({ timeout: 3000 });
     // Bare `*=` only matches <a> elements — this text is a <p> (structure.tsx).
-    await dialog.$("p*=61 members").waitForExist({ timeout: 3000 });
+    // Rendering 61 tree nodes right after 60 sequential member-adds is the
+    // heaviest render in this file — 3000ms was too tight under CI load.
+    await dialog.$("p*=61 members").waitForExist({ timeout: 10000 });
 
     await jsClick(dialog.$("button=Cancel"));
     await dialog.waitForExist({ timeout: 3000, reverse: true });
@@ -83,7 +85,7 @@ describe("Full Hierarchy Window", () => {
     await browser.switchToWindow(newHandle);
     // Header shows the total node count (root + descendants); the gate
     // above named the descendant-only count (61) — one more than this.
-    await $("p*=62 members").waitForExist({ timeout: 3000 });
+    await $("p*=62 members").waitForExist({ timeout: 10000 });
 
     // T-QA.6-3/AC-45: the main console must stay responsive while the full
     // hierarchy window is open and drawing. E2E has no bulk-seed path (no
