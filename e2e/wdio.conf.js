@@ -32,14 +32,15 @@ export const config = {
   // Explicit order, not a glob: every spec file shares one on-disk
   // app-data directory for the whole suite run (helpers/seed.js's own doc
   // comment), so ordering isn't cosmetic. reports.e2e.js's own T-M6.4 test
-  // requires no month to have closed yet, so monthly-close.e2e.js (which
-  // opens, but per its own header comment cannot actually complete, a
-  // close) must run after it. auth.e2e.js must run last of all — its
-  // final test deliberately drives the shared login-failure counter into
-  // a real lockout (D-2's ladder), and no spec after it could still log in
-  // during that window. Every other file only reads or additively builds
-  // on prior state, so their relative order doesn't matter, but keeping it
-  // stable here avoids re-litigating that each time a file is added.
+  // requires no month to have closed yet, so monthly-close.e2e.js (whose
+  // own header comment explains why the close wizard itself is
+  // unreachable through this harness at all) must run after it. auth.e2e.js
+  // must run last of all — its final test deliberately drives the shared
+  // login-failure counter into a real lockout (D-2's ladder), and no spec
+  // after it could still log in during that window. Every other file only
+  // reads or additively builds on prior state, so their relative order
+  // doesn't matter, but keeping it stable here avoids re-litigating that
+  // each time a file is added.
   specs: [
     "./specs/business-volume-entry.e2e.js",
     "./specs/full-hierarchy.e2e.js",

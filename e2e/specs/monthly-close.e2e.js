@@ -5,71 +5,38 @@ import { navigateTo, login, FIRST_RUN_PIN } from "../helpers/seed.js";
 // nothing before it may close one. wdio starts a fresh process per spec
 // file, so this file logs back in for itself first.
 //
-// The wizard's "Generate backup" step (`chooseBackupLocation`,
-// monthly-close.tsx) calls the Tauri dialog plugin's native save picker
-// unconditionally — there is no alternate path around it, unlike
-// settings.e2e.js's restore-from-file flow or reports.e2e.js's exports,
-// which simply never click the button that opens one. WebDriver/
-// tauri-driver cannot drive a native OS dialog at all, so actually
-// completing a close (and therefore ever producing a real closed month
-// for CorrectionPanel/Audit to exercise) is not reachable through this
-// harness — see reports.e2e.js's own header comment for the same
-// constraint on its export buttons. This spec covers everything up to
-// that point: the outstanding-month list, opening the wizard, its
-// confirm-step summary counts, Cancel being a true no-op, and advancing
-// into the backup step's initial (unconfirmed) render.
+// The close wizard itself (confirm → backup → commit) is not reachable
+// through this harness at all: `get_outstanding_periods` only ever
+// returns a period whose status is `awaiting_close` (m5_close/mod.rs), and
+// the period this shared session has had since business-volume-entry.e2e.js's
+// setup is `open` — the *current* month, never yet due for closing. A
+// period only becomes `awaiting_close` once a later login observes that a
+// new real calendar month has started (US-M5.5's catch-up), which nothing
+// in this suite can manufacture inside one run — the same limitation
+// business-volume-entry.e2e.js's own second test already documents for the
+// month-switcher case. That state is covered instead by m5_close's own
+// Rust unit tests against a seeded multi-period database
+// (`get_outstanding_periods_lists_oldest_first` and neighbours). So this
+// spec covers only what's actually reachable here: the plain status page's
+// fully-caught-up rendering.
 before(async () => {
   await login(FIRST_RUN_PIN);
 });
 
-describe("Monthly close — wizard, up to the native backup-file dialog", () => {
-  it("lists the single outstanding month as closable now", async () => {
+describe("Monthly close — status page", () => {
+  it("shows 'Fully caught up' with no Close button when nothing is awaiting close", async () => {
     await navigateTo("Monthly Close");
     await $("h1=Monthly close").waitForExist({ timeout: 5000 });
 
-    // business-volume-entry.e2e.js's own second test already established
-    // that exactly one month (the current one) is outstanding in this
-    // shared session.
-    await $("span=Oldest — closable now").waitForExist({ timeout: 3000 });
-    await $("button=Close").waitForExist({ timeout: 3000 });
+    await $("p=Fully caught up").waitForExist({ timeout: 5000 });
+    await expect($("span*=closable now")).not.toExist();
+    await expect($("button=Close")).not.toExist();
   });
 
-  it("Cancel from the confirm step is a true no-op, returning to the plain list", async () => {
+  it("shows no closed months yet", async () => {
     await navigateTo("Monthly Close");
-    await $("button=Close").click();
-
-    await $('h1*=Close ').waitForExist({ timeout: 5000 });
-    await $(".text-numeric").waitForExist({ timeout: 3000 });
-    // The confirm step's three summary counts (Members / With an entry /
-    // On top slab) are all present, whatever their values.
-    await expect($$(".text-numeric")).toBeElementsArrayOfSize(3);
-
-    await $("button=Cancel").click();
-
     await $("h1=Monthly close").waitForExist({ timeout: 5000 });
-    // Read-only stat query (begin_close) — nothing was mutated, so the
-    // month is still exactly where it was.
-    await $("span=Oldest — closable now").waitForExist({ timeout: 3000 });
-  });
 
-  it("Continue advances to the backup step, unconfirmed until a location is chosen", async () => {
-    await navigateTo("Monthly Close");
-    await $("button=Close").click();
-    await $('h1*=Close ').waitForExist({ timeout: 5000 });
-
-    await $("button=Continue").click();
-
-    await $("h1=Confirm a backup").waitForExist({ timeout: 5000 });
-    await $("button=Generate backup").waitForExist({ timeout: 3000 });
-    // Not yet confirmed — the commit button only appears once
-    // `chooseBackupLocation` (native dialog) has run.
-    await expect($("button*=cannot be undone")).not.toExist();
-
-    // Back returns to the confirm step without having touched anything
-    // that needs a native dialog.
-    await $("button=Back").click();
-    await $('h1*=Close ').waitForExist({ timeout: 5000 });
-    await $("button=Cancel").click();
-    await $("h1=Monthly close").waitForExist({ timeout: 5000 });
+    await $("p=No months are closed yet.").waitForExist({ timeout: 5000 });
   });
 });
