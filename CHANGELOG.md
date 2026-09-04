@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.2](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.4.1...bvconsole-v0.4.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* **ci:** allow release-please branches through restrict-main-source ([4b048d6](https://github.com/pkeyur18/distributor-credit-management/commit/4b048d6f50c7a40581e79858fa4c1bc00654db4d))
+* fix CI to allow release-please branches and sync main into develop ([15ed44e](https://github.com/pkeyur18/distributor-credit-management/commit/15ed44e675998602685957839fa57d2e35df1305))
+* **tests:** stop hardcoding calendar months in m2_entries period tests ([d30d742](https://github.com/pkeyur18/distributor-credit-management/commit/d30d742ce5f7b2a44d15ee669e93b6e6b27aa467))
+
 ## [0.4.1](https://github.com/pkeyur18/distributor-credit-management/compare/bvconsole-v0.4.0...bvconsole-v0.4.1) (2026-08-31)
 
 
