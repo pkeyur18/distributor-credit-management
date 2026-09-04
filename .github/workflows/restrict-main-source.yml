@@ -19,11 +19,11 @@ jobs:
     name: restrict-main-source
     runs-on: ubuntu-latest
     steps:
-      - name: Require develop as the source branch
+      - name: Require develop or a release-please branch as the source
         env:
           HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "$HEAD_REF" != "develop" ]; then
-            echo "::error::PRs into main must come from develop (got '$HEAD_REF'). Merge into develop first, then promote develop to main."
+          if [ "$HEAD_REF" != "develop" ] && [[ "$HEAD_REF" != release-please--branches--main--* ]]; then
+            echo "::error::PRs into main must come from develop, or be a release-please release PR (got '$HEAD_REF'). Merge into develop first, then promote develop to main."
             exit 1
           fi
