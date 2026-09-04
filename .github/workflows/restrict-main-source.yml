@@ -1,0 +1,29 @@
+name: Restrict main source
+
+# main only ever advances via develop (release promotion) or a hotfix the
+# team explicitly branched from main — see release.yml/sync-main-to-develop.yml
+# for the automated side of that flow. ci.yml's frontend/rust/perf/e2e suites
+# already ran against this exact code when it merged into develop (or, for a
+# hotfix, are the wrong thing to re-run against main-derived history), so the
+# only thing left to check on a main-bound PR is where it came from.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  restrict-main-source:
+    name: restrict-main-source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require develop as the source branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD_REF" != "develop" ]; then
+            echo "::error::PRs into main must come from develop (got '$HEAD_REF'). Merge into develop first, then promote develop to main."
+            exit 1
+          fi
