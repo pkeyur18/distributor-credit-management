@@ -785,17 +785,19 @@ fn record_entry_and_edit_entry_end_to_end_through_the_command_layer() {
     )
     .unwrap();
 
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let current_month = chrono::Local::now().format("%Y-%m").to_string();
     let entry = commands::record_entry(
         app.state::<SessionState>(),
         app.state::<DbState>(),
         RecordEntryInput {
             member_id: root.id,
             amount: 100_000,
-            entry_date: "2026-08-15".into(),
+            entry_date: today.clone(),
         },
     )
     .unwrap();
-    assert_eq!(entry.period_month, "2026-08");
+    assert_eq!(entry.period_month, current_month);
 
     let updated = commands::edit_entry(
         app.state::<SessionState>(),
@@ -804,7 +806,7 @@ fn record_entry_and_edit_entry_end_to_end_through_the_command_layer() {
         EditEntryInput {
             id: entry.id,
             amount: 250_000,
-            entry_date: "2026-08-15".into(),
+            entry_date: today,
         },
     )
     .unwrap();

@@ -655,23 +655,24 @@ mod tests {
     fn record_entry_creates_the_period_and_recalculates_the_chain() {
         let db = TempDb::new();
         let root = insert_member(&db.conn, None);
+        let current = ym_offset(0);
 
         let entry = record_entry(
             &db.conn,
             RecordEntryInput {
                 member_id: root,
                 amount: 100_000,
-                entry_date: "2026-08-15".into(),
+                entry_date: format!("{current}-15"),
             },
         )
         .unwrap();
 
-        assert_eq!(entry.period_month, "2026-08");
+        assert_eq!(entry.period_month, current);
         let period_id: i64 = db
             .conn
             .query_row(
-                "SELECT id FROM periods WHERE period_month = '2026-08'",
-                [],
+                "SELECT id FROM periods WHERE period_month = ?1",
+                [&current],
                 |r| r.get(0),
             )
             .unwrap();
@@ -725,12 +726,13 @@ mod tests {
     fn a_second_entry_the_same_month_reuses_the_same_period_row() {
         let db = TempDb::new();
         let root = insert_member(&db.conn, None);
+        let current = ym_offset(0);
         record_entry(
             &db.conn,
             RecordEntryInput {
                 member_id: root,
                 amount: 1_000,
-                entry_date: "2026-08-05".into(),
+                entry_date: format!("{current}-05"),
             },
         )
         .unwrap();
@@ -739,7 +741,7 @@ mod tests {
             RecordEntryInput {
                 member_id: root,
                 amount: 2_000,
-                entry_date: "2026-08-20".into(),
+                entry_date: format!("{current}-20"),
             },
         )
         .unwrap();
@@ -758,12 +760,13 @@ mod tests {
     fn edit_entry_in_an_open_period_recalculates_live_totals() {
         let db = TempDb::new();
         let root = insert_member(&db.conn, None);
+        let current = ym_offset(0);
         let entry = record_entry(
             &db.conn,
             RecordEntryInput {
                 member_id: root,
                 amount: 100_000,
-                entry_date: "2026-08-15".into(),
+                entry_date: format!("{current}-15"),
             },
         )
         .unwrap();
@@ -775,7 +778,7 @@ mod tests {
             EditEntryInput {
                 id: entry.id,
                 amount: 250_000,
-                entry_date: "2026-08-15".into(),
+                entry_date: format!("{current}-15"),
             },
         )
         .unwrap();
@@ -785,8 +788,8 @@ mod tests {
         let period_id: i64 = db
             .conn
             .query_row(
-                "SELECT id FROM periods WHERE period_month = '2026-08'",
-                [],
+                "SELECT id FROM periods WHERE period_month = ?1",
+                [&current],
                 |r| r.get(0),
             )
             .unwrap();
@@ -816,12 +819,13 @@ mod tests {
     fn edit_entry_audits_a_date_only_change_and_never_writes_a_no_op_amount_row() {
         let db = TempDb::new();
         let root = insert_member(&db.conn, None);
+        let current = ym_offset(0);
         let entry = record_entry(
             &db.conn,
             RecordEntryInput {
                 member_id: root,
                 amount: 100_000,
-                entry_date: "2026-08-15".into(),
+                entry_date: format!("{current}-15"),
             },
         )
         .unwrap();
@@ -833,7 +837,7 @@ mod tests {
             EditEntryInput {
                 id: entry.id,
                 amount: 100_000, // unchanged
-                entry_date: "2026-08-20".into(),
+                entry_date: format!("{current}-20"),
             },
         )
         .unwrap();
@@ -864,7 +868,7 @@ mod tests {
             RecordEntryInput {
                 member_id: root,
                 amount: 1_000,
-                entry_date: "2026-08-15".into(),
+                entry_date: format!("{}-15", ym_offset(0)),
             },
         )
         .unwrap();
@@ -876,7 +880,7 @@ mod tests {
             EditEntryInput {
                 id: entry.id,
                 amount: 1_000,
-                entry_date: "2026-09-01".into(),
+                entry_date: format!("{}-01", ym_offset(1)),
             },
         )
         .unwrap_err();
@@ -905,20 +909,21 @@ mod tests {
     ) {
         let db = TempDb::new();
         let root = insert_member(&db.conn, None);
+        let current = ym_offset(0);
         let entry = record_entry(
             &db.conn,
             RecordEntryInput {
                 member_id: root,
                 amount: 100_000,
-                entry_date: "2026-08-15".into(),
+                entry_date: format!("{current}-15"),
             },
         )
         .unwrap();
         let period_id: i64 = db
             .conn
             .query_row(
-                "SELECT id FROM periods WHERE period_month = '2026-08'",
-                [],
+                "SELECT id FROM periods WHERE period_month = ?1",
+                [&current],
                 |r| r.get(0),
             )
             .unwrap();
@@ -931,9 +936,9 @@ mod tests {
                     (member_id, period_id, version, business_volume, total_business_volume,
                      slab_pct, differential, royalty, own_reward, rewards, is_active_status, created_at)
                  SELECT member_id, period_id, 1, business_volume, total_business_volume,
-                        slab_pct, differential, royalty, own_reward, rewards, 1, '2026-08-31'
+                        slab_pct, differential, royalty, own_reward, rewards, 1, ?2
                  FROM member_period_totals WHERE period_id = ?1",
-                [period_id],
+                rusqlite::params![period_id, format!("{current}-28")],
             )
             .unwrap();
         db.conn
@@ -965,7 +970,7 @@ mod tests {
             EditEntryInput {
                 id: entry.id,
                 amount: 400_000,
-                entry_date: "2026-08-15".into(),
+                entry_date: format!("{current}-15"),
             },
         )
         .unwrap();
@@ -1077,20 +1082,21 @@ mod tests {
     ) {
         let db = TempDb::new();
         let root = insert_member(&db.conn, None);
+        let current = ym_offset(0);
         let entry = record_entry(
             &db.conn,
             RecordEntryInput {
                 member_id: root,
                 amount: 100_000,
-                entry_date: "2026-08-15".into(),
+                entry_date: format!("{current}-15"),
             },
         )
         .unwrap();
         let period_id: i64 = db
             .conn
             .query_row(
-                "SELECT id FROM periods WHERE period_month = '2026-08'",
-                [],
+                "SELECT id FROM periods WHERE period_month = ?1",
+                [&current],
                 |r| r.get(0),
             )
             .unwrap();
@@ -1101,9 +1107,9 @@ mod tests {
                     (member_id, period_id, version, business_volume, total_business_volume,
                      slab_pct, differential, royalty, own_reward, rewards, is_active_status, created_at)
                  SELECT member_id, period_id, 1, business_volume, total_business_volume,
-                        slab_pct, differential, royalty, own_reward, rewards, 1, '2026-08-31'
+                        slab_pct, differential, royalty, own_reward, rewards, 1, ?2
                  FROM member_period_totals WHERE period_id = ?1",
-                [period_id],
+                rusqlite::params![period_id, format!("{current}-28")],
             )
             .unwrap();
         db.conn
@@ -1126,7 +1132,7 @@ mod tests {
             AddClosedMonthEntryInput {
                 member_id: root,
                 amount: 50_000,
-                entry_date: "2026-08-20".into(),
+                entry_date: format!("{current}-20"),
             },
         )
         .unwrap();
