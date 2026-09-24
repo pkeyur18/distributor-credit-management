@@ -27,9 +27,13 @@ count, rate or threshold is hardcoded (Product Principle 4).
 
 ## 2. Confirmed decisions (client, 2026-09-24)
 
-1. **Monthly, not permanent.** A member's level is derived per period from that
-   period's figures, exactly like slab. A member can be Gold in August and hold no
-   level in September. Closed months keep the level their snapshot recorded.
+1. **Monthly, reset at close, never carried forward.** A member's level is derived
+   per period from that period's figures only, exactly like slab. No level is read
+   from, or copied into, any other period. At monthly close the level is captured in
+   the snapshot and then zeroed with the rest of the live figures
+   (`zero_period_totals`); the next month starts with every member at "—" until its
+   own figures qualify them. A member can be Gold in August and hold no level in
+   September. Closed months keep the level their snapshot recorded.
 2. **Highest level's rate replaces.** A member earns royalty at the rate of their
    highest level only — never a sum of rates. The base is unchanged from Rule-10: the
    Total Business Volume of each direct leg on the top slab.
@@ -157,6 +161,8 @@ reads a name.
   `setting_*` calls at every call site).
 - `direct_children_figures` also selects `COALESCE(t.membership_tier, 0)`.
 - `upsert_totals` and every snapshot insert write `membership_tier`.
+- `m5_close::zero_period_totals` also sets `membership_tier = 0` (decision 1 — reset
+  at close). Nothing reads another period's level, so no carry-forward path exists.
 - **Ordering fix 1 — `recompute_open_period_rows`.** Its current comment says order
   doesn't matter because slab settings never affect TBV. That no longer holds: a
   child's level feeds its parent's level. Rows are recomputed deepest first
@@ -245,6 +251,8 @@ royalty at every node, reconciled through the real engine.
 - `preview_settings_impact` output equals what the save writes, including levels
   (ordering fix 2).
 - Month close and correction snapshots carry `membership_tier`.
+- Month close zeroes live `membership_tier`; a member who was Gold in the closed month
+  is at rank 0 in the next month until that month's own figures qualify them.
 
 ### 6.4 Contract / frontend
 - `tests/contract.rs`: new settings fields round-trip.
