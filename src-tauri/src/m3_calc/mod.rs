@@ -156,16 +156,16 @@ fn setting_f64(conn: &Connection, key: &str) -> Result<f64, AppError> {
 pub const ROYALTY_TIER_KEYS: [(&str, &str); MEMBERSHIP_LEVEL_NAMES.len()] = [
     ("royalty_qualifying_count", "royalty_rate_percent"),
     (
-        "royalty_tier_2_qualifying_count",
-        "royalty_tier_2_rate_percent",
+        "royalty_membership_2_qualifying_count",
+        "royalty_membership_2_rate_percent",
     ),
     (
-        "royalty_tier_3_qualifying_count",
-        "royalty_tier_3_rate_percent",
+        "royalty_membership_3_qualifying_count",
+        "royalty_membership_3_rate_percent",
     ),
     (
-        "royalty_tier_4_qualifying_count",
-        "royalty_tier_4_rate_percent",
+        "royalty_membership_4_qualifying_count",
+        "royalty_membership_4_rate_percent",
     ),
 ];
 
@@ -1223,13 +1223,13 @@ mod tests {
     fn four_generation_chain(conn: &Connection, month: &str, period: i64) -> [i64; 4] {
         conn.execute(
             "UPDATE settings SET value = '1' WHERE key IN (
-                'royalty_qualifying_count', 'royalty_tier_3_qualifying_count',
-                'royalty_tier_4_qualifying_count')",
+                'royalty_qualifying_count', 'royalty_membership_3_qualifying_count',
+                'royalty_membership_4_qualifying_count')",
             [],
         )
         .unwrap();
         conn.execute(
-            "UPDATE settings SET value = '2' WHERE key = 'royalty_tier_2_qualifying_count'",
+            "UPDATE settings SET value = '2' WHERE key = 'royalty_membership_2_qualifying_count'",
             [],
         )
         .unwrap();
@@ -1260,7 +1260,7 @@ mod tests {
         );
 
         conn.execute(
-            "UPDATE settings SET value = '1' WHERE key = 'royalty_tier_2_qualifying_count'",
+            "UPDATE settings SET value = '1' WHERE key = 'royalty_membership_2_qualifying_count'",
             [],
         )
         .unwrap();
@@ -1315,7 +1315,7 @@ mod tests {
         );
 
         conn.execute(
-            "UPDATE settings SET value = '1' WHERE key = 'royalty_tier_2_qualifying_count'",
+            "UPDATE settings SET value = '1' WHERE key = 'royalty_membership_2_qualifying_count'",
             [],
         )
         .unwrap();

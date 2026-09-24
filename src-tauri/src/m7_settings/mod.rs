@@ -215,6 +215,12 @@ pub struct Settings {
     pub level4_width: i64,
     pub royalty_qualifying_count: i64,
     pub royalty_rate_percent: f64,
+    pub royalty_tier2_qualifying_count: i64,
+    pub royalty_tier2_rate_percent: f64,
+    pub royalty_tier3_qualifying_count: i64,
+    pub royalty_tier3_rate_percent: f64,
+    pub royalty_tier4_qualifying_count: i64,
+    pub royalty_tier4_rate_percent: f64,
     pub yearly_cycle: YearlyCycle,
     pub low_contribution_threshold: i64,
     pub default_export_columns: Vec<String>,
@@ -296,6 +302,12 @@ pub fn get_settings(conn: &Connection) -> Result<Settings, AppError> {
         level4_width: setting_i64(conn, "level_4_width")?,
         royalty_qualifying_count: setting_i64(conn, "royalty_qualifying_count")?,
         royalty_rate_percent: setting_f64(conn, "royalty_rate_percent")?,
+        royalty_tier2_qualifying_count: setting_i64(conn, "royalty_membership_2_qualifying_count")?,
+        royalty_tier2_rate_percent: setting_f64(conn, "royalty_membership_2_rate_percent")?,
+        royalty_tier3_qualifying_count: setting_i64(conn, "royalty_membership_3_qualifying_count")?,
+        royalty_tier3_rate_percent: setting_f64(conn, "royalty_membership_3_rate_percent")?,
+        royalty_tier4_qualifying_count: setting_i64(conn, "royalty_membership_4_qualifying_count")?,
+        royalty_tier4_rate_percent: setting_f64(conn, "royalty_membership_4_rate_percent")?,
         yearly_cycle,
         low_contribution_threshold: setting_i64(conn, "low_contribution_threshold")?,
         default_export_columns,
@@ -321,19 +333,57 @@ pub struct SettingsPatch {
     pub level4_width: Option<i64>,
     pub royalty_qualifying_count: Option<i64>,
     pub royalty_rate_percent: Option<f64>,
+    pub royalty_tier2_qualifying_count: Option<i64>,
+    pub royalty_tier2_rate_percent: Option<f64>,
+    pub royalty_tier3_qualifying_count: Option<i64>,
+    pub royalty_tier3_rate_percent: Option<f64>,
+    pub royalty_tier4_qualifying_count: Option<i64>,
+    pub royalty_tier4_rate_percent: Option<f64>,
     pub yearly_cycle: Option<YearlyCycle>,
     pub low_contribution_threshold: Option<i64>,
     pub default_export_columns: Option<Vec<String>>,
     pub session_timeout_minutes: Option<i64>,
 }
 
+/// Rule-47: the patch's (count, rate) per membership level, rank 1 first —
+/// same order as `m3_calc::ROYALTY_TIER_KEYS`.
+fn royalty_tier_patches(patch: &SettingsPatch) -> [(Option<i64>, Option<f64>); 4] {
+    [
+        (patch.royalty_qualifying_count, patch.royalty_rate_percent),
+        (
+            patch.royalty_tier2_qualifying_count,
+            patch.royalty_tier2_rate_percent,
+        ),
+        (
+            patch.royalty_tier3_qualifying_count,
+            patch.royalty_tier3_rate_percent,
+        ),
+        (
+            patch.royalty_tier4_qualifying_count,
+            patch.royalty_tier4_rate_percent,
+        ),
+    ]
+}
+
 fn apply_settings_patch(conn: &Connection, patch: &SettingsPatch) -> Result<(), AppError> {
-    // V7.4: royalty qualifying count is a positive whole number.
-    if let Some(count) = patch.royalty_qualifying_count {
-        if count <= 0 {
+    // V7.4 (extended by Rule-47): every level's qualifying count is a
+    // positive whole number and every rate is zero or more.
+    for (i, (count, rate)) in royalty_tier_patches(patch).into_iter().enumerate() {
+        let prefix = if i == 0 {
+            "royalty".to_string()
+        } else {
+            format!("royaltyTier{}", i + 1)
+        };
+        if count.is_some_and(|c| c <= 0) {
             return Err(AppError::Validation {
-                field: "royaltyQualifyingCount".into(),
+                field: format!("{prefix}QualifyingCount"),
                 message: "The royalty qualifying count must be a positive whole number.".into(),
+            });
+        }
+        if rate.is_some_and(|r| r.is_nan() || r < 0.0) {
+            return Err(AppError::Validation {
+                field: format!("{prefix}RatePercent"),
+                message: "The royalty rate must be zero or more.".into(),
             });
         }
     }
@@ -367,13 +417,18 @@ fn apply_settings_patch(conn: &Connection, patch: &SettingsPatch) -> Result<(), 
         write_setting(conn, "level_4_width", &v.to_string())?;
         write_audit(conn, 0, "level_4_width", &v.to_string())?;
     }
-    if let Some(v) = patch.royalty_qualifying_count {
-        write_setting(conn, "royalty_qualifying_count", &v.to_string())?;
-        write_audit(conn, 0, "royalty_qualifying_count", &v.to_string())?;
-    }
-    if let Some(v) = patch.royalty_rate_percent {
-        write_setting(conn, "royalty_rate_percent", &v.to_string())?;
-        write_audit(conn, 0, "royalty_rate_percent", &v.to_string())?;
+    for ((count, rate), (count_key, rate_key)) in royalty_tier_patches(patch)
+        .into_iter()
+        .zip(m3_calc::ROYALTY_TIER_KEYS)
+    {
+        if let Some(v) = count {
+            write_setting(conn, count_key, &v.to_string())?;
+            write_audit(conn, 0, count_key, &v.to_string())?;
+        }
+        if let Some(v) = rate {
+            write_setting(conn, rate_key, &v.to_string())?;
+            write_audit(conn, 0, rate_key, &v.to_string())?;
+        }
     }
     if let Some(v) = &patch.yearly_cycle {
         let json = serde_json::to_string(v).expect("YearlyCycle always serializes");
@@ -398,11 +453,13 @@ fn apply_settings_patch(conn: &Connection, patch: &SettingsPatch) -> Result<(), 
 
 /// API-22. §5.7: structure guidance, reporting and the reference value save
 /// silently — they change nothing already calculated. Only a royalty
-/// qualifying-count or rate change recalculates the current open period
+/// qualifying-count or rate change, at any membership level (Rule-47),
+/// recalculates the current open period
 /// (T-M7.2-2); the other sections never do.
 pub fn update_settings(conn: &Connection, patch: SettingsPatch) -> Result<Settings, AppError> {
-    let recalculates =
-        patch.royalty_qualifying_count.is_some() || patch.royalty_rate_percent.is_some();
+    let recalculates = royalty_tier_patches(&patch)
+        .iter()
+        .any(|(count, rate)| count.is_some() || rate.is_some());
 
     if conn.is_autocommit() {
         let tx = conn.unchecked_transaction()?;
@@ -807,6 +864,132 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn get_settings_returns_every_membership_levels_seeded_values() {
+        let settings = get_settings(&seeded()).unwrap();
+        assert_eq!(
+            (
+                settings.royalty_tier2_qualifying_count,
+                settings.royalty_tier2_rate_percent
+            ),
+            (3, 1.0)
+        );
+        assert_eq!(
+            (
+                settings.royalty_tier3_qualifying_count,
+                settings.royalty_tier3_rate_percent
+            ),
+            (3, 1.0)
+        );
+        assert_eq!(
+            (
+                settings.royalty_tier4_qualifying_count,
+                settings.royalty_tier4_rate_percent
+            ),
+            (3, 1.0)
+        );
+    }
+
+    #[test]
+    fn update_settings_saves_and_audits_a_later_levels_count_and_rate() {
+        let conn = seeded();
+        let updated = update_settings(
+            &conn,
+            SettingsPatch {
+                royalty_tier3_qualifying_count: Some(5),
+                royalty_tier3_rate_percent: Some(2.5),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.royalty_tier3_qualifying_count, 5);
+        assert_eq!(updated.royalty_tier3_rate_percent, 2.5);
+        let audited: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM audit_log WHERE field IN
+                    ('royalty_membership_3_qualifying_count', 'royalty_membership_3_rate_percent')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(audited, 2);
+    }
+
+    #[test]
+    fn update_settings_refuses_a_non_positive_count_on_any_level() {
+        let err = update_settings(
+            &seeded(),
+            SettingsPatch {
+                royalty_tier4_qualifying_count: Some(0),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn update_settings_refuses_a_negative_rate_on_any_level() {
+        let err = update_settings(
+            &seeded(),
+            SettingsPatch {
+                royalty_tier2_rate_percent: Some(-0.5),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Validation { .. }));
+    }
+
+    #[test]
+    fn a_later_levels_rate_change_recalculates_the_open_period() {
+        let conn = seeded();
+        let month = chrono::Local::now().format("%Y-%m").to_string();
+        conn.execute(
+            "INSERT INTO periods (period_month, status) VALUES (?1, 'open')",
+            [&month],
+        )
+        .unwrap();
+        let period: i64 = conn.last_insert_rowid();
+        conn.execute(
+            "UPDATE settings SET value = '1' WHERE key IN (
+                'royalty_qualifying_count', 'royalty_membership_2_qualifying_count')",
+            [],
+        )
+        .unwrap();
+        // root -> mid -> leaf(top slab): mid is Gold, root is Platinum.
+        let root = insert_member(&conn, None);
+        let mid = insert_member(&conn, Some(root));
+        let leaf = insert_member(&conn, Some(mid));
+        insert_entry(&conn, leaf, &month, 1_000_000);
+        m3_calc::recalculate_chain(&conn, leaf, period).unwrap();
+        let royalty_of = |id: i64| -> i64 {
+            conn.query_row(
+                "SELECT royalty FROM member_period_totals WHERE member_id = ?1",
+                [id],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        let before = royalty_of(root);
+
+        update_settings(
+            &conn,
+            SettingsPatch {
+                royalty_tier2_rate_percent: Some(3.0),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(before, 10_000, "1% of 1,000,000 at Platinum's seeded 1%");
+        assert_eq!(
+            royalty_of(root),
+            30_000,
+            "3% of 1,000,000 once Platinum's rate is 3%"
+        );
     }
 
     #[test]

@@ -13,14 +13,14 @@ ALTER TABLE monthly_snapshots    ADD COLUMN membership_tier INTEGER NOT NULL DEF
 -- upgrade moves no Rewards figure until the client edits one.
 INSERT INTO settings (key, value)
 SELECT k, v FROM (
-    SELECT 'royalty_tier_2_qualifying_count' AS k, '3' AS v
-    UNION ALL SELECT 'royalty_tier_3_qualifying_count', '3'
-    UNION ALL SELECT 'royalty_tier_4_qualifying_count', '3'
-    UNION ALL SELECT 'royalty_tier_2_rate_percent',
+    SELECT 'royalty_membership_2_qualifying_count' AS k, '3' AS v
+    UNION ALL SELECT 'royalty_membership_3_qualifying_count', '3'
+    UNION ALL SELECT 'royalty_membership_4_qualifying_count', '3'
+    UNION ALL SELECT 'royalty_membership_2_rate_percent',
                      (SELECT value FROM settings WHERE key = 'royalty_rate_percent')
-    UNION ALL SELECT 'royalty_tier_3_rate_percent',
+    UNION ALL SELECT 'royalty_membership_3_rate_percent',
                      (SELECT value FROM settings WHERE key = 'royalty_rate_percent')
-    UNION ALL SELECT 'royalty_tier_4_rate_percent',
+    UNION ALL SELECT 'royalty_membership_4_rate_percent',
                      (SELECT value FROM settings WHERE key = 'royalty_rate_percent')
 )
 WHERE EXISTS (SELECT 1 FROM settings);

@@ -995,6 +995,11 @@ fn get_and_update_settings_end_to_end_through_the_command_layer() {
     let settings =
         commands::get_settings(app.state::<SessionState>(), app.state::<DbState>()).unwrap();
     assert_eq!(settings.session_timeout_minutes, 15);
+    assert_eq!(settings.royalty_tier2_qualifying_count, 3);
+    assert_eq!(
+        settings.royalty_tier4_rate_percent,
+        settings.royalty_rate_percent
+    );
 
     let updated = commands::update_settings(
         app.state::<SessionState>(),

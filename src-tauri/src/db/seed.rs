@@ -69,12 +69,12 @@ fn seed_settings(conn: &Connection) -> SqlResult<()> {
         ("royalty_qualifying_count", "3"),
         ("royalty_rate_percent", "1"),
         // CR-7/Rule-47: membership levels 2-4 (level 1 is the two rows above).
-        ("royalty_tier_2_qualifying_count", "3"),
-        ("royalty_tier_2_rate_percent", "1"),
-        ("royalty_tier_3_qualifying_count", "3"),
-        ("royalty_tier_3_rate_percent", "1"),
-        ("royalty_tier_4_qualifying_count", "3"),
-        ("royalty_tier_4_rate_percent", "1"),
+        ("royalty_membership_2_qualifying_count", "3"),
+        ("royalty_membership_2_rate_percent", "1"),
+        ("royalty_membership_3_qualifying_count", "3"),
+        ("royalty_membership_3_rate_percent", "1"),
+        ("royalty_membership_4_qualifying_count", "3"),
+        ("royalty_membership_4_rate_percent", "1"),
         ("yearly_cycle", &yearly_cycle),
         ("low_contribution_threshold", "10000"), // ×100 (ADR-004): 100.00
         ("default_export_columns", &default_export_columns),
@@ -159,8 +159,14 @@ mod tests {
             .unwrap()
         };
         for rank in 2..=4 {
-            assert_eq!(value(format!("royalty_tier_{rank}_qualifying_count")), "3");
-            assert_eq!(value(format!("royalty_tier_{rank}_rate_percent")), "1");
+            assert_eq!(
+                value(format!("royalty_membership_{rank}_qualifying_count")),
+                "3"
+            );
+            assert_eq!(
+                value(format!("royalty_membership_{rank}_rate_percent")),
+                "1"
+            );
         }
     }
 

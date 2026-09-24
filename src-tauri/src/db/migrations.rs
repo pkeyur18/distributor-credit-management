@@ -2,7 +2,7 @@ use rusqlite::{Connection, Result as SqlResult};
 
 const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("migrations/0001_initial.sql")),
-    (2, include_str!("migrations/0002_membership_tier.sql")),
+    (2, include_str!("migrations/0002_membership_level.sql")),
 ];
 
 pub fn run(conn: &mut Connection) -> SqlResult<()> {
@@ -160,9 +160,12 @@ mod tests {
             "existing value untouched"
         );
         for rank in 2..=4 {
-            assert_eq!(value(&format!("royalty_tier_{rank}_qualifying_count")), "3");
             assert_eq!(
-                value(&format!("royalty_tier_{rank}_rate_percent")),
+                value(&format!("royalty_membership_{rank}_qualifying_count")),
+                "3"
+            );
+            assert_eq!(
+                value(&format!("royalty_membership_{rank}_rate_percent")),
                 "1.5",
                 "upgrade copies the installation's current rate so no Rewards figure moves"
             );

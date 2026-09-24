@@ -73,7 +73,7 @@ Royalty(x)    = 0                                   if Level(x) = 0
 
 ## 4. Architecture
 
-### 4.1 Data model — migration `0002_membership_tier.sql`
+### 4.1 Data model — migration `0002_membership_level.sql`
 
 ```sql
 ALTER TABLE member_period_totals ADD COLUMN membership_tier INTEGER NOT NULL DEFAULT 0;
@@ -85,14 +85,14 @@ ALTER TABLE monthly_snapshots    ADD COLUMN membership_tier INTEGER NOT NULL DEF
 -- brand-new install.
 INSERT INTO settings (key, value)
 SELECT k, v FROM (
-    SELECT 'royalty_tier_2_qualifying_count' AS k, '3' AS v
-    UNION ALL SELECT 'royalty_tier_3_qualifying_count', '3'
-    UNION ALL SELECT 'royalty_tier_4_qualifying_count', '3'
-    UNION ALL SELECT 'royalty_tier_2_rate_percent',
+    SELECT 'royalty_membership_2_qualifying_count' AS k, '3' AS v
+    UNION ALL SELECT 'royalty_membership_3_qualifying_count', '3'
+    UNION ALL SELECT 'royalty_membership_4_qualifying_count', '3'
+    UNION ALL SELECT 'royalty_membership_2_rate_percent',
                      (SELECT value FROM settings WHERE key = 'royalty_rate_percent')
-    UNION ALL SELECT 'royalty_tier_3_rate_percent',
+    UNION ALL SELECT 'royalty_membership_3_rate_percent',
                      (SELECT value FROM settings WHERE key = 'royalty_rate_percent')
-    UNION ALL SELECT 'royalty_tier_4_rate_percent',
+    UNION ALL SELECT 'royalty_membership_4_rate_percent',
                      (SELECT value FROM settings WHERE key = 'royalty_rate_percent')
 )
 WHERE EXISTS (SELECT 1 FROM settings);
@@ -110,9 +110,9 @@ WHERE EXISTS (SELECT 1 FROM settings);
 | Level | Qualifying count key | Rate key |
 |---|---|---|
 | 1 Gold | `royalty_qualifying_count` (existing) | `royalty_rate_percent` (existing) |
-| 2 Platinum | `royalty_tier_2_qualifying_count` | `royalty_tier_2_rate_percent` |
-| 3 Diamond | `royalty_tier_3_qualifying_count` | `royalty_tier_3_rate_percent` |
-| 4 Ace | `royalty_tier_4_qualifying_count` | `royalty_tier_4_rate_percent` |
+| 2 Platinum | `royalty_membership_2_qualifying_count` | `royalty_membership_2_rate_percent` |
+| 3 Diamond | `royalty_membership_3_qualifying_count` | `royalty_membership_3_rate_percent` |
+| 4 Ace | `royalty_membership_4_qualifying_count` | `royalty_membership_4_rate_percent` |
 
 - Level 1 keeps the existing keys — no data migration, no rename.
 - Numbered keys follow the sibling `level_2_width` convention; no draft name appears
@@ -212,13 +212,15 @@ reads a name.
 ### 4.6 Vocabulary
 
 "Membership" and the four draft level names are client-supplied and used as-is. The
-words "subscription" and "tier" never appear in any visible string (settings key
-names are internal). `scripts/vocabulary-grep.mjs` needs no change.
+words "subscription" and "tier" never appear in any visible string. Settings keys
+are shown raw on the Audit screen, so they are named `royalty_membership_{2,3,4}_…`,
+not `…tier…`. The `membership_tier` column and code identifiers are never displayed.
+`scripts/vocabulary-grep.mjs` needs no change.
 
 ## 5. Files affected
 
 **Rust:** `m3_calc/engine.rs`, `m3_calc/mod.rs`, `db/migrations.rs`,
-`db/migrations/0002_membership_tier.sql` (new), `db/seed.rs`, `m7_settings/mod.rs`,
+`db/migrations/0002_membership_level.sql` (new), `db/seed.rs`, `m7_settings/mod.rs`,
 `m5_close/mod.rs`, `m6_reports/mod.rs`, `m4_search/mod.rs`, `m4_search/pdf.rs`,
 `tests/golden_scenarios.rs`, `tests/differential_non_negativity.rs`, `tests/contract.rs`.
 (Test-only inserts in `m1_members`, `m2_entries`, `m6_reports` need no change — the new

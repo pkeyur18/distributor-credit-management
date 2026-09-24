@@ -18,9 +18,9 @@
 - Levels are monthly. Nothing reads or copies a level across periods. Close snapshots the level and then zeroes it.
 - Settings keys:
   - Level 1: `royalty_qualifying_count` / `royalty_rate_percent` (existing).
-  - Levels 2–4: `royalty_tier_{2,3,4}_qualifying_count` / `royalty_tier_{2,3,4}_rate_percent`.
+  - Levels 2–4: `royalty_membership_{2,3,4}_qualifying_count` / `royalty_membership_{2,3,4}_rate_percent`.
   - IPC camelCase: `royaltyTier{2,3,4}QualifyingCount` / `royaltyTier{2,3,4}RatePercent`.
-- Restricted vocabulary: the words "subscription" and "tier" never appear in a user-visible string. "Membership" and the four level names are allowed.
+- Restricted vocabulary: the words "subscription" and "tier" never appear in a user-visible string. "Membership" and the four level names are allowed. Settings keys show raw on the Audit screen, so the new keys are `royalty_membership_{2,3,4}_…` (renamed from `royalty_tier_…` during execution).
 - Commits: conventional-commit prefix (`feat:`, `fix:`, `test:`, `docs:`), **no `Co-Authored-By` trailer**, on `feature/membership-levels` only. Run `git branch --show-current` before every commit. Never commit to `develop`/`main`. Push only at the end; the user opens the PR.
 - Rust commands run from `src-tauri/`: `cargo test`, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`. Frontend commands run from the repo root: `npm run test`, `npm run lint`, `npx tsc --noEmit`, `npm run vocab-grep`.
 - Money is ×100 fixed point in the DB (ADR-004). Engine unit tests and golden scenarios use real units against a real-unit slab table. DB tests use ×100 against the seeded table (top slab 14% at threshold 1,000,000).
@@ -30,7 +30,7 @@
 ### Task 1: Schema migration and seeded settings
 
 **Files:**
-- Create: `src-tauri/src/db/migrations/0002_membership_tier.sql`
+- Create: `src-tauri/src/db/migrations/0002_membership_level.sql`
 - Modify: `src-tauri/src/db/migrations.rs:3` (MIGRATIONS list) and its tests
 - Modify: `src-tauri/src/db/seed.rs:16-83` (doc comment, rows, count assert) and its tests
 
@@ -110,9 +110,9 @@ Add to `mod tests` in `src-tauri/src/db/migrations.rs`, and change `is_idempoten
         assert_eq!(value("royalty_qualifying_count"), "4", "existing value untouched");
         assert_eq!(value("royalty_rate_percent"), "1.5", "existing value untouched");
         for rank in 2..=4 {
-            assert_eq!(value(&format!("royalty_tier_{rank}_qualifying_count")), "3");
+            assert_eq!(value(&format!("royalty_membership_{rank}_qualifying_count")), "3");
             assert_eq!(
-                value(&format!("royalty_tier_{rank}_rate_percent")),
+                value(&format!("royalty_membership_{rank}_rate_percent")),
                 "1.5",
                 "upgrade copies the installation's current rate so no Rewards figure moves"
             );
@@ -133,14 +133,14 @@ In `src-tauri/src/db/seed.rs` tests:
             let count: String = conn
                 .query_row(
                     "SELECT value FROM settings WHERE key = ?1",
-                    [format!("royalty_tier_{rank}_qualifying_count")],
+                    [format!("royalty_membership_{rank}_qualifying_count")],
                     |r| r.get(0),
                 )
                 .unwrap();
             let rate: String = conn
                 .query_row(
                     "SELECT value FROM settings WHERE key = ?1",
-                    [format!("royalty_tier_{rank}_rate_percent")],
+                    [format!("royalty_membership_{rank}_rate_percent")],
                     |r| r.get(0),
                 )
                 .unwrap();
@@ -156,7 +156,7 @@ Expected: FAIL. `membership_tier_column_exists...` fails (column missing), the b
 
 - [ ] **Step 3: Write the migration**
 
-Create `src-tauri/src/db/migrations/0002_membership_tier.sql`:
+Create `src-tauri/src/db/migrations/0002_membership_level.sql`:
 
 ```sql
 -- Migration 0002 — membership levels (CR-7, Rule-47).
@@ -174,14 +174,14 @@ ALTER TABLE monthly_snapshots    ADD COLUMN membership_tier INTEGER NOT NULL DEF
 -- upgrade moves no Rewards figure until the client edits one.
 INSERT INTO settings (key, value)
 SELECT k, v FROM (
-    SELECT 'royalty_tier_2_qualifying_count' AS k, '3' AS v
-    UNION ALL SELECT 'royalty_tier_3_qualifying_count', '3'
-    UNION ALL SELECT 'royalty_tier_4_qualifying_count', '3'
-    UNION ALL SELECT 'royalty_tier_2_rate_percent',
+    SELECT 'royalty_membership_2_qualifying_count' AS k, '3' AS v
+    UNION ALL SELECT 'royalty_membership_3_qualifying_count', '3'
+    UNION ALL SELECT 'royalty_membership_4_qualifying_count', '3'
+    UNION ALL SELECT 'royalty_membership_2_rate_percent',
                      (SELECT value FROM settings WHERE key = 'royalty_rate_percent')
-    UNION ALL SELECT 'royalty_tier_3_rate_percent',
+    UNION ALL SELECT 'royalty_membership_3_rate_percent',
                      (SELECT value FROM settings WHERE key = 'royalty_rate_percent')
-    UNION ALL SELECT 'royalty_tier_4_rate_percent',
+    UNION ALL SELECT 'royalty_membership_4_rate_percent',
                      (SELECT value FROM settings WHERE key = 'royalty_rate_percent')
 )
 WHERE EXISTS (SELECT 1 FROM settings);
@@ -192,7 +192,7 @@ In `src-tauri/src/db/migrations.rs` line 3:
 ```rust
 const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("migrations/0001_initial.sql")),
-    (2, include_str!("migrations/0002_membership_tier.sql")),
+    (2, include_str!("migrations/0002_membership_level.sql")),
 ];
 ```
 
@@ -204,12 +204,12 @@ In `src-tauri/src/db/seed.rs`:
 
 ```rust
         // CR-7/Rule-47: membership levels 2-4 (level 1 is the two rows above).
-        ("royalty_tier_2_qualifying_count", "3"),
-        ("royalty_tier_2_rate_percent", "1"),
-        ("royalty_tier_3_qualifying_count", "3"),
-        ("royalty_tier_3_rate_percent", "1"),
-        ("royalty_tier_4_qualifying_count", "3"),
-        ("royalty_tier_4_rate_percent", "1"),
+        ("royalty_membership_2_qualifying_count", "3"),
+        ("royalty_membership_2_rate_percent", "1"),
+        ("royalty_membership_3_qualifying_count", "3"),
+        ("royalty_membership_3_rate_percent", "1"),
+        ("royalty_membership_4_qualifying_count", "3"),
+        ("royalty_membership_4_rate_percent", "1"),
 ```
 
 - Change the `debug_assert_eq!` to `rows.len(), 22, "settings inventory is 22 rows (conflict C1 + CR-7)"`.
@@ -514,9 +514,9 @@ In `src-tauri/src/m3_calc/mod.rs`:
 /// the names and the settings can never disagree on how many levels exist.
 pub const ROYALTY_TIER_KEYS: [(&str, &str); MEMBERSHIP_LEVEL_NAMES.len()] = [
     ("royalty_qualifying_count", "royalty_rate_percent"),
-    ("royalty_tier_2_qualifying_count", "royalty_tier_2_rate_percent"),
-    ("royalty_tier_3_qualifying_count", "royalty_tier_3_rate_percent"),
-    ("royalty_tier_4_qualifying_count", "royalty_tier_4_rate_percent"),
+    ("royalty_membership_2_qualifying_count", "royalty_membership_2_rate_percent"),
+    ("royalty_membership_3_qualifying_count", "royalty_membership_3_rate_percent"),
+    ("royalty_membership_4_qualifying_count", "royalty_membership_4_rate_percent"),
 ];
 
 pub fn royalty_tiers(conn: &Connection) -> Result<Vec<RoyaltyTier>, AppError> {
@@ -722,13 +722,13 @@ Add to `m3_calc/mod.rs` `mod tests`:
     fn four_generation_chain(conn: &Connection, month: &str, period: i64) -> [i64; 4] {
         conn.execute(
             "UPDATE settings SET value = '1' WHERE key IN (
-                'royalty_qualifying_count', 'royalty_tier_3_qualifying_count',
-                'royalty_tier_4_qualifying_count')",
+                'royalty_qualifying_count', 'royalty_membership_3_qualifying_count',
+                'royalty_membership_4_qualifying_count')",
             [],
         )
         .unwrap();
         conn.execute(
-            "UPDATE settings SET value = '2' WHERE key = 'royalty_tier_2_qualifying_count'",
+            "UPDATE settings SET value = '2' WHERE key = 'royalty_membership_2_qualifying_count'",
             [],
         )
         .unwrap();
@@ -755,7 +755,7 @@ Add to `m3_calc/mod.rs` `mod tests`:
         );
 
         conn.execute(
-            "UPDATE settings SET value = '1' WHERE key = 'royalty_tier_2_qualifying_count'",
+            "UPDATE settings SET value = '1' WHERE key = 'royalty_membership_2_qualifying_count'",
             [],
         )
         .unwrap();
@@ -802,7 +802,7 @@ Add to `m3_calc/mod.rs` `mod tests`:
         );
 
         conn.execute(
-            "UPDATE settings SET value = '1' WHERE key = 'royalty_tier_2_qualifying_count'",
+            "UPDATE settings SET value = '1' WHERE key = 'royalty_membership_2_qualifying_count'",
             [],
         )
         .unwrap();
@@ -1150,7 +1150,7 @@ Add to `m7_settings/mod.rs` `mod tests`:
         let audited: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM audit_log WHERE field IN
-                    ('royalty_tier_3_qualifying_count', 'royalty_tier_3_rate_percent')",
+                    ('royalty_membership_3_qualifying_count', 'royalty_membership_3_rate_percent')",
                 [],
                 |r| r.get(0),
             )
@@ -1196,7 +1196,7 @@ Add to `m7_settings/mod.rs` `mod tests`:
         let period: i64 = conn.last_insert_rowid();
         conn.execute(
             "UPDATE settings SET value = '1' WHERE key IN (
-                'royalty_qualifying_count', 'royalty_tier_2_qualifying_count')",
+                'royalty_qualifying_count', 'royalty_membership_2_qualifying_count')",
             [],
         )
         .unwrap();
@@ -1266,12 +1266,12 @@ Expected: compile errors (`royalty_tier2_qualifying_count` etc. unknown).
 `get_settings`: add after the `royalty_rate_percent` line:
 
 ```rust
-        royalty_tier2_qualifying_count: setting_i64(conn, "royalty_tier_2_qualifying_count")?,
-        royalty_tier2_rate_percent: setting_f64(conn, "royalty_tier_2_rate_percent")?,
-        royalty_tier3_qualifying_count: setting_i64(conn, "royalty_tier_3_qualifying_count")?,
-        royalty_tier3_rate_percent: setting_f64(conn, "royalty_tier_3_rate_percent")?,
-        royalty_tier4_qualifying_count: setting_i64(conn, "royalty_tier_4_qualifying_count")?,
-        royalty_tier4_rate_percent: setting_f64(conn, "royalty_tier_4_rate_percent")?,
+        royalty_tier2_qualifying_count: setting_i64(conn, "royalty_membership_2_qualifying_count")?,
+        royalty_tier2_rate_percent: setting_f64(conn, "royalty_membership_2_rate_percent")?,
+        royalty_tier3_qualifying_count: setting_i64(conn, "royalty_membership_3_qualifying_count")?,
+        royalty_tier3_rate_percent: setting_f64(conn, "royalty_membership_3_rate_percent")?,
+        royalty_tier4_qualifying_count: setting_i64(conn, "royalty_membership_4_qualifying_count")?,
+        royalty_tier4_rate_percent: setting_f64(conn, "royalty_membership_4_rate_percent")?,
 ```
 
 (b) `SettingsPatch`: add the same six names as `Option<i64>` / `Option<f64>` after `royalty_rate_percent`.
@@ -1389,12 +1389,12 @@ git commit -m "feat: read, validate and save royalty settings for every membersh
         let conn = seeded();
         conn.execute(
             "UPDATE settings SET value = '1' WHERE key IN (
-                'royalty_qualifying_count', 'royalty_tier_2_qualifying_count')",
+                'royalty_qualifying_count', 'royalty_membership_2_qualifying_count')",
             [],
         )
         .unwrap();
         conn.execute(
-            "UPDATE settings SET value = '2.5' WHERE key = 'royalty_tier_2_rate_percent'",
+            "UPDATE settings SET value = '2.5' WHERE key = 'royalty_membership_2_rate_percent'",
             [],
         )
         .unwrap();
@@ -2190,7 +2190,7 @@ Change its heading to `### Rule-10 — Royalty qualification **[AMENDED 24 Sep 2
 **Rule:** Each period, every member holds a membership level, rank 0–4 (none / Gold / Platinum / Diamond / Ace — draft names, not settings). Gold: ≥ N₁ direct legs on the top slab. Each later level k: holds level k−1 **and** ≥ Nₖ direct legs at level k−1 or higher. `Royalty(x)` = 0 at rank 0, otherwise `rate(level(x)) × Σ TBV(c)` over x's top-slab direct legs — the highest level's rate replaces the lower ones, never stacks.
 **Source:** Client change request **CR-7**, 24 September 2026 — decisions: monthly (reset at close, never carried forward); highest rate replaces; one count and one rate per level (N₁…N₄, rate₁…rate₄, all in Settings); sequential ladder; a higher-level leg counts toward a lower rung.
 **Applies to:** M3, M5 (snapshot + reset at close), M7 (settings), M4/M6 (display).
-**Implementation impact:** `member_period_totals`/`monthly_snapshots` gain `membership_tier` (rank). Level 1 keeps `royalty_qualifying_count`/`royalty_rate_percent`; levels 2–4 add `royalty_tier_{2,3,4}_qualifying_count`/`_rate_percent`. A level depends on children's levels, so a settings-change recompute runs deepest member first.
+**Implementation impact:** `member_period_totals`/`monthly_snapshots` gain `membership_tier` (rank). Level 1 keeps `royalty_qualifying_count`/`royalty_rate_percent`; levels 2–4 add `royalty_membership_{2,3,4}_qualifying_count`/`_rate_percent`. A level depends on children's levels, so a settings-change recompute runs deepest member first.
 **Test requirement:** Scenario 7 (constructed — **awaiting client confirmation of the figures**): with counts 3/3/3/3 and rates 1/2/3/4%, top leaves of 10,000 → Gold 300, Platinum 1,800, Diamond 8,100, Ace 32,400 royalty; every differential 0. Plus the client's own example: 2 Platinum legs + 1 Gold leg → Platinum.
 ```
 
@@ -2202,7 +2202,7 @@ Change its heading to `### Rule-10 — Royalty qualification **[AMENDED 24 Sep 2
 - [ ] **Step 4: Check vocabulary**
 
 Run: `grep -n -i -E "subscription|\btier\b" PRODUCT.md documents/implementation-readiness/03-business-rules.md`
-Expected: no matches in user-facing prose. The key names inside backticks contain `tier`; that is fine, because they are internal identifiers.
+Expected: no matches in user-facing prose. `membership_tier` (a column name) inside backticks is fine; it is never displayed.
 
 - [ ] **Step 5: Commit**
 
