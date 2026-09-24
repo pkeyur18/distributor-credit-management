@@ -290,3 +290,97 @@ fn no_rounding_drift_across_a_long_chain() {
     assert_eq!(figures.slab_pct, expected_slab_pct);
     assert_eq!(figures.own_reward, expected_own_reward);
 }
+
+// --- Scenario 7 (CR-7/Rule-47): the membership ladder, top leaf to Ace. ---
+// Constructed, not client-supplied — awaiting client confirmation of the
+// figures (03-business-rules.md Rule-47). Kept out of `golden_scenarios()`,
+// which holds the client's own six.
+
+const S7_TOP: MemberFixture = MemberFixture {
+    name: "top",
+    own_bv: 10_000,
+    children: &[],
+};
+const S7_GOLD: MemberFixture = MemberFixture {
+    name: "gold",
+    own_bv: 0,
+    children: &[S7_TOP, S7_TOP, S7_TOP],
+};
+const S7_PLATINUM: MemberFixture = MemberFixture {
+    name: "platinum",
+    own_bv: 0,
+    children: &[S7_GOLD, S7_GOLD, S7_GOLD],
+};
+const S7_DIAMOND: MemberFixture = MemberFixture {
+    name: "diamond",
+    own_bv: 0,
+    children: &[S7_PLATINUM, S7_PLATINUM, S7_PLATINUM],
+};
+const S7_ACE: MemberFixture = MemberFixture {
+    name: "ace",
+    own_bv: 0,
+    children: &[S7_DIAMOND, S7_DIAMOND, S7_DIAMOND],
+};
+const S7_TIERS: [RoyaltyTier; 4] = [
+    RoyaltyTier {
+        qualifying_count: 3,
+        rate_percent: 1.0,
+    },
+    RoyaltyTier {
+        qualifying_count: 3,
+        rate_percent: 2.0,
+    },
+    RoyaltyTier {
+        qualifying_count: 3,
+        rate_percent: 3.0,
+    },
+    RoyaltyTier {
+        qualifying_count: 3,
+        rate_percent: 4.0,
+    },
+];
+
+fn evaluate_with(
+    tree: &MemberFixture,
+    tiers: &[RoyaltyTier],
+) -> bvconsole_lib::m3_calc::engine::NodeFigures {
+    let children: Vec<ChildFigures> = tree
+        .children
+        .iter()
+        .map(|child| {
+            let f = evaluate_with(child, tiers);
+            ChildFigures {
+                total_business_volume: f.total_business_volume,
+                slab_pct: f.slab_pct,
+                membership_tier: f.membership_tier,
+            }
+        })
+        .collect();
+    compute_node(tree.own_bv, &children, SLABS, tiers)
+}
+
+#[test]
+fn scenario_7_membership_ladder_reaches_ace_at_every_rungs_own_rate() {
+    let expected = [
+        (&S7_TOP, 10_000, 0, 0),
+        (&S7_GOLD, 30_000, 1, 300),
+        (&S7_PLATINUM, 90_000, 2, 1_800),
+        (&S7_DIAMOND, 270_000, 3, 8_100),
+        (&S7_ACE, 810_000, 4, 32_400),
+    ];
+    for (tree, tbv, level, royalty) in expected {
+        let f = evaluate_with(tree, &S7_TIERS);
+        assert_eq!(
+            (
+                f.total_business_volume,
+                f.slab_pct,
+                f.membership_tier,
+                f.royalty,
+                f.differential
+            ),
+            (tbv, 14, level, royalty, 0),
+            "node '{}'",
+            tree.name
+        );
+    }
+}
