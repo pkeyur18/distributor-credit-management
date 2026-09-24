@@ -31,6 +31,19 @@ describe("Settings", () => {
     await $("h2*=Royalty settings saved").waitForExist({ timeout: 3000 });
   });
 
+  it("saves a later membership level's rate", async () => {
+    await navigateTo("Settings");
+    await $("#royalty-rate-2").waitForExist({ timeout: 3000 });
+    await $("#royalty-rate-2").setValue("2");
+    await $("button=Save royalty settings").click();
+    const dialog = $('div[role="dialog"]');
+    await dialog.waitForExist({ timeout: 3000 });
+    const confirmButton = dialog.$("button*=Save and re-work");
+    await confirmButton.waitForEnabled({ timeout: 3000 });
+    await confirmButton.click();
+    await $("h2*=Royalty settings saved").waitForExist({ timeout: 3000 });
+  });
+
   it("T-M7.1-4: disables removing the last remaining slab row, and refuses it if reached anyway", async () => {
     await navigateTo("Settings");
     // Add/remove is staged locally now (prototype-match single "Save slab

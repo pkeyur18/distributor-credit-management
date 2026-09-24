@@ -5,6 +5,12 @@ export interface CandidateSettings {
   slabPercentages?: number[];
   royaltyQualifyingCount?: number;
   royaltyRatePercent?: number;
+  royaltyTier2QualifyingCount?: number;
+  royaltyTier2RatePercent?: number;
+  royaltyTier3QualifyingCount?: number;
+  royaltyTier3RatePercent?: number;
+  royaltyTier4QualifyingCount?: number;
+  royaltyTier4RatePercent?: number;
 }
 
 export interface MemberImpact {
@@ -16,6 +22,8 @@ export interface MemberImpact {
   slabPctAfter: number;
   royaltyBefore: number;
   royaltyAfter: number;
+  membershipTierBefore: number;
+  membershipTierAfter: number;
 }
 
 export interface SettingsImpactPreview {

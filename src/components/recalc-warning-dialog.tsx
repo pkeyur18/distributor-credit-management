@@ -4,13 +4,16 @@ import { Button } from "@/components/ui/button";
 import { ImpactRow, ImpactSummary, ImpactValue } from "@/components/impact-summary";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableWrap } from "@/components/ui/table";
 import { centsToDisplay } from "@/lib/utils";
+import { membershipLevelName } from "@/lib/membership-levels";
 import type { SettingsImpactPreview } from "@/lib/ipc/m3-calc";
 
 // RQ-18/V7.6, T-M7.3-3/-4 — fires only on a Slab table or Royalty save.
 // Mirrors the approved prototype's `confirmSettingsRecalc` modal: a
 // `.modal-warn` note naming the open month, the Rewards before/after total,
 // a royalty-earner count only for a royalty change, and the affected
-// members themselves (capped, "and N more").
+// members themselves (capped, "and N more"). For a royalty change each
+// member shows their membership level move (Rule-47), or — when only a
+// rate moved — their royalty before → after.
 const MOVERS_SHOWN = 4;
 
 interface RecalcWarningDialogProps {
@@ -72,7 +75,9 @@ function RecalcWarningDialog({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Member</TableHead>
-                      <TableHead numeric>{kind === "slab" ? "Slab" : "Royalty"}</TableHead>
+                      <TableHead numeric>
+                        {kind === "slab" ? "Slab" : "Membership / royalty"}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -82,9 +87,9 @@ function RecalcWarningDialog({
                         <TableCell numeric>
                           {kind === "slab"
                             ? `${m.slabPctBefore}% → ${m.slabPctAfter}%`
-                            : m.royaltyAfter > 0
-                              ? "Starts"
-                              : "Stops"}
+                            : m.membershipTierBefore !== m.membershipTierAfter
+                              ? `${membershipLevelName(m.membershipTierBefore)} → ${membershipLevelName(m.membershipTierAfter)}`
+                              : `${centsToDisplay(m.royaltyBefore)} → ${centsToDisplay(m.royaltyAfter)}`}
                         </TableCell>
                       </TableRow>
                     ))}

@@ -170,6 +170,12 @@ export interface Settings {
   level4Width: number;
   royaltyQualifyingCount: number;
   royaltyRatePercent: number;
+  royaltyTier2QualifyingCount: number;
+  royaltyTier2RatePercent: number;
+  royaltyTier3QualifyingCount: number;
+  royaltyTier3RatePercent: number;
+  royaltyTier4QualifyingCount: number;
+  royaltyTier4RatePercent: number;
   yearlyCycle: { start: string; end: string };
   lowContributionThreshold: number;
   defaultExportColumns: string[];

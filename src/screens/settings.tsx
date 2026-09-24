@@ -37,6 +37,7 @@ import { toErrorPresentation } from "@/lib/ipc/errors";
 import { backupPrimaryLabel, backupProvenanceText } from "@/lib/backup-labels";
 import { useAuth } from "@/lib/auth-context";
 import { MANDATORY_EXPORT_COLUMNS, OPTIONAL_EXPORT_COLUMNS } from "@/lib/export-columns";
+import { membershipLevelName } from "@/lib/membership-levels";
 
 function SectionCard({
   id,
@@ -322,6 +323,15 @@ function SlabTableCard({
 
 // --- Royalty / structure guidance / reporting / reference / session (US-M7.2) ---
 
+// Rule-47: one row per membership level, rank 1 first. Rank 1 keeps Rule-10's
+// original keys — and the `royalty-min`/`royalty-rate` ids the E2E suite uses.
+const ROYALTY_TIER_FIELDS = [
+  { count: "royaltyQualifyingCount", rate: "royaltyRatePercent" },
+  { count: "royaltyTier2QualifyingCount", rate: "royaltyTier2RatePercent" },
+  { count: "royaltyTier3QualifyingCount", rate: "royaltyTier3RatePercent" },
+  { count: "royaltyTier4QualifyingCount", rate: "royaltyTier4RatePercent" },
+] as const;
+
 function RoyaltyCard({
   settings,
   onSettingsChange,
@@ -331,61 +341,95 @@ function RoyaltyCard({
 }) {
   const toast = useToast();
   const recalcWarning = useRecalcWarning();
-  const [minChildren, setMinChildren] = useState(String(settings.royaltyQualifyingCount));
-  const [rate, setRate] = useState(String(settings.royaltyRatePercent));
+  const [rows, setRows] = useState(() =>
+    ROYALTY_TIER_FIELDS.map((f) => ({
+      count: String(settings[f.count]),
+      rate: String(settings[f.rate]),
+    })),
+  );
   const [saving, setSaving] = useState(false);
 
+  function setRow(index: number, patch: Partial<{ count: string; rate: string }>) {
+    setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
   async function save() {
-    const royaltyQualifyingCount = Number(minChildren);
-    const royaltyRatePercent = Number(rate);
-    if (!Number.isFinite(royaltyQualifyingCount) || !Number.isFinite(royaltyRatePercent)) {
-      toast.add({ title: "Enter valid numbers", type: "danger" });
-      return;
+    const patch: CandidateSettings = {};
+    for (const [i, field] of ROYALTY_TIER_FIELDS.entries()) {
+      const count = Number(rows[i].count);
+      const rate = Number(rows[i].rate);
+      if (!Number.isFinite(count) || !Number.isFinite(rate)) {
+        toast.add({ title: "Enter valid numbers", type: "danger" });
+        return;
+      }
+      patch[field.count] = count;
+      patch[field.rate] = rate;
     }
-    await recalcWarning.request(
-      "royalty",
-      { royaltyQualifyingCount, royaltyRatePercent },
-      async () => {
-        setSaving(true);
-        try {
-          const updated = await updateSettings({ royaltyQualifyingCount, royaltyRatePercent });
-          onSettingsChange(updated);
-          toast.add({ title: "Royalty settings saved", type: "success" });
-        } finally {
-          setSaving(false);
-        }
-      },
-    );
+    await recalcWarning.request("royalty", patch, async () => {
+      setSaving(true);
+      try {
+        const updated = await updateSettings(patch);
+        onSettingsChange(updated);
+        toast.add({ title: "Royalty settings saved", type: "success" });
+      } finally {
+        setSaving(false);
+      }
+    });
   }
 
   return (
     <SectionCard
       id="settings-card-royalty"
       title="Royalty"
-      description="Paid when enough direct legs land on the top slab"
+      description="Membership levels, and the royalty rate each one earns"
     >
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="royalty-min" className="text-label mb-1 block">
-            Minimum qualifying legs
-          </label>
-          <Input
-            id="royalty-min"
-            value={minChildren}
-            onChange={(e) => setMinChildren(e.target.value)}
-          />
-        </div>
-        <div>
-          <label htmlFor="royalty-rate" className="text-label mb-1 block">
-            Royalty rate (%)
-          </label>
-          <Input id="royalty-rate" value={rate} onChange={(e) => setRate(e.target.value)} />
-        </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-body">
+          <thead>
+            <tr className="text-label text-left text-muted-text">
+              <th className="pb-1.5 font-normal">Membership</th>
+              <th className="pb-1.5 font-normal">Minimum qualifying legs</th>
+              <th className="pb-1.5 font-normal">Royalty rate (%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ROYALTY_TIER_FIELDS.map((_, i) => {
+              const name = membershipLevelName(i + 1);
+              const suffix = i === 0 ? "" : `-${i + 1}`;
+              return (
+                <tr key={name} className="border-t border-border">
+                  <td className="py-1.5 pr-3 font-[650] whitespace-nowrap">{name}</td>
+                  <td className="py-1.5 pr-2">
+                    <Input
+                      id={`royalty-min${suffix}`}
+                      className="num"
+                      aria-label={`${name} minimum qualifying legs`}
+                      disabled={saving}
+                      value={rows[i].count}
+                      onChange={(e) => setRow(i, { count: e.target.value })}
+                    />
+                  </td>
+                  <td className="py-1.5">
+                    <Input
+                      id={`royalty-rate${suffix}`}
+                      className="num"
+                      aria-label={`${name} royalty rate (%)`}
+                      disabled={saving}
+                      value={rows[i].rate}
+                      onChange={(e) => setRow(i, { rate: e.target.value })}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-      <InputHint className="mt-2">
-        A member with {minChildren || settings.royaltyQualifyingCount}+ direct legs on the top slab
-        earns {rate || settings.royaltyRatePercent}% royalty on each qualifying leg&apos;s Total
-        Business Volume.
+      <InputHint className="mt-3">
+        {membershipLevelName(1)} needs that many direct legs on the top slab. Each later level needs
+        that many direct legs already at the level before it, or higher. A member earns only their
+        highest level&apos;s rate, on each top-slab leg&apos;s Total Business Volume. Levels are
+        worked out afresh every month.
       </InputHint>
       <Button className="mt-3.5" disabled={saving} onClick={save}>
         Save royalty settings
