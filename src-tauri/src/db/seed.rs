@@ -13,7 +13,8 @@ const DEFAULT_SLABS: &[(i64, i64)] = &[
     (1_000_000, 14),
 ];
 
-/// First-run seed: 7 slab rows + 16 settings rows (02-business-rules.md §4.3
+/// First-run seed: 7 slab rows + 22 settings rows (16 original + CR-7's six
+/// membership-level rows) (02-business-rules.md §4.3
 /// / §6). Idempotent — only seeds a table that is currently empty, so a
 /// second run (or a login on an already-seeded database) is a no-op.
 pub fn run(conn: &Connection) -> SqlResult<()> {
@@ -67,6 +68,13 @@ fn seed_settings(conn: &Connection) -> SqlResult<()> {
         ("level_4_width", "3"),
         ("royalty_qualifying_count", "3"),
         ("royalty_rate_percent", "1"),
+        // CR-7/Rule-47: membership levels 2-4 (level 1 is the two rows above).
+        ("royalty_tier_2_qualifying_count", "3"),
+        ("royalty_tier_2_rate_percent", "1"),
+        ("royalty_tier_3_qualifying_count", "3"),
+        ("royalty_tier_3_rate_percent", "1"),
+        ("royalty_tier_4_qualifying_count", "3"),
+        ("royalty_tier_4_rate_percent", "1"),
         ("yearly_cycle", &yearly_cycle),
         ("low_contribution_threshold", "10000"), // ×100 (ADR-004): 100.00
         ("default_export_columns", &default_export_columns),
@@ -77,8 +85,8 @@ fn seed_settings(conn: &Connection) -> SqlResult<()> {
     ];
     debug_assert_eq!(
         rows.len(),
-        16,
-        "settings inventory is 16 rows (conflict C1)"
+        22,
+        "settings inventory is 22 rows (conflict C1 + CR-7)"
     );
 
     for (key, value) in rows {
@@ -130,15 +138,30 @@ mod tests {
     }
 
     #[test]
-    fn inserts_exactly_sixteen_settings_rows() {
+    fn inserts_exactly_twenty_two_settings_rows() {
         let conn = seeded_db();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM settings", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            count, 16,
-            "authoritative settings count is 16, not 13 (conflict C1)"
+            count, 22,
+            "16 (conflict C1) + CR-7's six membership-level rows"
         );
+    }
+
+    #[test]
+    fn seeds_the_three_later_membership_levels_with_count_3_and_rate_1() {
+        let conn = seeded_db();
+        let value = |key: String| -> String {
+            conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get(0)
+            })
+            .unwrap()
+        };
+        for rank in 2..=4 {
+            assert_eq!(value(format!("royalty_tier_{rank}_qualifying_count")), "3");
+            assert_eq!(value(format!("royalty_tier_{rank}_rate_percent")), "1");
+        }
     }
 
     #[test]
@@ -200,6 +223,6 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM settings", [], |r| r.get(0))
             .unwrap();
         assert_eq!(slab_count, 7);
-        assert_eq!(settings_count, 16);
+        assert_eq!(settings_count, 22);
     }
 }
