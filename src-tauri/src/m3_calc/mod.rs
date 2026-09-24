@@ -11,6 +11,8 @@
 // commands themselves.
 pub mod engine;
 
+use std::collections::HashMap;
+
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +69,42 @@ fn business_volume_of(
     )?)
 }
 
+/// Every member's depth below its root, from the real introducer links — not
+/// the stored `members.level`, so ordering can never drift from the tree.
+/// Rule-37 (introducers never change) keeps this stable within a recompute.
+const MEMBER_DEPTH_CTE: &str = "WITH RECURSIVE depth(id, d) AS (
+        SELECT id, 0 FROM members WHERE introducer_member_id IS NULL
+        UNION ALL
+        SELECT m.id, depth.d + 1 FROM members m JOIN depth ON m.introducer_member_id = depth.id
+     )";
+
+fn direct_children_with_ids(
+    conn: &Connection,
+    member_id: i64,
+    period_id: i64,
+) -> Result<Vec<(i64, ChildFigures)>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT m.id, COALESCE(t.total_business_volume, 0), COALESCE(t.slab_pct, 0),
+                COALESCE(t.membership_tier, 0)
+         FROM members m
+         LEFT JOIN member_period_totals t ON t.member_id = m.id AND t.period_id = ?2
+         WHERE m.introducer_member_id = ?1",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![member_id, period_id], |r| {
+            Ok((
+                r.get(0)?,
+                ChildFigures {
+                    total_business_volume: r.get(1)?,
+                    slab_pct: r.get(2)?,
+                    membership_tier: r.get(3)?,
+                },
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
 /// Rule-28: every direct child, active or not — no filtering here. A child
 /// with no row yet for this period (nothing in its subtree has been
 /// entered this period) defaults to zero, which is its correct TBV.
@@ -75,23 +113,10 @@ fn direct_children_figures(
     member_id: i64,
     period_id: i64,
 ) -> Result<Vec<ChildFigures>, AppError> {
-    let mut stmt = conn.prepare(
-        "SELECT COALESCE(t.total_business_volume, 0), COALESCE(t.slab_pct, 0),
-                COALESCE(t.membership_tier, 0)
-         FROM members m
-         LEFT JOIN member_period_totals t ON t.member_id = m.id AND t.period_id = ?2
-         WHERE m.introducer_member_id = ?1",
-    )?;
-    let rows = stmt
-        .query_map(rusqlite::params![member_id, period_id], |r| {
-            Ok(ChildFigures {
-                total_business_volume: r.get(0)?,
-                slab_pct: r.get(1)?,
-                membership_tier: r.get(2)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(rows)
+    Ok(direct_children_with_ids(conn, member_id, period_id)?
+        .into_iter()
+        .map(|(_, figures)| figures)
+        .collect())
 }
 
 fn slab_table(conn: &Connection) -> Result<Vec<(i64, i64)>, AppError> {
@@ -261,9 +286,20 @@ pub(crate) fn current_open_period_id(conn: &Connection) -> Result<Option<i64>, A
         .optional()?)
 }
 
-fn open_period_member_ids(conn: &Connection, period_id: i64) -> Result<Vec<i64>, AppError> {
-    let mut stmt =
-        conn.prepare("SELECT member_id FROM member_period_totals WHERE period_id = ?1")?;
+/// Deepest member first: a child's slab feeds its parent's differential
+/// (Rule-8) and a child's level feeds its parent's level (Rule-47), so every
+/// parent must read children already recomputed under the new settings.
+fn open_period_member_ids_deepest_first(
+    conn: &Connection,
+    period_id: i64,
+) -> Result<Vec<i64>, AppError> {
+    let mut stmt = conn.prepare(&format!(
+        "{MEMBER_DEPTH_CTE}
+         SELECT t.member_id FROM member_period_totals t
+         JOIN depth ON depth.id = t.member_id
+         WHERE t.period_id = ?1
+         ORDER BY depth.d DESC, t.member_id"
+    ))?;
     let rows = stmt
         .query_map([period_id], |r| r.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
@@ -275,7 +311,7 @@ fn recompute_open_period_rows(conn: &Connection, period_id: i64) -> Result<(), A
     let slabs = slab_table(conn)?;
     let tiers = royalty_tiers(conn)?;
 
-    for id in open_period_member_ids(conn, period_id)? {
+    for id in open_period_member_ids_deepest_first(conn, period_id)? {
         let business_volume = business_volume_of(conn, id, &period_month)?;
         let children = direct_children_figures(conn, id, period_id)?;
         let figures = compute_node(business_volume, &children, &slabs, &tiers);
@@ -287,12 +323,10 @@ fn recompute_open_period_rows(conn: &Connection, period_id: i64) -> Result<(), A
 /// T-M7.1-1/T-M7.2-2: a slab-table or royalty-setting change affects every
 /// member's slab-driven figures, not one ancestor chain, so
 /// `recalculate_chain` doesn't fit — this recomputes every row already
-/// present in the currently open calendar-month period. Order doesn't
-/// matter here the way it does for `recalculate_chain`: Rule-6's TBV
-/// formula never depends on the slab table or royalty settings, only on
-/// each member's own Business Volume (re-summed from entries, untouched by
-/// a settings edit) and its children's already-stored TBV — so every row
-/// can be recomputed independently from what's already on disk. If no
+/// present in the currently open calendar-month period. Rows are
+/// recomputed deepest first (`open_period_member_ids_deepest_first`) — a
+/// child's slab and level both feed its parent's figures, so a parent must
+/// never read a child still holding pre-edit values. If no
 /// period is currently open (nothing entered yet this calendar month),
 /// there is nothing to recompute — a no-op, not an error. Composes inside
 /// a caller-owned transaction exactly like `recalculate_chain`, since
@@ -321,6 +355,12 @@ pub struct CandidateSettings {
     pub slab_percentages: Option<Vec<i64>>,
     pub royalty_qualifying_count: Option<i64>,
     pub royalty_rate_percent: Option<f64>,
+    pub royalty_tier2_qualifying_count: Option<i64>,
+    pub royalty_tier2_rate_percent: Option<f64>,
+    pub royalty_tier3_qualifying_count: Option<i64>,
+    pub royalty_tier3_rate_percent: Option<f64>,
+    pub royalty_tier4_qualifying_count: Option<i64>,
+    pub royalty_tier4_rate_percent: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -334,6 +374,8 @@ pub struct MemberImpact {
     pub slab_pct_after: i64,
     pub royalty_before: i64,
     pub royalty_after: i64,
+    pub membership_tier_before: i64,
+    pub membership_tier_after: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -378,24 +420,61 @@ fn resolve_candidate_slabs(
     }
 }
 
+/// Each level's candidate count/rate where given, the live setting otherwise.
+fn resolve_candidate_tiers(
+    conn: &Connection,
+    candidate: &CandidateSettings,
+) -> Result<Vec<RoyaltyTier>, AppError> {
+    let overrides = [
+        (
+            candidate.royalty_qualifying_count,
+            candidate.royalty_rate_percent,
+        ),
+        (
+            candidate.royalty_tier2_qualifying_count,
+            candidate.royalty_tier2_rate_percent,
+        ),
+        (
+            candidate.royalty_tier3_qualifying_count,
+            candidate.royalty_tier3_rate_percent,
+        ),
+        (
+            candidate.royalty_tier4_qualifying_count,
+            candidate.royalty_tier4_rate_percent,
+        ),
+    ];
+    Ok(royalty_tiers(conn)?
+        .into_iter()
+        .zip(overrides)
+        .map(|(live, (count, rate))| RoyaltyTier {
+            qualifying_count: count.unwrap_or(live.qualifying_count),
+            rate_percent: rate.unwrap_or(live.rate_percent),
+        })
+        .collect())
+}
+
 struct LiveFigures {
     member_id: i64,
     member_name: String,
     slab_pct: i64,
     royalty: i64,
     rewards: i64,
+    membership_tier: i64,
 }
 
 fn live_figures_for_open_period(
     conn: &Connection,
     period_id: i64,
 ) -> Result<Vec<LiveFigures>, AppError> {
-    let mut stmt = conn.prepare(
-        "SELECT m.id, m.name, t.slab_pct, t.royalty, t.rewards
+    let mut stmt = conn.prepare(&format!(
+        "{MEMBER_DEPTH_CTE}
+         SELECT m.id, m.name, t.slab_pct, t.royalty, t.rewards, t.membership_tier
          FROM member_period_totals t
          JOIN members m ON m.id = t.member_id
-         WHERE t.period_id = ?1",
-    )?;
+         JOIN depth ON depth.id = t.member_id
+         WHERE t.period_id = ?1
+         ORDER BY depth.d DESC, t.member_id"
+    ))?;
     let rows = stmt
         .query_map([period_id], |r| {
             Ok(LiveFigures {
@@ -404,6 +483,7 @@ fn live_figures_for_open_period(
                 slab_pct: r.get(2)?,
                 royalty: r.get(3)?,
                 rewards: r.get(4)?,
+                membership_tier: r.get(5)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -418,9 +498,9 @@ fn live_figures_for_open_period(
 /// candidate values directly — nothing is ever written, so a panic can't
 /// leave anything uncommitted to restore. Both paths sharing `compute_node`
 /// is also what guarantees the preview equals what actually lands
-/// (T-M7.3-6): given the same live Business Volume and children figures
-/// (Rule-6 — TBV never depends on slab/royalty settings) and the same
-/// candidate values, the two calls are identical function applications.
+/// (T-M7.3-6): both walk the open period deepest first, and here each
+/// parent reads its children's *predicted* figures — exactly what the real
+/// save's parent reads back from rows it has just rewritten.
 pub fn preview_settings_impact(
     conn: &Connection,
     candidate: CandidateSettings,
@@ -436,23 +516,32 @@ pub fn preview_settings_impact(
     };
     let period_month = period_month_of(conn, period_id)?;
     let slabs = resolve_candidate_slabs(conn, &candidate)?;
-    let mut tiers = royalty_tiers(conn)?;
-    if let Some(count) = candidate.royalty_qualifying_count {
-        tiers[0].qualifying_count = count;
-    }
-    if let Some(rate) = candidate.royalty_rate_percent {
-        tiers[0].rate_percent = rate;
-    }
+    let tiers = resolve_candidate_tiers(conn, &candidate)?;
 
     let mut rewards_before_total = 0;
     let mut rewards_after_total = 0;
     let mut royalty_earner_count_before = 0;
     let mut royalty_earner_count_after = 0;
     let mut affected = Vec::new();
+    // Deepest first (live_figures_for_open_period's order), substituting each
+    // already-predicted child for its live row.
+    let mut predicted: HashMap<i64, ChildFigures> = HashMap::new();
     for live in live_figures_for_open_period(conn, period_id)? {
         let business_volume = business_volume_of(conn, live.member_id, &period_month)?;
-        let children = direct_children_figures(conn, live.member_id, period_id)?;
+        let children: Vec<ChildFigures> =
+            direct_children_with_ids(conn, live.member_id, period_id)?
+                .into_iter()
+                .map(|(id, figures)| predicted.get(&id).copied().unwrap_or(figures))
+                .collect();
         let after = compute_node(business_volume, &children, &slabs, &tiers);
+        predicted.insert(
+            live.member_id,
+            ChildFigures {
+                total_business_volume: after.total_business_volume,
+                slab_pct: after.slab_pct,
+                membership_tier: after.membership_tier,
+            },
+        );
 
         rewards_before_total += live.rewards;
         rewards_after_total += after.rewards;
@@ -465,6 +554,7 @@ pub fn preview_settings_impact(
 
         if live.rewards != after.rewards
             || live.slab_pct != after.slab_pct
+            || live.membership_tier != after.membership_tier
             || (live.royalty > 0) != (after.royalty > 0)
         {
             affected.push(MemberImpact {
@@ -476,6 +566,8 @@ pub fn preview_settings_impact(
                 slab_pct_after: after.slab_pct,
                 royalty_before: live.royalty,
                 royalty_after: after.royalty,
+                membership_tier_before: live.membership_tier,
+                membership_tier_after: after.membership_tier,
             });
         }
     }
@@ -1078,6 +1170,165 @@ mod tests {
             slab_after_rollback, 4,
             "rolling back the caller's transaction must discard the recalculation too"
         );
+    }
+
+    fn differential(conn: &Connection, member_id: i64, period_id: i64) -> i64 {
+        conn.query_row(
+            "SELECT differential FROM member_period_totals WHERE member_id = ?1 AND period_id = ?2",
+            rusqlite::params![member_id, period_id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_slab_edit_recomputes_children_before_their_parent() {
+        // Regression: the parent's row is inserted first (lower rowid), so
+        // member-id/rowid order visited it before its child and computed its
+        // differential against the child's *old* slab.
+        let conn = seeded();
+        let month = this_month();
+        let period = insert_period(&conn, &month);
+        let parent = insert_member(&conn, None);
+        let child = insert_member(&conn, Some(parent));
+        insert_entry(&conn, parent, &month, 200_000);
+        recalculate_chain(&conn, parent, period).unwrap();
+        insert_entry(&conn, child, &month, 100_000); // 4% (40,000 <= 100,000)
+        recalculate_chain(&conn, child, period).unwrap();
+        // Parent TBV 300,000 -> 8%; (8 - 4) × 100,000 / 100.
+        assert_eq!(differential(&conn, parent, period), 4_000);
+
+        // Child drops to 2%; parent stays at 8%.
+        conn.execute(
+            "UPDATE slab_table SET threshold = 200000 WHERE percentage = 4",
+            [],
+        )
+        .unwrap();
+        recalculate_open_period(&conn).unwrap();
+
+        assert_eq!(
+            differential(&conn, parent, period),
+            6_000,
+            "(8 - 2) × 100,000 / 100 — the child's *new* slab"
+        );
+    }
+
+    /// root -> mid -> low -> leaf with counts 1/2/1/1: leaf is top slab and
+    /// low, mid and root are all Gold (Platinum needs 2 Gold legs; each has
+    /// one). Lowering Platinum's count to 1 then makes mid Platinum and root
+    /// Diamond — but root only reaches Diamond by reading mid's *new* level,
+    /// so a parent-before-child walk leaves root stuck at Platinum. Root's
+    /// own entry is recorded first so its row is visited first by any
+    /// rowid/member-id order.
+    fn four_generation_chain(conn: &Connection, month: &str, period: i64) -> [i64; 4] {
+        conn.execute(
+            "UPDATE settings SET value = '1' WHERE key IN (
+                'royalty_qualifying_count', 'royalty_tier_3_qualifying_count',
+                'royalty_tier_4_qualifying_count')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE settings SET value = '2' WHERE key = 'royalty_tier_2_qualifying_count'",
+            [],
+        )
+        .unwrap();
+        let root = insert_member(conn, None);
+        let mid = insert_member(conn, Some(root));
+        let low = insert_member(conn, Some(mid));
+        let leaf = insert_member(conn, Some(low));
+        insert_entry(conn, root, month, 1_000);
+        recalculate_chain(conn, root, period).unwrap();
+        insert_entry(conn, leaf, month, 1_000_000); // top slab
+        recalculate_chain(conn, leaf, period).unwrap();
+        [root, mid, low, leaf]
+    }
+
+    #[test]
+    fn lowering_the_platinum_count_moves_parent_and_grandparent_in_one_save() {
+        let conn = seeded();
+        let month = this_month();
+        let period = insert_period(&conn, &month);
+        let [root, mid, low, _] = four_generation_chain(&conn, &month, period);
+        assert_eq!(
+            (
+                tier(&conn, root, period),
+                tier(&conn, mid, period),
+                tier(&conn, low, period)
+            ),
+            (1, 1, 1)
+        );
+
+        conn.execute(
+            "UPDATE settings SET value = '1' WHERE key = 'royalty_tier_2_qualifying_count'",
+            [],
+        )
+        .unwrap();
+        recalculate_open_period(&conn).unwrap();
+
+        assert_eq!(
+            tier(&conn, low, period),
+            1,
+            "low's only leg holds no level: still Gold"
+        );
+        assert_eq!(
+            tier(&conn, mid, period),
+            2,
+            "one Gold leg now meets Platinum's 1"
+        );
+        assert_eq!(
+            tier(&conn, root, period),
+            3,
+            "root reaches Diamond only by reading mid's *new* Platinum in the same save"
+        );
+    }
+
+    #[test]
+    fn a_level_count_preview_matches_what_the_save_settles_at() {
+        let conn = seeded();
+        let month = this_month();
+        let period = insert_period(&conn, &month);
+        let [root, mid, _, _] = four_generation_chain(&conn, &month, period);
+
+        let preview = preview_settings_impact(
+            &conn,
+            CandidateSettings {
+                royalty_tier2_qualifying_count: Some(1),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let predicted = |id: i64| {
+            preview
+                .affected_members
+                .iter()
+                .find(|m| m.member_id == id)
+                .unwrap_or_else(|| panic!("member {id} must be listed as affected"))
+        };
+        assert_eq!(predicted(mid).membership_tier_before, 1);
+        assert_eq!(predicted(mid).membership_tier_after, 2);
+        assert_eq!(predicted(root).membership_tier_before, 1);
+        assert_eq!(
+            predicted(root).membership_tier_after,
+            3,
+            "the preview must use mid's *predicted* level, not its live one"
+        );
+
+        conn.execute(
+            "UPDATE settings SET value = '1' WHERE key = 'royalty_tier_2_qualifying_count'",
+            [],
+        )
+        .unwrap();
+        recalculate_open_period(&conn).unwrap();
+        for id in [root, mid] {
+            let (_, _, settled_rewards) = totals(&conn, id, period);
+            assert_eq!(
+                settled_rewards,
+                predicted(id).rewards_after,
+                "T-M7.3-6 for member {id}"
+            );
+            assert_eq!(tier(&conn, id, period), predicted(id).membership_tier_after);
+        }
     }
 
     // --- write_correction_snapshot (US-M2.2, S7) ---
