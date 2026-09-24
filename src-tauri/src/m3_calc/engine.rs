@@ -5,18 +5,45 @@
 // caller (`super::recalculate_chain`, or a test walking a fixture tree)
 // owns loading the chain and persisting the result.
 
+/// Rule-47 (CR-7): the draft membership-level names, rank 1..=4 in order.
+/// Display only — the database stores the rank, never a name, and names are
+/// not a setting. Renaming a level is a change here and in
+/// `src/lib/membership-levels.ts`, nowhere else.
+pub const MEMBERSHIP_LEVEL_NAMES: [&str; 4] = ["Gold", "Platinum", "Diamond", "Ace"];
+
+/// Rank 0 ("no level") and anything out of range render as an em dash.
+pub fn membership_level_name(rank: i64) -> &'static str {
+    usize::try_from(rank)
+        .ok()
+        .and_then(|r| r.checked_sub(1))
+        .and_then(|i| MEMBERSHIP_LEVEL_NAMES.get(i))
+        .copied()
+        .unwrap_or("\u{2014}")
+}
+
+/// One membership level's settings (Rule-47), rank = index + 1.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RoyaltyTier {
+    pub qualifying_count: i64,
+    pub rate_percent: f64,
+}
+
 /// A direct child's already-known figures for the period — either read
 /// from `member_period_totals` (the DB caller) or from a fixture tree
-/// (the golden-scenario tests).
+/// (the golden-scenario tests). Its membership level feeds its parent's
+/// (Rule-47).
+#[derive(Debug, Clone, Copy)]
 pub struct ChildFigures {
     pub total_business_volume: i64,
     pub slab_pct: i64,
+    pub membership_tier: i64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct NodeFigures {
     pub total_business_volume: i64,
     pub slab_pct: i64,
+    pub membership_tier: i64,
     pub differential: i64,
     pub royalty: i64,
     pub own_reward: i64,
@@ -41,6 +68,33 @@ pub fn slab_lookup(tbv: i64, slabs: &[(i64, i64)]) -> i64 {
 /// its threshold — not the highest percentage among a member's children.
 fn top_slab_percentage(slabs: &[(i64, i64)]) -> i64 {
     slabs.iter().map(|(_, pct)| *pct).max().unwrap_or(0)
+}
+
+/// Rule-47: rank 1 needs `tiers[0].qualifying_count` direct legs on the top
+/// slab; each later rank k needs rank k-1 already held *and*
+/// `tiers[k-1].qualifying_count` direct legs at rank k-1 or higher (a
+/// higher-level leg has been through every rung below it). Stops at the
+/// first unmet rung. Iterates `tiers` — never assumes there are four.
+fn membership_tier(children: &[ChildFigures], top_slab_pct: i64, tiers: &[RoyaltyTier]) -> i64 {
+    let mut rank = 0;
+    for (i, tier) in tiers.iter().enumerate() {
+        let qualifying = if i == 0 {
+            children
+                .iter()
+                .filter(|c| c.slab_pct == top_slab_pct)
+                .count()
+        } else {
+            children
+                .iter()
+                .filter(|c| c.membership_tier >= i as i64)
+                .count()
+        };
+        if (qualifying as i64) < tier.qualifying_count {
+            break;
+        }
+        rank = i as i64 + 1;
+    }
+    rank
 }
 
 /// ADR-004: round-half-up, applied once, at the point a term is finalised.
@@ -69,14 +123,14 @@ pub(crate) fn round_half_up_f64(n: f64) -> i64 {
 
 /// One post-order step (Rule-5): given a member's own Business Volume and
 /// its direct children's current figures, compute that member's TBV
-/// (Rule-6), slab (Rule-7), differential (Rule-8), royalty (Rule-10,
-/// Rule-25), own-Business-Volume reward (Rule-46), and Rewards (Rule-12).
+/// (Rule-6), slab (Rule-7), differential (Rule-8), membership level
+/// (Rule-47), royalty (Rule-10 as amended by Rule-47, Rule-25),
+/// own-Business-Volume reward (Rule-46), and Rewards (Rule-12).
 pub fn compute_node(
     own_business_volume: i64,
     children: &[ChildFigures],
     slabs: &[(i64, i64)],
-    royalty_min_children: i64,
-    royalty_rate_percent: f64,
+    tiers: &[RoyaltyTier],
 ) -> NodeFigures {
     let total_business_volume = own_business_volume
         + children
@@ -91,21 +145,20 @@ pub fn compute_node(
         .map(|c| round_half_up_div100((slab_pct - c.slab_pct) * c.total_business_volume))
         .sum();
 
-    // Rule-10: only children on the table's top slab, both to count and to pay.
+    // Rule-47: the level, then royalty at that level's rate only (the
+    // highest level's rate replaces, never stacks). Base is unchanged from
+    // Rule-10: only top-slab legs, both to count Gold and to pay.
     let top_slab_pct = top_slab_percentage(slabs);
-    let qualifying: Vec<&ChildFigures> = children
-        .iter()
-        .filter(|c| c.slab_pct == top_slab_pct)
-        .collect();
-    let royalty: i64 = if qualifying.len() as i64 >= royalty_min_children {
-        qualifying
-            .iter()
-            .map(|c| {
-                round_half_up_f64(royalty_rate_percent * c.total_business_volume as f64 / 100.0)
-            })
-            .sum()
-    } else {
+    let membership_tier = membership_tier(children, top_slab_pct, tiers);
+    let royalty: i64 = if membership_tier == 0 {
         0
+    } else {
+        let rate_percent = tiers[(membership_tier - 1) as usize].rate_percent;
+        children
+            .iter()
+            .filter(|c| c.slab_pct == top_slab_pct)
+            .map(|c| round_half_up_f64(rate_percent * c.total_business_volume as f64 / 100.0))
+            .sum()
     };
 
     // Rule-46 (CR-4): own Business Volume, at the member's own slab.
@@ -117,6 +170,7 @@ pub fn compute_node(
     NodeFigures {
         total_business_volume,
         slab_pct,
+        membership_tier,
         differential,
         royalty,
         own_reward,
@@ -206,10 +260,41 @@ mod tests {
         (10_000, 14),
     ];
 
+    // Every existing Rule-10 test assumed min 3 / 1% — the same rule, now
+    // expressed as four identical rungs.
+    const UNIFORM: [RoyaltyTier; 4] = [RoyaltyTier {
+        qualifying_count: 3,
+        rate_percent: 1.0,
+    }; 4];
+    // Distinct rates so "highest level's rate replaces" is observable.
+    const LADDER: [RoyaltyTier; 4] = [
+        RoyaltyTier {
+            qualifying_count: 3,
+            rate_percent: 1.0,
+        },
+        RoyaltyTier {
+            qualifying_count: 3,
+            rate_percent: 2.0,
+        },
+        RoyaltyTier {
+            qualifying_count: 3,
+            rate_percent: 3.0,
+        },
+        RoyaltyTier {
+            qualifying_count: 3,
+            rate_percent: 4.0,
+        },
+    ];
+
     fn leaf(total_business_volume: i64, slab_pct: i64) -> ChildFigures {
+        leg(total_business_volume, slab_pct, 0)
+    }
+
+    fn leg(total_business_volume: i64, slab_pct: i64, membership_tier: i64) -> ChildFigures {
         ChildFigures {
             total_business_volume,
             slab_pct,
+            membership_tier,
         }
     }
 
@@ -248,7 +333,7 @@ mod tests {
         // Rule-8's own example: D at 6%, children A (2%, 300), B (0%, 50),
         // C (4%, 1000) -> 35, reproducing Scenario 1's differential term.
         let children = [leaf(300, 2), leaf(50, 0), leaf(1_000, 4)];
-        let figures = compute_node(500, &children, SLABS, 3, 1.0);
+        let figures = compute_node(500, &children, SLABS, &UNIFORM);
         assert_eq!(figures.total_business_volume, 1_850);
         assert_eq!(figures.slab_pct, 6);
         assert_eq!(figures.differential, 35);
@@ -258,7 +343,7 @@ mod tests {
     fn royalty_is_zero_below_the_configured_min_children() {
         let top = top_slab_percentage(SLABS);
         let children = [leaf(10_000, top), leaf(10_000, top)];
-        let figures = compute_node(0, &children, SLABS, 3, 1.0);
+        let figures = compute_node(0, &children, SLABS, &UNIFORM);
         assert_eq!(figures.royalty, 0, "only 2 qualifying, min is 3");
     }
 
@@ -266,7 +351,7 @@ mod tests {
     fn royalty_pays_once_the_min_children_boundary_is_reached() {
         let top = top_slab_percentage(SLABS);
         let children = [leaf(10_000, top), leaf(10_000, top), leaf(10_000, top)];
-        let figures = compute_node(0, &children, SLABS, 3, 1.0);
+        let figures = compute_node(0, &children, SLABS, &UNIFORM);
         assert_eq!(figures.royalty, 300, "3 qualifying at 1% of 10,000 each");
     }
 
@@ -275,7 +360,15 @@ mod tests {
         // T-M7.4-3: 1.25% of 10,000 = 125, exactly, per qualifying leg.
         let top = top_slab_percentage(SLABS);
         let children = [leaf(10_000, top), leaf(10_000, top), leaf(10_000, top)];
-        let figures = compute_node(0, &children, SLABS, 3, 1.25);
+        let figures = compute_node(
+            0,
+            &children,
+            SLABS,
+            &[RoyaltyTier {
+                qualifying_count: 3,
+                rate_percent: 1.25,
+            }; 4],
+        );
         assert_eq!(figures.royalty, 375, "3 qualifying at 1.25% of 10,000 each");
     }
 
@@ -284,7 +377,7 @@ mod tests {
         // Rule-10: "top slab" is the table's own highest-percentage row,
         // not the highest percentage actually present among the children.
         let children = [leaf(9_000, 12), leaf(9_000, 12), leaf(9_000, 12)];
-        let figures = compute_node(0, &children, SLABS, 3, 1.0);
+        let figures = compute_node(0, &children, SLABS, &UNIFORM);
         assert_eq!(
             figures.royalty, 0,
             "12% isn't the table's top slab (14% is), so none of these qualify"
@@ -300,7 +393,7 @@ mod tests {
         // logic exists for this; it falls out of the formulas themselves.
         let top = top_slab_percentage(SLABS);
         let children = [leaf(10_000, top), leaf(10_000, top), leaf(10_000, top)];
-        let figures = compute_node(0, &children, SLABS, 3, 1.0);
+        let figures = compute_node(0, &children, SLABS, &UNIFORM);
         assert_eq!(
             figures.differential, 0,
             "every child is on the parent's own top slab, so each differential term is zero"
@@ -315,7 +408,7 @@ mod tests {
     fn own_reward_pays_at_the_members_own_slab_on_their_own_business_volume_only() {
         // Rule-46: A's own BV = 100 at A's own slab (4%) -> 4.
         let children = [leaf(100, 2), leaf(100, 2), leaf(100, 2)];
-        let figures = compute_node(100, &children, SLABS, 3, 1.0);
+        let figures = compute_node(100, &children, SLABS, &UNIFORM);
         assert_eq!(figures.slab_pct, 4);
         assert_eq!(figures.own_reward, 4);
     }
@@ -323,7 +416,7 @@ mod tests {
     #[test]
     fn rewards_is_the_sum_of_all_three_terms_and_never_negative_in_normal_operation() {
         let children = [leaf(300, 2), leaf(50, 0), leaf(1_000, 4)];
-        let figures = compute_node(500, &children, SLABS, 3, 1.0);
+        let figures = compute_node(500, &children, SLABS, &UNIFORM);
         assert_eq!(
             figures.rewards,
             figures.differential + figures.royalty + figures.own_reward
@@ -339,9 +432,121 @@ mod tests {
         // must be idempotent — TBV depends only on own_bv + children's
         // TBV, never on the previous rewards figure.
         let children = [leaf(300, 2), leaf(50, 0), leaf(1_000, 4)];
-        let first = compute_node(500, &children, SLABS, 3, 1.0);
-        let second = compute_node(500, &children, SLABS, 3, 1.0);
+        let first = compute_node(500, &children, SLABS, &UNIFORM);
+        let second = compute_node(500, &children, SLABS, &UNIFORM);
         assert_eq!(first.total_business_volume, second.total_business_volume);
         assert_eq!(first.rewards, second.rewards);
+    }
+
+    #[test]
+    fn membership_level_name_maps_rank_to_the_draft_names() {
+        assert_eq!(membership_level_name(0), "\u{2014}");
+        assert_eq!(membership_level_name(1), "Gold");
+        assert_eq!(membership_level_name(4), "Ace");
+        assert_eq!(membership_level_name(5), "\u{2014}");
+        assert_eq!(membership_level_name(-1), "\u{2014}");
+    }
+
+    #[test]
+    fn no_level_below_the_gold_count() {
+        let children = [leg(10_000, 14, 0), leg(10_000, 14, 0)];
+        let figures = compute_node(0, &children, SLABS, &LADDER);
+        assert_eq!(figures.membership_tier, 0);
+        assert_eq!(figures.royalty, 0);
+    }
+
+    #[test]
+    fn gold_exactly_at_the_gold_count_pays_the_gold_rate() {
+        let children = [leg(10_000, 14, 0), leg(10_000, 14, 0), leg(10_000, 14, 0)];
+        let figures = compute_node(0, &children, SLABS, &LADDER);
+        assert_eq!(figures.membership_tier, 1);
+        assert_eq!(
+            figures.royalty, 300,
+            "1% of 10,000 on each of 3 top-slab legs"
+        );
+    }
+
+    #[test]
+    fn platinum_needs_the_platinum_count_of_gold_legs() {
+        let two_gold = [leg(30_000, 14, 1), leg(30_000, 14, 1), leg(10_000, 14, 0)];
+        assert_eq!(
+            compute_node(0, &two_gold, SLABS, &LADDER).membership_tier,
+            1
+        );
+
+        let three_gold = [leg(30_000, 14, 1), leg(30_000, 14, 1), leg(30_000, 14, 1)];
+        let figures = compute_node(0, &three_gold, SLABS, &LADDER);
+        assert_eq!(figures.membership_tier, 2);
+        assert_eq!(
+            figures.royalty, 1_800,
+            "Platinum's 2% replaces Gold's 1%: 2% of 90,000"
+        );
+    }
+
+    #[test]
+    fn a_higher_level_leg_counts_toward_a_lower_rung() {
+        // Client's own example (decision 5): 2 Platinum + 1 Gold = 3 legs at
+        // Gold or higher -> Platinum; only 2 at Platinum or higher -> not Diamond.
+        let children = [leg(90_000, 14, 2), leg(90_000, 14, 2), leg(30_000, 14, 1)];
+        let figures = compute_node(0, &children, SLABS, &LADDER);
+        assert_eq!(figures.membership_tier, 2);
+        assert_eq!(figures.royalty, 4_200, "2% of 210,000");
+    }
+
+    #[test]
+    fn three_diamond_legs_reach_ace_through_every_rung() {
+        let children = [
+            leg(270_000, 14, 3),
+            leg(270_000, 14, 3),
+            leg(270_000, 14, 3),
+        ];
+        let figures = compute_node(0, &children, SLABS, &LADDER);
+        assert_eq!(figures.membership_tier, 4);
+        assert_eq!(figures.royalty, 32_400, "Ace's 4% of 810,000");
+    }
+
+    #[test]
+    fn the_ladder_stops_at_the_first_unmet_rung() {
+        // Platinum needs 5 here, so Diamond/Ace (count 1) are never reached
+        // even though three Diamond legs would satisfy them on their own.
+        let tiers = [
+            RoyaltyTier {
+                qualifying_count: 3,
+                rate_percent: 1.0,
+            },
+            RoyaltyTier {
+                qualifying_count: 5,
+                rate_percent: 2.0,
+            },
+            RoyaltyTier {
+                qualifying_count: 1,
+                rate_percent: 3.0,
+            },
+            RoyaltyTier {
+                qualifying_count: 1,
+                rate_percent: 4.0,
+            },
+        ];
+        let children = [
+            leg(270_000, 14, 3),
+            leg(270_000, 14, 3),
+            leg(270_000, 14, 3),
+        ];
+        assert_eq!(compute_node(0, &children, SLABS, &tiers).membership_tier, 1);
+    }
+
+    #[test]
+    fn the_royalty_base_stays_top_slab_legs_only_at_every_level() {
+        // A Platinum member's non-top-slab leg adds nothing to royalty
+        // (Rule-10 base unchanged); it is paid through differential instead.
+        let children = [
+            leg(30_000, 14, 1),
+            leg(30_000, 14, 1),
+            leg(30_000, 14, 1),
+            leg(5_000, 10, 0),
+        ];
+        let figures = compute_node(0, &children, SLABS, &LADDER);
+        assert_eq!(figures.membership_tier, 2);
+        assert_eq!(figures.royalty, 1_800);
     }
 }

@@ -15,7 +15,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use engine::{compute_node, ChildFigures, NodeFigures};
+use engine::{compute_node, ChildFigures, NodeFigures, RoyaltyTier, MEMBERSHIP_LEVEL_NAMES};
 
 fn introducer_of(conn: &Connection, member_id: i64) -> Result<Option<i64>, AppError> {
     conn.query_row(
@@ -76,7 +76,8 @@ fn direct_children_figures(
     period_id: i64,
 ) -> Result<Vec<ChildFigures>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT COALESCE(t.total_business_volume, 0), COALESCE(t.slab_pct, 0)
+        "SELECT COALESCE(t.total_business_volume, 0), COALESCE(t.slab_pct, 0),
+                COALESCE(t.membership_tier, 0)
          FROM members m
          LEFT JOIN member_period_totals t ON t.member_id = m.id AND t.period_id = ?2
          WHERE m.introducer_member_id = ?1",
@@ -86,6 +87,7 @@ fn direct_children_figures(
             Ok(ChildFigures {
                 total_business_volume: r.get(0)?,
                 slab_pct: r.get(1)?,
+                membership_tier: r.get(2)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -122,6 +124,38 @@ fn setting_f64(conn: &Connection, key: &str) -> Result<f64, AppError> {
     })
 }
 
+/// Rule-47: (qualifying count, rate) settings keys per membership level,
+/// rank 1 first. Rank 1 keeps Rule-10's original keys, so an upgraded
+/// install needed no data migration for them. Sized off the names list, so
+/// the names and the settings can never disagree on how many levels exist.
+pub const ROYALTY_TIER_KEYS: [(&str, &str); MEMBERSHIP_LEVEL_NAMES.len()] = [
+    ("royalty_qualifying_count", "royalty_rate_percent"),
+    (
+        "royalty_tier_2_qualifying_count",
+        "royalty_tier_2_rate_percent",
+    ),
+    (
+        "royalty_tier_3_qualifying_count",
+        "royalty_tier_3_rate_percent",
+    ),
+    (
+        "royalty_tier_4_qualifying_count",
+        "royalty_tier_4_rate_percent",
+    ),
+];
+
+pub fn royalty_tiers(conn: &Connection) -> Result<Vec<RoyaltyTier>, AppError> {
+    ROYALTY_TIER_KEYS
+        .iter()
+        .map(|(count_key, rate_key)| {
+            Ok(RoyaltyTier {
+                qualifying_count: setting_i64(conn, count_key)?,
+                rate_percent: setting_f64(conn, rate_key)?,
+            })
+        })
+        .collect()
+}
+
 fn upsert_totals(
     conn: &Connection,
     member_id: i64,
@@ -132,8 +166,8 @@ fn upsert_totals(
     conn.execute(
         "INSERT INTO member_period_totals
             (member_id, period_id, business_volume, total_business_volume, slab_pct,
-             differential, royalty, own_reward, rewards)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             differential, royalty, own_reward, rewards, membership_tier)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
          ON CONFLICT (member_id, period_id) DO UPDATE SET
             business_volume = excluded.business_volume,
             total_business_volume = excluded.total_business_volume,
@@ -141,7 +175,8 @@ fn upsert_totals(
             differential = excluded.differential,
             royalty = excluded.royalty,
             own_reward = excluded.own_reward,
-            rewards = excluded.rewards",
+            rewards = excluded.rewards,
+            membership_tier = excluded.membership_tier",
         rusqlite::params![
             member_id,
             period_id,
@@ -152,6 +187,7 @@ fn upsert_totals(
             figures.royalty,
             figures.own_reward,
             figures.rewards,
+            figures.membership_tier,
         ],
     )?;
     Ok(())
@@ -163,19 +199,12 @@ fn walk_chain(
     period_month: &str,
     period_id: i64,
     slabs: &[(i64, i64)],
-    royalty_min_children: i64,
-    royalty_rate_percent: f64,
+    tiers: &[RoyaltyTier],
 ) -> Result<(), AppError> {
     for &id in chain {
         let business_volume = business_volume_of(conn, id, period_month)?;
         let children = direct_children_figures(conn, id, period_id)?;
-        let figures = compute_node(
-            business_volume,
-            &children,
-            slabs,
-            royalty_min_children,
-            royalty_rate_percent,
-        );
+        let figures = compute_node(business_volume, &children, slabs, tiers);
         upsert_totals(conn, id, period_id, business_volume, &figures)?;
     }
     Ok(())
@@ -207,31 +236,14 @@ pub fn recalculate_chain(
     let chain = chain_to_root(conn, member_id)?;
     let period_month = period_month_of(conn, period_id)?;
     let slabs = slab_table(conn)?;
-    let royalty_min_children = setting_i64(conn, "royalty_qualifying_count")?;
-    let royalty_rate_percent = setting_f64(conn, "royalty_rate_percent")?;
+    let tiers = royalty_tiers(conn)?;
 
     if conn.is_autocommit() {
         let tx = conn.unchecked_transaction()?;
-        walk_chain(
-            &tx,
-            &chain,
-            &period_month,
-            period_id,
-            &slabs,
-            royalty_min_children,
-            royalty_rate_percent,
-        )?;
+        walk_chain(&tx, &chain, &period_month, period_id, &slabs, &tiers)?;
         tx.commit()?;
     } else {
-        walk_chain(
-            conn,
-            &chain,
-            &period_month,
-            period_id,
-            &slabs,
-            royalty_min_children,
-            royalty_rate_percent,
-        )?;
+        walk_chain(conn, &chain, &period_month, period_id, &slabs, &tiers)?;
     }
     Ok(())
 }
@@ -261,19 +273,12 @@ fn open_period_member_ids(conn: &Connection, period_id: i64) -> Result<Vec<i64>,
 fn recompute_open_period_rows(conn: &Connection, period_id: i64) -> Result<(), AppError> {
     let period_month = period_month_of(conn, period_id)?;
     let slabs = slab_table(conn)?;
-    let royalty_min_children = setting_i64(conn, "royalty_qualifying_count")?;
-    let royalty_rate_percent = setting_f64(conn, "royalty_rate_percent")?;
+    let tiers = royalty_tiers(conn)?;
 
     for id in open_period_member_ids(conn, period_id)? {
         let business_volume = business_volume_of(conn, id, &period_month)?;
         let children = direct_children_figures(conn, id, period_id)?;
-        let figures = compute_node(
-            business_volume,
-            &children,
-            &slabs,
-            royalty_min_children,
-            royalty_rate_percent,
-        );
+        let figures = compute_node(business_volume, &children, &slabs, &tiers);
         upsert_totals(conn, id, period_id, business_volume, &figures)?;
     }
     Ok(())
@@ -431,14 +436,13 @@ pub fn preview_settings_impact(
     };
     let period_month = period_month_of(conn, period_id)?;
     let slabs = resolve_candidate_slabs(conn, &candidate)?;
-    let royalty_min_children = candidate
-        .royalty_qualifying_count
-        .map(Ok)
-        .unwrap_or_else(|| setting_i64(conn, "royalty_qualifying_count"))?;
-    let royalty_rate_percent = candidate
-        .royalty_rate_percent
-        .map(Ok)
-        .unwrap_or_else(|| setting_f64(conn, "royalty_rate_percent"))?;
+    let mut tiers = royalty_tiers(conn)?;
+    if let Some(count) = candidate.royalty_qualifying_count {
+        tiers[0].qualifying_count = count;
+    }
+    if let Some(rate) = candidate.royalty_rate_percent {
+        tiers[0].rate_percent = rate;
+    }
 
     let mut rewards_before_total = 0;
     let mut rewards_after_total = 0;
@@ -448,13 +452,7 @@ pub fn preview_settings_impact(
     for live in live_figures_for_open_period(conn, period_id)? {
         let business_volume = business_volume_of(conn, live.member_id, &period_month)?;
         let children = direct_children_figures(conn, live.member_id, period_id)?;
-        let after = compute_node(
-            business_volume,
-            &children,
-            &slabs,
-            royalty_min_children,
-            royalty_rate_percent,
-        );
+        let after = compute_node(business_volume, &children, &slabs, &tiers);
 
         rewards_before_total += live.rewards;
         rewards_after_total += after.rewards;
@@ -518,7 +516,8 @@ fn snapshot_children_figures(
     period_id: i64,
 ) -> Result<Vec<ChildFigures>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT COALESCE(t.total_business_volume, 0), COALESCE(t.slab_pct, 0)
+        "SELECT COALESCE(t.total_business_volume, 0), COALESCE(t.slab_pct, 0),
+                COALESCE(t.membership_tier, 0)
          FROM members m
          LEFT JOIN monthly_snapshots t ON t.member_id = m.id AND t.period_id = ?2
             AND t.version = (
@@ -532,6 +531,7 @@ fn snapshot_children_figures(
             Ok(ChildFigures {
                 total_business_volume: r.get(0)?,
                 slab_pct: r.get(1)?,
+                membership_tier: r.get(2)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -568,8 +568,9 @@ fn insert_snapshot(
     conn.execute(
         "INSERT INTO monthly_snapshots
             (member_id, period_id, version, business_volume, total_business_volume,
-             slab_pct, differential, royalty, own_reward, rewards, is_active_status, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+             slab_pct, differential, royalty, own_reward, rewards, is_active_status, created_at,
+             membership_tier)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         rusqlite::params![
             member_id,
             period_id,
@@ -583,6 +584,7 @@ fn insert_snapshot(
             figures.rewards,
             is_active_status,
             created_at,
+            figures.membership_tier,
         ],
     )?;
     Ok(())
@@ -595,20 +597,13 @@ fn walk_chain_into_snapshot(
     period_month: &str,
     period_id: i64,
     slabs: &[(i64, i64)],
-    royalty_min_children: i64,
-    royalty_rate_percent: f64,
+    tiers: &[RoyaltyTier],
     created_at: &str,
 ) -> Result<(), AppError> {
     for &id in chain {
         let business_volume = business_volume_of(conn, id, period_month)?;
         let children = snapshot_children_figures(conn, id, period_id)?;
-        let figures = compute_node(
-            business_volume,
-            &children,
-            slabs,
-            royalty_min_children,
-            royalty_rate_percent,
-        );
+        let figures = compute_node(business_volume, &children, slabs, tiers);
         let version = next_snapshot_version(conn, id, period_id)?;
         let is_active = is_active_of(conn, id)?;
         insert_snapshot(
@@ -642,8 +637,7 @@ pub fn write_correction_snapshot(
     let chain = chain_to_root(conn, member_id)?;
     let period_month = period_month_of(conn, period_id)?;
     let slabs = slab_table(conn)?;
-    let royalty_min_children = setting_i64(conn, "royalty_qualifying_count")?;
-    let royalty_rate_percent = setting_f64(conn, "royalty_rate_percent")?;
+    let tiers = royalty_tiers(conn)?;
     let created_at = chrono::Local::now().date_naive().to_string();
 
     if conn.is_autocommit() {
@@ -654,8 +648,7 @@ pub fn write_correction_snapshot(
             &period_month,
             period_id,
             &slabs,
-            royalty_min_children,
-            royalty_rate_percent,
+            &tiers,
             &created_at,
         )?;
         tx.commit()?;
@@ -666,8 +659,7 @@ pub fn write_correction_snapshot(
             &period_month,
             period_id,
             &slabs,
-            royalty_min_children,
-            royalty_rate_percent,
+            &tiers,
             &created_at,
         )?;
     }
@@ -733,6 +725,61 @@ mod tests {
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .unwrap()
+    }
+
+    fn tier(conn: &Connection, member_id: i64, period_id: i64) -> i64 {
+        conn.query_row(
+            "SELECT membership_tier FROM member_period_totals
+             WHERE member_id = ?1 AND period_id = ?2",
+            rusqlite::params![member_id, period_id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_chain_write_stores_the_members_membership_level() {
+        let conn = seeded();
+        let period = insert_period(&conn, "2026-08");
+        let parent = insert_member(&conn, None);
+        for _ in 0..3 {
+            let child = insert_member(&conn, Some(parent));
+            insert_entry(&conn, child, "2026-08", 1_000_000); // ×100: top slab
+            recalculate_chain(&conn, child, period).unwrap();
+        }
+        assert_eq!(
+            tier(&conn, parent, period),
+            1,
+            "3 top-slab legs at the seeded count of 3 is Gold"
+        );
+    }
+
+    #[test]
+    fn a_correction_snapshot_records_the_level_from_childrens_snapshots() {
+        let conn = seeded();
+        conn.execute(
+            "UPDATE settings SET value = '1' WHERE key = 'royalty_qualifying_count'",
+            [],
+        )
+        .unwrap();
+        let period = insert_period(&conn, "2026-08");
+        let parent = insert_member(&conn, None);
+        let child = insert_member(&conn, Some(parent));
+        insert_snapshot_row(&conn, child, period, 1, 0, 0);
+        insert_snapshot_row(&conn, parent, period, 1, 0, 0);
+        insert_entry(&conn, child, "2026-08", 1_000_000); // top slab
+
+        write_correction_snapshot(&conn, child, period).unwrap();
+
+        let parent_tier: i64 = conn
+            .query_row(
+                "SELECT membership_tier FROM monthly_snapshots
+                 WHERE member_id = ?1 AND period_id = ?2 AND version = 2",
+                rusqlite::params![parent, period],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(parent_tier, 1, "one top-slab leg at a Gold count of 1");
     }
 
     #[test]

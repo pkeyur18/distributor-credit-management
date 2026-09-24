@@ -5,7 +5,7 @@
 
 mod fixtures;
 
-use bvconsole_lib::m3_calc::engine::{compute_node, ChildFigures};
+use bvconsole_lib::m3_calc::engine::{compute_node, ChildFigures, RoyaltyTier};
 use fixtures::{diverging_terms, golden_scenarios, MemberFixture};
 
 // §4.3 default slab table, real units (matching the fixtures' own units —
@@ -19,8 +19,12 @@ const SLABS: &[(i64, i64)] = &[
     (7_000, 12),
     (10_000, 14),
 ];
-const ROYALTY_MIN_CHILDREN: i64 = 3;
-const ROYALTY_RATE_PERCENT: f64 = 1.0;
+// Rule-10's original min 3 / 1%, as four identical Rule-47 rungs — the six
+// client scenarios predate membership levels and must reproduce unchanged.
+const TIERS: [RoyaltyTier; 4] = [RoyaltyTier {
+    qualifying_count: 3,
+    rate_percent: 1.0,
+}; 4];
 
 /// Rule-5's post-order walk over a fixture tree, through the real engine.
 fn evaluate(tree: &MemberFixture) -> bvconsole_lib::m3_calc::engine::NodeFigures {
@@ -32,16 +36,11 @@ fn evaluate(tree: &MemberFixture) -> bvconsole_lib::m3_calc::engine::NodeFigures
             ChildFigures {
                 total_business_volume: figures.total_business_volume,
                 slab_pct: figures.slab_pct,
+                membership_tier: figures.membership_tier,
             }
         })
         .collect();
-    compute_node(
-        tree.own_bv,
-        &children,
-        SLABS,
-        ROYALTY_MIN_CHILDREN,
-        ROYALTY_RATE_PERCENT,
-    )
+    compute_node(tree.own_bv, &children, SLABS, &TIERS)
 }
 
 #[test]
