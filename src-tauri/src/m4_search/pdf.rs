@@ -27,6 +27,7 @@ use genpdf::{Alignment, Document, Element, Margins, Position, SimplePageDecorato
 
 use crate::error::AppError;
 use crate::m1_members::Member;
+use crate::m3_calc::engine::membership_level_name;
 use crate::m4_search::{MemberDetail, MemberDetailChild, RewardBreakdown};
 
 // 07-design-system.md §1: accent #4f46e5, ledger green #059669, red #dc2626.
@@ -273,9 +274,19 @@ pub(super) fn rewards_detail_rows(rewards: &RewardBreakdown) -> Vec<RewardRow> {
     }
 
     if let Some(royalty) = &rewards.royalty {
+        // Rule-47: name the level and its rate once one is held.
+        let level = if royalty.membership_tier > 0 {
+            format!(
+                "{} at {}% \u{2014} ",
+                membership_level_name(royalty.membership_tier),
+                royalty.rate_percent
+            )
+        } else {
+            String::new()
+        };
         rows.push(RewardRow {
             description: format!(
-                "Royalty \u{2014} {} of {} legs qualifying",
+                "Royalty \u{2014} {level}{} of {} legs qualifying",
                 royalty.qualifying_children,
                 rewards.differentials.len()
             ),
@@ -757,6 +768,7 @@ mod tests {
             ],
             royalty: Some(RoyaltyLine {
                 qualifying_children: 1,
+                membership_tier: 0,
                 rate_percent: 5.0,
                 amount: 5_942,
             }),
@@ -800,6 +812,34 @@ mod tests {
         let rows = rewards_detail_rows(&rewards);
         assert_eq!(rows.len(), 2, "own reward + total only, no royalty row");
         assert_eq!(rows[1].description, "Rewards total");
+    }
+
+    #[test]
+    fn rewards_detail_rows_names_the_level_and_its_rate_on_the_royalty_row() {
+        let rewards = RewardBreakdown {
+            own_reward: OwnRewardLine {
+                own_business_volume: 0,
+                own_slab_pct: 14,
+                amount: 0,
+            },
+            differentials: vec![
+                differential_line(1, "A", 3_000_000, 14, 14, 0),
+                differential_line(2, "B", 3_000_000, 14, 14, 0),
+                differential_line(3, "C", 3_000_000, 14, 14, 0),
+            ],
+            royalty: Some(RoyaltyLine {
+                qualifying_children: 3,
+                membership_tier: 2,
+                rate_percent: 2.0,
+                amount: 180_000,
+            }),
+            rewards_total: 180_000,
+        };
+        let rows = rewards_detail_rows(&rewards);
+        assert_eq!(
+            rows[4].description,
+            "Royalty \u{2014} Platinum at 2% \u{2014} 3 of 3 legs qualifying"
+        );
     }
 
     #[test]
@@ -917,6 +957,7 @@ mod tests {
             differentials,
             royalty: Some(RoyaltyLine {
                 qualifying_children: 80,
+                membership_tier: 0,
                 rate_percent: 5.0,
                 amount: 800,
             }),
@@ -970,6 +1011,7 @@ mod tests {
             differentials,
             royalty: Some(RoyaltyLine {
                 qualifying_children: 3,
+                membership_tier: 0,
                 rate_percent: 5.0,
                 amount: 72_598,
             }),
@@ -1000,6 +1042,7 @@ mod tests {
             member,
             total_business_volume: 2_147_185,
             slab_pct: 14,
+            membership_tier: 0,
             leg_count: 1,
             rewards: RewardBreakdown {
                 own_reward: OwnRewardLine {
@@ -1033,6 +1076,7 @@ mod tests {
             member,
             total_business_volume: 0,
             slab_pct: 0,
+            membership_tier: 0,
             leg_count: 0,
             rewards: RewardBreakdown {
                 own_reward: OwnRewardLine {

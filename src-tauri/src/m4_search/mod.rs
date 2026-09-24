@@ -78,6 +78,7 @@ struct PeriodTotals {
     royalty: i64,
     own_reward: i64,
     rewards: i64,
+    membership_tier: i64,
 }
 
 fn totals_for_period(
@@ -88,7 +89,8 @@ fn totals_for_period(
     Ok(conn.query_row(
         "SELECT COALESCE(t.business_volume, 0), COALESCE(t.total_business_volume, 0),
                 COALESCE(t.slab_pct, 0),
-                COALESCE(t.royalty, 0), COALESCE(t.own_reward, 0), COALESCE(t.rewards, 0)
+                COALESCE(t.royalty, 0), COALESCE(t.own_reward, 0), COALESCE(t.rewards, 0),
+                COALESCE(t.membership_tier, 0)
          FROM (SELECT 1) dummy
          LEFT JOIN member_period_totals t
                 ON t.member_id = ?1 AND t.period_id = ?2",
@@ -101,6 +103,7 @@ fn totals_for_period(
                 royalty: r.get(3)?,
                 own_reward: r.get(4)?,
                 rewards: r.get(5)?,
+                membership_tier: r.get(6)?,
             })
         },
     )?)
@@ -121,18 +124,6 @@ fn top_slab_percentage(conn: &Connection) -> Result<i64, AppError> {
         [],
         |r| r.get(0),
     )?)
-}
-
-fn royalty_rate_percent(conn: &Connection) -> Result<f64, AppError> {
-    let value: String = conn.query_row(
-        "SELECT value FROM settings WHERE key = 'royalty_rate_percent'",
-        [],
-        |r| r.get(0),
-    )?;
-    value.parse().map_err(|_| AppError::Validation {
-        field: "royalty_rate_percent".into(),
-        message: "setting 'royalty_rate_percent' is not a valid number".into(),
-    })
 }
 
 // ---------------------------------------------------------------------
@@ -163,6 +154,7 @@ pub struct DifferentialLine {
 #[serde(rename_all = "camelCase")]
 pub struct RoyaltyLine {
     pub qualifying_children: i64,
+    pub membership_tier: i64,
     pub rate_percent: f64,
     pub amount: i64,
 }
@@ -192,6 +184,7 @@ pub struct MemberDetail {
     pub member: Member,
     pub total_business_volume: i64,
     pub slab_pct: i64,
+    pub membership_tier: i64,
     pub leg_count: i64,
     pub rewards: RewardBreakdown,
     pub direct_children: Vec<MemberDetailChild>,
@@ -270,9 +263,14 @@ pub fn get_member_detail(
     } else {
         let top_slab = top_slab_percentage(conn)?;
         let qualifying_children = children.iter().filter(|c| c.slab_pct == top_slab).count() as i64;
+        // Rule-47: the rate of the level actually held; below Gold, show
+        // Gold's rate — the one the member would earn on qualifying.
+        let tiers = crate::m3_calc::royalty_tiers(conn)?;
+        let rate_index = (totals.membership_tier.max(1) - 1) as usize;
         Some(RoyaltyLine {
             qualifying_children,
-            rate_percent: royalty_rate_percent(conn)?,
+            membership_tier: totals.membership_tier,
+            rate_percent: tiers[rate_index].rate_percent,
             amount: totals.royalty,
         })
     };
@@ -280,6 +278,7 @@ pub fn get_member_detail(
     Ok(MemberDetail {
         total_business_volume: totals.total_business_volume,
         slab_pct: totals.slab_pct,
+        membership_tier: totals.membership_tier,
         leg_count: children.len() as i64,
         rewards: RewardBreakdown {
             own_reward: OwnRewardLine {
@@ -659,6 +658,37 @@ mod tests {
         let conn = seeded();
         let err = get_member_detail(&conn, 999_999, None).unwrap_err();
         assert!(matches!(err, AppError::NotFound { .. }));
+    }
+
+    #[test]
+    fn member_detail_reports_the_level_and_that_levels_royalty_rate() {
+        let conn = seeded();
+        conn.execute(
+            "UPDATE settings SET value = '1' WHERE key IN (
+                'royalty_qualifying_count', 'royalty_membership_2_qualifying_count')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE settings SET value = '2.5' WHERE key = 'royalty_membership_2_rate_percent'",
+            [],
+        )
+        .unwrap();
+        let period = insert_period(&conn, "2026-08");
+        let root = insert_member(&conn, "Root", None);
+        let mid = insert_member(&conn, "Mid", Some(root));
+        let leaf = insert_member(&conn, "Leaf", Some(mid));
+        insert_entry(&conn, leaf, "2026-08", 1_000_000); // top slab
+        recalculate_chain(&conn, leaf, period).unwrap();
+
+        let detail = get_member_detail(&conn, root, Some("2026-08")).unwrap();
+        assert_eq!(
+            detail.membership_tier, 2,
+            "Mid is Gold, so Root is Platinum"
+        );
+        let royalty = detail.rewards.royalty.expect("root has a leg");
+        assert_eq!(royalty.membership_tier, 2);
+        assert_eq!(royalty.rate_percent, 2.5);
     }
 
     #[test]
