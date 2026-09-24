@@ -26,6 +26,7 @@ import { getPeriodLockStatus, type PeriodLockStatus } from "@/lib/ipc/m2-entries
 import type { MemberDetail as MemberDetailData } from "@/lib/ipc/m4-search";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { centsToDisplay } from "@/lib/utils";
+import { membershipLevelName } from "@/lib/membership-levels";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { useBackTarget, useRouteLabel } from "@/lib/navigation-history";
 
@@ -190,7 +191,15 @@ export function MemberDetail() {
           label="Total Business Volume"
           value={centsToDisplay(detail.totalBusinessVolume)}
         />
-        <StatCard label="Slab" value={`${detail.slabPct}%`} />
+        <StatCard
+          label="Slab"
+          value={`${detail.slabPct}%`}
+          aside={
+            detail.membershipTier > 0 && (
+              <Pill variant="slab">{membershipLevelName(detail.membershipTier)}</Pill>
+            )
+          }
+        />
         <StatCard label="Rewards this period" value={centsToDisplay(rewards.rewardsTotal)} />
       </div>
 
@@ -272,7 +281,10 @@ export function MemberDetail() {
                         <TableCell colSpan={3} primary>
                           Royalty{" "}
                           <span className="font-normal text-muted-text">
-                            — {rewards.royalty.qualifyingChildren} of {rewards.differentials.length}{" "}
+                            —{" "}
+                            {rewards.royalty.membershipTier > 0 &&
+                              `${membershipLevelName(rewards.royalty.membershipTier)} at ${rewards.royalty.ratePercent}% — `}
+                            {rewards.royalty.qualifyingChildren} of {rewards.differentials.length}{" "}
                             legs qualifying (top slab)
                           </span>
                         </TableCell>
@@ -411,11 +423,22 @@ export function MemberDetail() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({
+  label,
+  value,
+  aside,
+}: {
+  label: string;
+  value: string;
+  aside?: React.ReactNode;
+}) {
   return (
     <div className="rounded-lg border border-border bg-surface p-3.5">
       <div className="text-label text-muted-text">{label}</div>
-      <div className="num mt-1 text-numeric-lg">{value}</div>
+      <div className="mt-1 flex items-center gap-2">
+        <span className="num text-numeric-lg">{value}</span>
+        {aside}
+      </div>
     </div>
   );
 }

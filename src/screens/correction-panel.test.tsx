@@ -54,6 +54,7 @@ function memberDetail(overrides: Partial<MemberDetail> = {}): MemberDetail {
     member: MEMBER,
     totalBusinessVolume: 5000,
     slabPct: 6,
+    membershipTier: 0,
     legCount: 0,
     rewards: {
       ownReward: { ownBusinessVolume: 0, ownSlabPct: 0, amount: 0 },

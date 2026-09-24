@@ -47,6 +47,7 @@ function detailFor(member: Member, overrides: Partial<MemberDetailData> = {}): M
     member,
     totalBusinessVolume: 500000,
     slabPct: 14,
+    membershipTier: 0,
     legCount: 2,
     rewards: {
       ownReward: { ownBusinessVolume: 100000, ownSlabPct: 14, amount: 14000 },
@@ -61,7 +62,7 @@ function detailFor(member: Member, overrides: Partial<MemberDetailData> = {}): M
           amount: 16000,
         },
       ],
-      royalty: { qualifyingChildren: 3, ratePercent: 5, amount: 5000 },
+      royalty: { qualifyingChildren: 3, membershipTier: 0, ratePercent: 5, amount: 5000 },
       rewardsTotal: 35000,
     },
     directChildren: [
@@ -128,6 +129,40 @@ describe("MemberDetail — rewards breakdown", () => {
     expect(screen.getByText(/3 of 1 legs qualifying/)).toBeInTheDocument();
     // Rewards total appears both in its stat card and the table's total row.
     expect(screen.getAllByText("350.00")).toHaveLength(2);
+  });
+
+  it("shows the membership level beside the slab and on the royalty row", async () => {
+    vi.spyOn(m2Entries, "getPeriodLockStatus").mockResolvedValue({
+      recordablePeriodMonths: ["2026-06"],
+      blockingMonth: null,
+    });
+    const base = detailFor(CHILD_MEMBER);
+    vi.spyOn(m4Search, "getMemberDetail").mockResolvedValue(
+      detailFor(CHILD_MEMBER, {
+        membershipTier: 2,
+        rewards: {
+          ...base.rewards,
+          royalty: { qualifyingChildren: 3, membershipTier: 2, ratePercent: 2, amount: 5000 },
+        },
+      }),
+    );
+    renderDetail(CHILD_MEMBER.id);
+
+    await screen.findByRole("button", { name: "Edit member" });
+    expect(screen.getByText("Platinum")).toBeInTheDocument();
+    expect(screen.getByText(/Platinum at 2% — 3 of 1 legs qualifying/)).toBeInTheDocument();
+  });
+
+  it("shows no membership level when none is held", async () => {
+    vi.spyOn(m2Entries, "getPeriodLockStatus").mockResolvedValue({
+      recordablePeriodMonths: ["2026-06"],
+      blockingMonth: null,
+    });
+    vi.spyOn(m4Search, "getMemberDetail").mockResolvedValue(detailFor(CHILD_MEMBER));
+    renderDetail(CHILD_MEMBER.id);
+
+    await screen.findByRole("button", { name: "Edit member" });
+    expect(screen.queryByText(/^(Gold|Platinum|Diamond|Ace)$/)).toBeNull();
   });
 
   it("shows the no-direct-legs row when there are none", async () => {
