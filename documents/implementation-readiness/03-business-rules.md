@@ -78,12 +78,13 @@ Source: `requirement-spec.md` Rules 1–38, corrected/extended where `client-req
 **Implementation impact:** No defensive negative-differential check is needed in normal operation — **except** that Rule-4's monotonicity gap (see below) can theoretically break this guarantee if the admin misconfigures the slab table. Do not silently clamp; see [07-error-edge-case-matrix.md](07-error-edge-case-matrix.md).
 **Test requirement:** Confirm no scenario ever produces a negative differential term.
 
-### Rule-10 — Royalty qualification
+### Rule-10 — Royalty qualification **[AMENDED 24 Sep 2026, CR-7 — see Rule-47]**
 **Rule:** Let Q = direct children of x on the top slab. If `|Q| ≥ royalty_min_children` (default 3), `Royalty(x) = Σ royalty_rate × TBV(c)` for c in Q (default rate 1%). Otherwise 0. Direct children only, both for counting and for paying.
 **Source:** requirement-spec.md Rule 10. **[AS SPECIFIED]**
 **Applies to:** M3.
 **Implementation impact:** "Top slab" is always the highest-percentage row currently in the table (Rule-27), never hardcoded to 14%/10,000.
 **Test requirement:** Scenario 4 (pure royalty, 1,000) and Scenario 5 (differential + royalty together, 980).
+**Amended:** qualifying under this rule is now membership level 1 (Gold). The paid rate is the rate of the member's highest level (Rule-47), not a single rate; the base (top-slab direct legs' TBV) is unchanged.
 
 ### Rule-11 — Royalty and differential never double-pay
 **Rule:** If a child is on the top slab, the parent is automatically on the top slab too (TBV(parent) ≥ TBV(child)), so that child's differential term is exactly 0. Disjoint by construction — no explicit exclusion logic needed.
@@ -347,3 +348,10 @@ Two further rules were added on **7 August 2026** by client change requests CR-1
 **Structural guarantee:** `OwnReward(x) ≥ 0` always — both factors non-negative by construction, same guarantee shape as Rule-9.
 **Implementation impact:** `member_period_totals` gains `own_reward`; `rewards` = `differential + royalty + own_reward`. Reward-detail responses/screens show the own-Business-Volume line **first**, before per-leg differential rows.
 **Test requirement:** the client's own worked example — A with children B/C/D at 100 BV/2% each, A's own BV 100 → TBV(A) 400 (4% slab), differential 6, own reward 4, **total 10**.
+
+### Rule-47 — Membership levels **[NEW — client requirement, CR-7]**
+**Rule:** Each period, every member holds a membership level, rank 0–4 (none / Gold / Platinum / Diamond / Ace — draft names, not settings). Gold: ≥ N₁ direct legs on the top slab. Each later level k: holds level k−1 **and** ≥ Nₖ direct legs at level k−1 or higher. `Royalty(x)` = 0 at rank 0, otherwise `rate(level(x)) × Σ TBV(c)` over x's top-slab direct legs — the highest level's rate replaces the lower ones, never stacks.
+**Source:** Client change request **CR-7**, 24 September 2026 — decisions: monthly (reset at close, never carried forward); highest rate replaces; one qualifying count and one rate per level (N₁…N₄, rate₁…rate₄, all in Settings, rates may be fractional, e.g. 1.5%); every level's rate defaults to the existing royalty rate; sequential ladder; a higher-level leg counts toward a lower rung.
+**Applies to:** M3, M5 (snapshot + reset at close), M7 (settings), M4/M6 (display).
+**Implementation impact:** `member_period_totals`/`monthly_snapshots` gain `membership_tier` (rank). Level 1 keeps `royalty_qualifying_count`/`royalty_rate_percent`; levels 2–4 add `royalty_membership_{2,3,4}_qualifying_count`/`_rate_percent`. A level depends on children's levels, so a settings-change recompute (and its preview) runs deepest member first.
+**Test requirement:** Scenario 7 (constructed — **awaiting client confirmation of the figures**): with counts 3/3/3/3 and rates 1/2/3/4%, top-slab leaves of 10,000 → Gold 300, Platinum 1,800, Diamond 8,100, Ace 32,400 royalty; every differential 0. Plus the client's own example: 2 Platinum legs + 1 Gold leg → Platinum.

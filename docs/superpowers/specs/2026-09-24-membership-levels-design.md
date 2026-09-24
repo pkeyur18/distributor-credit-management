@@ -198,7 +198,7 @@ reads a name.
 |---|---|
 | Settings → Royalty card (`settings.tsx`) | Becomes a 4-row table: level name (read-only), qualifying count, rate %. One save button, one recalc-warning dialog. Helper text states the ladder rule. |
 | Recalc warning dialog (`recalc-warning-dialog.tsx`) | For a royalty change, each affected member's row shows "{level} → {level}" when their level moves, otherwise their royalty before → after (replaces the old "Starts/Stops", which is wrong once a rate-only change can move a royalty that stays above zero). |
-| Member detail (`member-detail.tsx`) | New "Membership" stat card beside Slab; royalty row reads "Royalty — {level} at {rate}% — {n} of {m} legs qualifying (top slab)". |
+| Member detail (`member-detail.tsx`) | The level shows as a `slab`-variant pill beside the value in the existing Slab stat card (hidden at rank 0). This replaces the planned fifth stat card, which overflows at a 1280px window. The royalty row reads "Royalty — {level} at {rate}% — {n} of {m} legs qualifying (top slab)". |
 | Member detail PDF (`m4_search/pdf.rs`) | Royalty row reads "Royalty — {level} at {rate}% — {n} of {m} legs qualifying". The row exists whenever the member has a leg, which is the only case a level can be above "—". |
 | Monthly extract (`m6_reports`) | New optional column `membership_level` / "Membership" (`export-columns.ts` + `OptionalColumn`). |
 
