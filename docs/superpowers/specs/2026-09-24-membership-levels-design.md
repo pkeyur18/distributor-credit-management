@@ -168,12 +168,18 @@ reads a name.
   child's level feeds its parent's level. Rows are recomputed deepest first
   (`ORDER BY members.level DESC`; `level` is fixed at creation and introducers never
   change, Rule-37), so every parent reads its children's already-updated level.
+  Depth comes from a recursive CTE over `introducer_member_id`, not the stored
+  `members.level` column, so it cannot drift from the real tree. This also fixes a
+  **pre-existing bug**: rows are currently visited in member-id order (parents before
+  children), so after a slab-table edit a parent's differential is computed against a
+  child's *old* slab. A regression test covers it.
 - **Ordering fix 2 — `preview_settings_impact`.** It currently computes each member
   from children's *live* figures. It must instead walk deepest first and substitute
   each child's *predicted* level (held in an in-memory map) — otherwise the preview
-  diverges from what the save actually writes (T-M7.3-6). `MemberImpact` gains
-  `membership_tier_before/after`; `SettingsImpactPreview` gains per-level member
-  counts before/after.
+  diverges from what the save actually writes (T-M7.3-6). The same substitution
+  applies to children's predicted slab, fixing the same pre-existing flaw in the
+  slab-edit preview. `MemberImpact` gains `membership_tier_before/after`, and a level
+  change alone marks a member as affected.
 - `recalculate_chain` and the closed-month correction walk already go member → root,
   so each parent already reads a fresh child; they only take the new `tiers` argument.
 
@@ -183,17 +189,17 @@ reads a name.
   in `m3_calc/engine.rs` — used by the PDF and the monthly extract.
 - TypeScript: the same list in one constant in `src/lib/` — used by screens.
 - Rank 0 renders as "—".
-- A Rust test asserts `MEMBERSHIP_LEVEL_NAMES.len()` equals the number of tier setting
-  pairs, so the list and the settings can't drift apart.
+- `m3_calc::ROYALTY_TIER_KEYS` is typed `[(&str, &str); MEMBERSHIP_LEVEL_NAMES.len()]`,
+  so the compiler refuses any mismatch between the names and the settings pairs.
 
 ### 4.5 Screens and outputs
 
 | Surface | Change |
 |---|---|
 | Settings → Royalty card (`settings.tsx`) | Becomes a 4-row table: level name (read-only), qualifying count, rate %. One save button, one recalc-warning dialog. Helper text states the ladder rule. |
-| Recalc warning dialog (`recalc-warning-dialog.tsx`) | For a royalty change, adds "Members per membership level: before → after" and a level column in the affected-members table. |
-| Member detail (`member-detail.tsx`) | Membership pill beside slab; royalty line reads "Royalty — {level}, {rate}% — {n} of {m} legs on top slab". |
-| Member detail PDF (`m4_search/pdf.rs`) | Membership line in the figures block; royalty line carries the level name. |
+| Recalc warning dialog (`recalc-warning-dialog.tsx`) | For a royalty change, each affected member's row shows "{level} → {level}" when their level moves, otherwise their royalty before → after (replaces the old "Starts/Stops", which is wrong once a rate-only change can move a royalty that stays above zero). |
+| Member detail (`member-detail.tsx`) | New "Membership" stat card beside Slab; royalty row reads "Royalty — {level} at {rate}% — {n} of {m} legs qualifying (top slab)". |
+| Member detail PDF (`m4_search/pdf.rs`) | Royalty row reads "Royalty — {level} at {rate}% — {n} of {m} legs qualifying". The row exists whenever the member has a leg, which is the only case a level can be above "—". |
 | Monthly extract (`m6_reports`) | New optional column `membership_level` / "Membership" (`export-columns.ts` + `OptionalColumn`). |
 
 **Deliberately unchanged:**
@@ -213,14 +219,15 @@ names are internal). `scripts/vocabulary-grep.mjs` needs no change.
 
 **Rust:** `m3_calc/engine.rs`, `m3_calc/mod.rs`, `db/migrations.rs`,
 `db/migrations/0002_membership_tier.sql` (new), `db/seed.rs`, `m7_settings/mod.rs`,
-`m5_close/mod.rs`, `m2_entries/mod.rs`, `m1_members/mod.rs`, `m6_reports/mod.rs`,
-`m4_search/mod.rs`, `m4_search/pdf.rs`, `tests/fixtures/mod.rs`,
+`m5_close/mod.rs`, `m6_reports/mod.rs`, `m4_search/mod.rs`, `m4_search/pdf.rs`,
 `tests/golden_scenarios.rs`, `tests/differential_non_negativity.rs`, `tests/contract.rs`.
+(Test-only inserts in `m1_members`, `m2_entries`, `m6_reports` need no change — the new
+column defaults to 0.)
 
 **Frontend:** `screens/settings.tsx`, `screens/member-detail.tsx`,
 `components/recalc-warning-dialog.tsx`, `lib/export-columns.ts`,
 `lib/ipc/entities.ts`, `lib/ipc/m3-calc.ts`, `lib/ipc/m4-search.ts`,
-`lib/ipc/m7-settings.ts`, one new constant in `src/lib/`, plus their tests.
+new `lib/membership-levels.ts`, plus their tests.
 
 **Docs:** `documents/implementation-readiness/03-business-rules.md` (Rule-10 amended,
 Rule-47 new, Scenario 7), `PRODUCT.md` (capabilities line).
@@ -239,8 +246,10 @@ Rule-47 new, Scenario 7), `PRODUCT.md` (capabilities line).
   outside tests.
 
 ### 6.2 Golden Scenario 7 (fixtures + `golden_scenarios.rs`)
-A four-generation tree built so its root reaches Ace, with hand-worked level and
-royalty at every node, reconciled through the real engine.
+A five-generation tree built so its root reaches Ace, with hand-worked level and
+royalty at every node, reconciled through the real engine. It is a constructed
+scenario, not a client-supplied one, and is marked as awaiting client confirmation in
+the business-rules doc; it does not join the six client scenarios' fixture array.
 
 ### 6.3 Database (`m3_calc/mod.rs`, `db/`)
 - Migration on an already-seeded DB adds six keys copying the current rate and does
