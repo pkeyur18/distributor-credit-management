@@ -267,7 +267,7 @@ fn write_setting(conn: &Connection, key: &str, value: &str) -> Result<(), AppErr
     Ok(())
 }
 
-/// API-21. Every one of the 16 rows (C1) — the Settings screen's single
+/// API-21. Every one of the 22 rows (C1 + CR-7) — the Settings screen's single
 /// full read, slab table and backup config included, even though their
 /// writes go through dedicated APIs.
 pub fn get_settings(conn: &Connection) -> Result<Settings, AppError> {

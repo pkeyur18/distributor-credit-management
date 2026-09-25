@@ -354,16 +354,29 @@ function RoyaltyCard({
   }
 
   async function save() {
+    // Only changed values go in the patch — every saved key writes its own
+    // audit row. Checked here, not only server-side, because the pre-save
+    // preview runs first and would otherwise show figures for values the
+    // save then refuses.
     const patch: CandidateSettings = {};
     for (const [i, field] of ROYALTY_TIER_FIELDS.entries()) {
       const count = Number(rows[i].count);
       const rate = Number(rows[i].rate);
-      if (!Number.isFinite(count) || !Number.isFinite(rate)) {
-        toast.add({ title: "Enter valid numbers", type: "danger" });
+      if (
+        !Number.isInteger(count) ||
+        count < 1 ||
+        rows[i].rate.trim() === "" ||
+        !Number.isFinite(rate) ||
+        rate < 0
+      ) {
+        toast.add({
+          title: "Qualifying legs must be a whole number of 1 or more, and a rate 0 or more",
+          type: "danger",
+        });
         return;
       }
-      patch[field.count] = count;
-      patch[field.rate] = rate;
+      if (count !== settings[field.count]) patch[field.count] = count;
+      if (rate !== settings[field.rate]) patch[field.rate] = rate;
     }
     await recalcWarning.request("royalty", patch, async () => {
       setSaving(true);
