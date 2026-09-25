@@ -215,7 +215,9 @@ Key entities (`src-tauri/src/db/migrations/0001_initial.sql`, extended by `0002_
 - **periods** — a period's lifecycle: open, awaiting close, or closed.
 - **monthly_snapshots** — the permanent, versioned record of a closed period, including the membership level each member held that month; all reporting reads from snapshots, never live values.
 - **slab_table** — the administrator-editable percentage-band configuration.
-- **backups**, **settings**, **auth**, **audit_log** — supporting tables for backup/restore, configuration, authentication, and the audit trail.
+- **backups**, **settings**, **audit_log** — supporting tables for backup/restore, configuration, and the audit trail.
+
+Login details are deliberately **not** in the database: the database is encrypted with a key that can only be unlocked by logging in, so they live in a separate `auth.json` file next to it. That file holds only encrypted copies of the database key plus failed-attempt lockout state — never a PIN, password, or the key itself in readable form (`src-tauri/src/m8_auth/store.rs`).
 
 All volume and reward figures are stored as fixed-point integers (scaled by 100), never as floating point, to avoid rounding drift in the calculation chain.
 
