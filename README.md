@@ -45,11 +45,11 @@ Source: `PRODUCT.md`, `documents/refinement/01-product-and-scope.md`.
 
 - **Member/structure management** — a single permanent root member, an introducer-fixed-forever tree, six-digit member IDs, deactivate/reactivate (never permanent delete).
 - **Business Volume entry** — single-field monthly entry per member, searchable by name, ID, or phone number.
-- **Calculation engine** — computes each member's Total Business Volume, applicable slab, differential reward, royalty, and own-volume reward; recalculates the affected chain immediately on every entry, with no manual "recalculate" control anywhere.
+- **Calculation engine** — computes each member's Total Business Volume, applicable slab, differential reward, monthly membership level (Gold, Platinum, Diamond, Ace), royalty at that level's rate, and own-volume reward; recalculates the affected chain immediately on every entry, with no manual "recalculate" control anywhere.
 - **Structure chart & Full Hierarchy Window** — a focused single-branch chart on the main screen, and a separate read-only window that draws the entire network at a point in time.
 - **Monthly close** — closes a period behind a mandatory backup gate; closed periods remain correctable via new snapshot versions.
-- **Reporting & export** — monthly, yearly-average, and low-contribution spreadsheet extracts, closed-month re-download, and a per-member PDF export.
-- **Settings** — every scheme parameter (slab table, royalty rules, etc.) is editable by the administrator; nothing is hardcoded to a specific scheme.
+- **Reporting & export** — monthly, yearly-average, and low-contribution spreadsheet extracts (the monthly extract can include a Membership column), closed-month re-download, and a per-member PDF export.
+- **Settings** — every scheme parameter (slab table, the qualifying count and royalty rate for each membership level, etc.) is editable by the administrator; nothing is hardcoded to a specific scheme.
 - **Authentication & backup/restore** — single-operator login (PIN and/or password) with lockout and recovery codes, plus whole-console backup and restore on any machine, including a fresh install.
 
 Only capabilities confirmed in `src-tauri/src/commands.rs` and the corresponding frontend screens are listed here.
@@ -62,8 +62,13 @@ The calculation engine (`src-tauri/src/m3_calc/engine.rs`) computes, for each me
 TotalBusinessVolume(x) = BusinessVolume(x) + sum of TotalBusinessVolume(c) for each direct child c
 slab%(x)                = highest configured slab threshold that is <= TotalBusinessVolume(x)
 Differential(x)          = sum over direct children c of (slab%(x) - slab%(c)) * TotalBusinessVolume(c)
-Royalty(x)                = sum of (royalty_rate * TotalBusinessVolume(c)) for direct children on the top slab,
-                             only if the count of such children meets the configured minimum; otherwise 0
+Level(x)                  = 0 (none), then climbs one rung at a time, stopping at the first rung not met:
+                              1 Gold      if >= N1 direct children are on the top slab
+                              2 Platinum  if Gold     and >= N2 direct children are at level 1 or higher
+                              3 Diamond   if Platinum and >= N3 direct children are at level 2 or higher
+                              4 Ace       if Diamond  and >= N4 direct children are at level 3 or higher
+Royalty(x)                = 0 if Level(x) = 0; otherwise
+                             rate(Level(x)) * sum of TotalBusinessVolume(c) for direct children on the top slab
 OwnReward(x)              = slab%(x) * BusinessVolume(x)
 Rewards(x)                = Differential(x) + Royalty(x) + OwnReward(x)
 ```
@@ -75,8 +80,11 @@ Structural guarantees enforced by the engine and its test suite:
 - Rewards are a separate ledger — they never feed back into Business Volume or Total Business Volume.
 - Recalculation walks only the affected chain upward (not the whole tree) inside a single database transaction.
 - An inactive member still contributes fully to every calculation; deactivation is a display-only flag.
+- Membership levels are worked out afresh each month from that month's figures only: the level is recorded in the month's snapshot at close, then reset, and never carries into the next month.
+- A member earns only their highest level's royalty rate — rates replace each other, they never stack.
+- A settings change recalculates the open month deepest member first, because a child's slab and level both feed its parent's figures.
 
-The slab table, royalty rate, and royalty qualification rule are all administrator-editable in Settings — the formulas above are the fixed shape of the calculation, not fixed numbers.
+The slab table and each membership level's qualifying count (N1–N4) and royalty rate are all administrator-editable in Settings — the formulas above are the fixed shape of the calculation, not fixed numbers. The four level names (Gold, Platinum, Diamond, Ace) are provisional names fixed in code (`src-tauri/src/m3_calc/engine.rs` and `src/lib/membership-levels.ts`), not settings.
 
 Source: `src-tauri/src/m3_calc/engine.rs`, `documents/refinement/03-business-rules.md`.
 
@@ -199,13 +207,13 @@ erDiagram
     MEMBERS ||--o{ MONTHLY_SNAPSHOTS : "recorded in"
 ```
 
-Key entities (`src-tauri/src/db/migrations/0001_initial.sql`):
+Key entities (`src-tauri/src/db/migrations/0001_initial.sql`, extended by `0002_membership_level.sql`):
 
 - **members** — the hierarchy, self-referencing via an introducer reference; a member's introducer can never change.
 - **business_volume_entries** — append-only ledger of monthly entries.
-- **member_period_totals** — live, recalculated totals for any period not yet closed.
+- **member_period_totals** — live, recalculated totals for any period not yet closed, including each member's membership level (stored as a rank, 0–4).
 - **periods** — a period's lifecycle: open, awaiting close, or closed.
-- **monthly_snapshots** — the permanent, versioned record of a closed period; all reporting reads from snapshots, never live values.
+- **monthly_snapshots** — the permanent, versioned record of a closed period, including the membership level each member held that month; all reporting reads from snapshots, never live values.
 - **slab_table** — the administrator-editable percentage-band configuration.
 - **backups**, **settings**, **auth**, **audit_log** — supporting tables for backup/restore, configuration, authentication, and the audit trail.
 
@@ -257,10 +265,10 @@ npm run tauri build
 | Command | Covers |
 | --- | --- |
 | `npm test` | Frontend unit/component tests (Vitest) and script-level tests (`scripts/*.test.mjs`) |
-| `cargo test` (from `src-tauri/`) | Rust unit tests, IPC contract tests, the six golden-scenario regression tests, differential non-negativity property test, and the performance harness |
+| `cargo test` (from `src-tauri/`) | Rust unit tests, IPC contract tests, the golden-scenario regression tests (the client's six worked examples plus Scenario 7, the membership ladder), differential non-negativity property test, and the performance harness |
 | `npm run test:e2e` | WebdriverIO end-to-end specs via `tauri-driver` (Windows/Linux only) |
 
-The golden-scenario tests (`src-tauri/tests/golden_scenarios.rs`) pin six worked examples of the calculation engine's output; they are the primary regression guard for the calculation logic and are treated as must-never-move. macOS has no automated end-to-end coverage — see [Known Limitations](#known-limitations).
+The golden-scenario tests (`src-tauri/tests/golden_scenarios.rs`) pin the client's six worked examples of the calculation engine's output, plus a seventh for the membership ladder (awaiting client confirmation of its figures); they are the primary regression guard for the calculation logic and are treated as must-never-move. macOS has no automated end-to-end coverage — see [Known Limitations](#known-limitations).
 
 ## Build & Packaging
 
