@@ -10,6 +10,17 @@ before(async () => {
 });
 
 describe("Settings", () => {
+  // Each save leaves a toast up for ~3.4s (bottom right, role="dialog" like
+  // a modal). Starting the next test under it lets the toast intercept that
+  // test's clicks, match its `div[role="dialog"]` lookups, or satisfy its
+  // "saved" check with the previous test's toast — so start every test clean.
+  beforeEach(async () => {
+    await browser.waitUntil(
+      async () => (await $$('[role="dialog"], [role="alertdialog"]')).length === 0,
+      { timeout: 8000, timeoutMsg: "a toast or dialog from the previous test is still open" },
+    );
+  });
+
   it("saves a royalty setting change", async () => {
     await navigateTo("Settings");
     await $("#royalty-min").waitForExist({ timeout: 3000 });
@@ -32,9 +43,6 @@ describe("Settings", () => {
   });
 
   it("saves a later membership level's rate", async () => {
-    // The previous test's identical toast must be gone first, or the final
-    // "saved" check below could pass on it instead of on this save.
-    await $("h2*=Royalty settings saved").waitForExist({ reverse: true, timeout: 6000 });
     await navigateTo("Settings");
     await $("#royalty-rate-2").waitForExist({ timeout: 3000 });
     await $("#royalty-rate-2").setValue("2");
