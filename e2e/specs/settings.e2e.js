@@ -32,13 +32,18 @@ describe("Settings", () => {
   });
 
   it("saves a later membership level's rate", async () => {
+    // The previous test's identical toast must be gone first, or the final
+    // "saved" check below could pass on it instead of on this save.
+    await $("h2*=Royalty settings saved").waitForExist({ reverse: true, timeout: 6000 });
     await navigateTo("Settings");
     await $("#royalty-rate-2").waitForExist({ timeout: 3000 });
     await $("#royalty-rate-2").setValue("2");
     await $("button=Save royalty settings").click();
-    const dialog = $('div[role="dialog"]');
-    await dialog.waitForExist({ timeout: 3000 });
-    const confirmButton = dialog.$("button*=Save and re-work");
+    // Not scoped to `div[role="dialog"]`: the previous test's "Royalty
+    // settings saved" toast is still on screen, and Base UI toasts are
+    // role="dialog" too — the first match would be the toast, not the
+    // recalc warning. The confirm button itself is unique on the page.
+    const confirmButton = $("button*=Save and re-work");
     await confirmButton.waitForEnabled({ timeout: 3000 });
     await confirmButton.click();
     await $("h2*=Royalty settings saved").waitForExist({ timeout: 3000 });
