@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { ColumnChart } from "./column-chart";
 
@@ -43,5 +44,22 @@ describe("ColumnChart", () => {
     );
     const bars = container.querySelectorAll("[style*='linear-gradient']");
     expect((bars[0] as HTMLElement).style.height).not.toBe("0%");
+  });
+
+  it("makes each non-empty column a button that reports its slab when onSelect is given", async () => {
+    const onSelect = vi.fn();
+    render(
+      <ColumnChart
+        rows={[
+          { id: 0, label: "0%", target: 0, tint: "red" },
+          { id: 14, label: "14%", target: 5, tint: "blue" },
+        ]}
+        format={(v) => String(v)}
+        onSelect={onSelect}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /0% slab/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: /14% slab/ }));
+    expect(onSelect).toHaveBeenCalledWith(14);
   });
 });

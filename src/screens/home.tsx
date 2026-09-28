@@ -10,6 +10,7 @@ import { SearchResultsList } from "@/components/search-results-list";
 import { ColumnChart, type SlabDatum } from "@/components/column-chart";
 import { RadialRingChart } from "@/components/radial-ring-chart";
 import { EmptyState } from "@/components/empty-state";
+import { SlabMembersModal } from "@/components/slab-members-modal";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { useMemberSearch } from "@/lib/use-member-search";
 import { getDirectChildrenChart } from "@/lib/ipc/m4-search";
@@ -43,6 +44,8 @@ export function Home() {
   const [lockStatus, setLockStatus] = useState<PeriodLockStatus | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const viewMonth = selectedMonth ?? lockStatus?.recordablePeriodMonths[0];
+
+  const [drill, setDrill] = useState<{ pct: number; metric: "count" | "rewards" } | null>(null);
 
   useEffect(() => {
     getPeriodLockStatus().then(setLockStatus);
@@ -133,14 +136,28 @@ export function Home() {
             nodes={nodes}
             slabTable={slabTable}
             metric="count"
+            onSelect={(pct) => setDrill({ pct, metric: "count" })}
           />
           <SlabDistributionChart
             title="Rewards by slab"
             nodes={nodes}
             slabTable={slabTable}
             metric="rewards"
+            onSelect={(pct) => setDrill({ pct, metric: "rewards" })}
           />
         </div>
+      )}
+
+      {drill && nodes && slabTable && viewMonth && (
+        <SlabMembersModal
+          nodes={nodes}
+          slabs={slabPercentages(slabTable)}
+          initialPct={drill.pct}
+          metric={drill.metric}
+          month={monthLabel(viewMonth)}
+          onClose={() => setDrill(null)}
+          onSelectMember={(id) => navigate(`/member/${id}`)}
+        />
       )}
 
       <MemberModal
@@ -203,42 +220,35 @@ function slabTint(i: number, n: number) {
   return `color-mix(in oklch, var(--accent) ${p}%, var(--bg) ${100 - p}%)`;
 }
 
+// 0% isn't a configured slab row (it's slab_lookup's below-lowest-threshold
+// fallback, m3_calc/engine.rs) so it's synthesized here rather than read
+// from slabTable — skipped only if an admin has actually configured a
+// literal 0% row, to avoid showing the slab twice.
+function slabPercentages(slabTable: SlabRow[]) {
+  const pcts = slabTable.map((row) => row.percentage);
+  return pcts.includes(0) ? pcts : [0, ...pcts];
+}
+
 function SlabDistributionChart({
   title,
   nodes,
   slabTable,
   metric,
+  onSelect,
 }: {
   title: string;
   nodes: ChartNode[];
   slabTable: SlabRow[];
   metric: "count" | "rewards";
+  onSelect: (pct: number) => void;
 }) {
-  // 0% isn't a configured slab row (it's slab_lookup's below-lowest-threshold
-  // fallback, m3_calc/engine.rs) so it's synthesized here rather than read
-  // from slabTable — skipped only if an admin has actually configured a
-  // literal 0% row, to avoid showing the slab twice.
-  const zeroBucket = slabTable.some((row) => row.percentage === 0)
-    ? []
-    : [
-        {
-          pct: 0,
-          total:
-            metric === "count"
-              ? nodes.filter((n) => n.slabPct === 0).length
-              : nodes.filter((n) => n.slabPct === 0).reduce((sum, n) => sum + n.rewards, 0),
-        },
-      ];
-  const buckets = [
-    ...zeroBucket,
-    ...slabTable.map((row) => ({
-      pct: row.percentage,
-      total:
-        metric === "count"
-          ? nodes.filter((n) => n.slabPct === row.percentage).length
-          : nodes.filter((n) => n.slabPct === row.percentage).reduce((sum, n) => sum + n.rewards, 0),
-    })),
-  ];
+  const buckets = slabPercentages(slabTable).map((pct) => {
+    const inSlab = nodes.filter((n) => n.slabPct === pct);
+    return {
+      pct,
+      total: metric === "count" ? inSlab.length : inSlab.reduce((sum, n) => sum + n.rewards, 0),
+    };
+  });
   const grandTotal = buckets.reduce((sum, b) => sum + b.total, 0);
 
   const rows: SlabDatum[] = buckets.map((b, i) => ({
@@ -260,10 +270,18 @@ function SlabDistributionChart({
       {buckets.length === 0 ? (
         <EmptyState title="No slabs configured" />
       ) : metric === "count" ? (
-        <ColumnChart rows={rows} format={format} />
+        <ColumnChart rows={rows} format={format} onSelect={(id) => onSelect(Number(id))} />
       ) : (
-        <RadialRingChart rows={rows} format={format} totalLabel="this period" />
+        <RadialRingChart
+          rows={rows}
+          format={format}
+          totalLabel="this period"
+          onSelect={(id) => onSelect(Number(id))}
+        />
       )}
+      <div className="text-caption mt-3.5">
+        {metric === "count" ? "Click a slab to see its members" : "Click a slab to see who earned it"}
+      </div>
     </div>
   );
 }

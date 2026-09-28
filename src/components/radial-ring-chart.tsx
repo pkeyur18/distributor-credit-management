@@ -1,3 +1,5 @@
+import { ChevronRight } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { rowProgress, useElapsedSinceActive, useRevealOnView } from "@/lib/use-chart-reveal";
 import type { SlabDatum } from "./column-chart";
@@ -10,6 +12,8 @@ interface RadialRingChartProps {
   rows: SlabDatum[];
   format: (value: number) => string;
   totalLabel: string;
+  /** Makes every non-empty arc and legend row selectable (Home slab drill-down). */
+  onSelect?: (id: SlabDatum["id"]) => void;
   className?: string;
 }
 
@@ -18,7 +22,7 @@ const STROKE = 20;
 const DURATION = 700;
 const STAGGER = 70;
 
-function RadialRingChart({ rows, format, totalLabel, className }: RadialRingChartProps) {
+function RadialRingChart({ rows, format, totalLabel, onSelect, className }: RadialRingChartProps) {
   const { ref, revealed } = useRevealOnView<HTMLDivElement>();
   const totalMs = Math.max(0, rows.length - 1) * STAGGER + DURATION;
   const elapsed = useElapsedSinceActive(revealed, totalMs);
@@ -52,7 +56,13 @@ function RadialRingChart({ rows, format, totalLabel, className }: RadialRingChar
               strokeDasharray={`${dash} ${circumference - dash}`}
               strokeDashoffset={-offsets[i]}
               transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-              className="transition-[filter] duration-150 hover:brightness-110"
+              className={cn(
+                "transition-[filter] duration-150 hover:brightness-110",
+                onSelect && row.target > 0 && "cursor-pointer",
+              )}
+              // Mouse shortcut only — the legend buttons below are the
+              // keyboard/screen-reader route to the same drill-down.
+              onClick={onSelect && row.target > 0 ? () => onSelect(row.id) : undefined}
             />
           );
         })}
@@ -63,15 +73,35 @@ function RadialRingChart({ rows, format, totalLabel, className }: RadialRingChar
           {totalLabel}
         </text>
       </svg>
-      <div className="flex min-w-0 flex-1 flex-col gap-1.75">
+      <div className={cn("flex min-w-0 flex-1 flex-col", onSelect ? "gap-0.5" : "gap-1.75")}>
         {rows.map((row, i) => {
           const p = rowProgress(elapsed, i, STAGGER, DURATION);
-          return (
-            <div key={row.id} className="grid grid-cols-[9px_30px_1fr] items-center gap-1.75 text-xs">
+          const cells = (
+            <>
               <span className="size-2.25 rounded-full" style={{ background: row.tint }} />
               <span className="font-[650]">{row.label}</span>
               <span className="num text-right text-muted-text">{format(row.target * p)}</span>
-            </div>
+            </>
+          );
+          if (!onSelect) {
+            return (
+              <div key={row.id} className="grid grid-cols-[9px_30px_1fr] items-center gap-1.75 text-xs">
+                {cells}
+              </div>
+            );
+          }
+          return (
+            <button
+              key={row.id}
+              type="button"
+              aria-label={`${row.label} slab, ${format(row.target)}${row.target > 0 ? " — show members" : ""}`}
+              disabled={row.target === 0}
+              onClick={() => onSelect(row.id)}
+              className="-mx-1.5 grid cursor-pointer grid-cols-[9px_30px_1fr_12px] items-center gap-1.75 rounded-sm px-1.5 py-0.5 text-left text-xs outline-none hover:bg-accent-weak focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default disabled:opacity-55 disabled:hover:bg-transparent"
+            >
+              {cells}
+              <ChevronRight aria-hidden="true" className="size-3 text-muted-text" />
+            </button>
           );
         })}
       </div>

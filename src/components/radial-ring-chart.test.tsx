@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { RadialRingChart } from "./radial-ring-chart";
 
@@ -46,5 +47,23 @@ describe("RadialRingChart", () => {
     const arcs = container.querySelectorAll("circle[stroke='red'], circle[stroke='blue']");
     const [first, second] = [...arcs].map((c) => parseFloat(c.getAttribute("stroke-dasharray") ?? "0"));
     expect(second).toBeGreaterThan(first);
+  });
+
+  it("makes each non-empty legend row a button that reports its slab when onSelect is given", async () => {
+    const onSelect = vi.fn();
+    render(
+      <RadialRingChart
+        rows={[
+          { id: 0, label: "0%", target: 0, tint: "red" },
+          { id: 14, label: "14%", target: 75, tint: "blue" },
+        ]}
+        format={(v) => String(v)}
+        totalLabel="this period"
+        onSelect={onSelect}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /0% slab/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: /14% slab/ }));
+    expect(onSelect).toHaveBeenCalledWith(14);
   });
 });

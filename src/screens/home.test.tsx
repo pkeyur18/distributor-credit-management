@@ -120,6 +120,32 @@ describe("Home — today's standing", () => {
   });
 });
 
+describe("Home — slab drill-down", () => {
+  it("opens the slab's members from Members by slab and goes to Member Detail on a row click", async () => {
+    vi.spyOn(m2Entries, "getPeriodLockStatus").mockResolvedValue({
+      recordablePeriodMonths: ["2026-06"],
+      blockingMonth: null,
+    });
+    vi.spyOn(m4Search, "getDirectChildrenChart").mockResolvedValue(
+      chartResult([
+        node({ memberId: 100001, name: "Zara Shah", slabPct: 14, rewards: 700 }),
+        node({ memberId: 100002, name: "Kiran Mehta", slabPct: 6, rewards: 60 }),
+      ]),
+    );
+    const user = userEvent.setup();
+    renderHome();
+
+    await screen.findByText("Members by slab");
+    await user.click(screen.getAllByRole("button", { name: /14% slab/ })[0]);
+
+    expect(await screen.findByRole("heading", { name: "Members on the 14% slab" })).toBeInTheDocument();
+    expect(screen.queryByText("Kiran Mehta")).not.toBeInTheDocument();
+    await user.click(screen.getByText("Zara Shah"));
+
+    expect(await screen.findByText("Member Detail screen")).toBeInTheDocument();
+  });
+});
+
 describe("Home — search", () => {
   it("shows the pre-search prompt until a query is typed", async () => {
     vi.spyOn(m2Entries, "getPeriodLockStatus").mockResolvedValue({
