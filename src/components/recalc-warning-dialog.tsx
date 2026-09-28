@@ -5,6 +5,7 @@ import { ImpactRow, ImpactSummary, ImpactValue } from "@/components/impact-summa
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableWrap } from "@/components/ui/table";
 import { centsToDisplay } from "@/lib/utils";
 import { membershipLevelName } from "@/lib/membership-levels";
+import { MembershipBadge } from "@/components/membership-badge";
 import type { SettingsImpactPreview } from "@/lib/ipc/m3-calc";
 
 // RQ-18/V7.6, T-M7.3-3/-4 — fires only on a Slab table or Royalty save.
@@ -88,7 +89,14 @@ function RecalcWarningDialog({
                           {kind === "slab"
                             ? `${m.slabPctBefore}% → ${m.slabPctAfter}%`
                             : m.membershipTierBefore !== m.membershipTierAfter
-                              ? `${membershipLevelName(m.membershipTierBefore)} → ${membershipLevelName(m.membershipTierAfter)}`
+                              ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <MembershipBadge rank={m.membershipTierBefore} size={18} />
+                                    {membershipLevelName(m.membershipTierBefore)} →{" "}
+                                    <MembershipBadge rank={m.membershipTierAfter} size={18} />
+                                    {membershipLevelName(m.membershipTierAfter)}
+                                  </span>
+                                )
                               : `${centsToDisplay(m.royaltyBefore)} → ${centsToDisplay(m.royaltyAfter)}`}
                         </TableCell>
                       </TableRow>

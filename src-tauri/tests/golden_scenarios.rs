@@ -291,7 +291,7 @@ fn no_rounding_drift_across_a_long_chain() {
     assert_eq!(figures.own_reward, expected_own_reward);
 }
 
-// --- Scenario 7 (CR-7/Rule-47): the membership ladder, top leaf to Ace. ---
+// --- Scenario 7 (CR-7/Rule-47): the membership ladder, top leaf to Elite. ---
 // Constructed, not client-supplied — awaiting client confirmation of the
 // figures (03-business-rules.md Rule-47). Kept out of `golden_scenarios()`,
 // which holds the client's own six.
@@ -316,8 +316,8 @@ const S7_DIAMOND: MemberFixture = MemberFixture {
     own_bv: 0,
     children: &[S7_PLATINUM, S7_PLATINUM, S7_PLATINUM],
 };
-const S7_ACE: MemberFixture = MemberFixture {
-    name: "ace",
+const S7_ELITE: MemberFixture = MemberFixture {
+    name: "elite",
     own_bv: 0,
     children: &[S7_DIAMOND, S7_DIAMOND, S7_DIAMOND],
 };
@@ -360,13 +360,13 @@ fn evaluate_with(
 }
 
 #[test]
-fn scenario_7_membership_ladder_reaches_ace_at_every_rungs_own_rate() {
+fn scenario_7_membership_ladder_reaches_elite_at_every_rungs_own_rate() {
     let expected = [
         (&S7_TOP, 10_000, 0, 0),
         (&S7_GOLD, 30_000, 1, 300),
         (&S7_PLATINUM, 90_000, 2, 1_800),
         (&S7_DIAMOND, 270_000, 3, 8_100),
-        (&S7_ACE, 810_000, 4, 32_400),
+        (&S7_ELITE, 810_000, 4, 32_400),
     ];
     for (tree, tbv, level, royalty) in expected {
         let f = evaluate_with(tree, &S7_TIERS);

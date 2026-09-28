@@ -45,7 +45,8 @@ function renderRoyaltyDialog(members: MemberImpact[]) {
 describe("RecalcWarningDialog — royalty changes", () => {
   it("shows a membership level move by name", () => {
     renderRoyaltyDialog([impact({ membershipTierBefore: 2, membershipTierAfter: 1 })]);
-    expect(screen.getByText("Platinum → Gold")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Platinum → Gold" })).toBeInTheDocument();
+    expect(screen.getAllByRole("presentation")).toHaveLength(2); // one badge per level
   });
 
   it("shows royalty before → after when only a rate moved", () => {

@@ -38,6 +38,7 @@ import { backupPrimaryLabel, backupProvenanceText } from "@/lib/backup-labels";
 import { useAuth } from "@/lib/auth-context";
 import { MANDATORY_EXPORT_COLUMNS, OPTIONAL_EXPORT_COLUMNS } from "@/lib/export-columns";
 import { membershipLevelName } from "@/lib/membership-levels";
+import { MembershipBadge } from "@/components/membership-badge";
 
 function SectionCard({
   id,
@@ -411,7 +412,12 @@ function RoyaltyCard({
               const suffix = i === 0 ? "" : `-${i + 1}`;
               return (
                 <tr key={name} className="border-t border-border">
-                  <td className="py-1.5 pr-3 font-[650] whitespace-nowrap">{name}</td>
+                  <td className="py-1.5 pr-3 font-[650] whitespace-nowrap">
+                    <span className="flex items-center gap-2">
+                      <MembershipBadge rank={i + 1} size={32} />
+                      {name}
+                    </span>
+                  </td>
                   <td className="py-1.5 pr-2">
                     <Input
                       id={`royalty-min${suffix}`}

@@ -43,6 +43,7 @@ const SEARCH_RESULT: SearchResult = {
   phone: MEMBER.phone,
   totalBusinessVolume: 5000,
   slabPct: 6,
+  membershipTier: 0,
   isActive: true,
   email: null,
   address: MEMBER.address,

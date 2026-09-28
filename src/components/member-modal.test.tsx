@@ -33,6 +33,7 @@ const REF_RESULT: SearchResult = {
   phone: "9876500000",
   totalBusinessVolume: 0,
   slabPct: 0,
+  membershipTier: 0,
   isActive: true,
   email: null,
   address: "1 Main Street",

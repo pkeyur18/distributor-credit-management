@@ -9,7 +9,7 @@
 /// Display only — the database stores the rank, never a name, and names are
 /// not a setting. Renaming a level is a change here and in
 /// `src/lib/membership-levels.ts`, nowhere else.
-pub const MEMBERSHIP_LEVEL_NAMES: [&str; 4] = ["Gold", "Platinum", "Diamond", "Ace"];
+pub const MEMBERSHIP_LEVEL_NAMES: [&str; 4] = ["Gold", "Platinum", "Diamond", "Elite"];
 
 /// Rank 0 ("no level") and anything out of range render as an em dash.
 pub fn membership_level_name(rank: i64) -> &'static str {
@@ -442,7 +442,7 @@ mod tests {
     fn membership_level_name_maps_rank_to_the_draft_names() {
         assert_eq!(membership_level_name(0), "\u{2014}");
         assert_eq!(membership_level_name(1), "Gold");
-        assert_eq!(membership_level_name(4), "Ace");
+        assert_eq!(membership_level_name(4), "Elite");
         assert_eq!(membership_level_name(5), "\u{2014}");
         assert_eq!(membership_level_name(-1), "\u{2014}");
     }
@@ -494,7 +494,7 @@ mod tests {
     }
 
     #[test]
-    fn three_diamond_legs_reach_ace_through_every_rung() {
+    fn three_diamond_legs_reach_elite_through_every_rung() {
         let children = [
             leg(270_000, 14, 3),
             leg(270_000, 14, 3),
@@ -502,12 +502,12 @@ mod tests {
         ];
         let figures = compute_node(0, &children, SLABS, &LADDER);
         assert_eq!(figures.membership_tier, 4);
-        assert_eq!(figures.royalty, 32_400, "Ace's 4% of 810,000");
+        assert_eq!(figures.royalty, 32_400, "Elite's 4% of 810,000");
     }
 
     #[test]
     fn the_ladder_stops_at_the_first_unmet_rung() {
-        // Platinum needs 5 here, so Diamond/Ace (count 1) are never reached
+        // Platinum needs 5 here, so Diamond/Elite (count 1) are never reached
         // even though three Diamond legs would satisfy them on their own.
         let tiers = [
             RoyaltyTier {

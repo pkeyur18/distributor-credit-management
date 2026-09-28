@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MemberLevelTag } from "@/components/membership-badge";
 import { Modal, ModalBody, ModalHeader } from "@/components/ui/dialog";
 import { Pill } from "@/components/ui/pill";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -170,6 +171,7 @@ function SlabMembersModal({
                     <TableCell>
                       <div className="flex items-center gap-1.5 text-title-sm">
                         <span className="truncate">{n.name}</span>
+                        <MemberLevelTag rank={n.membershipTier} />
                         {!n.isActive && <Pill variant="inactive">Inactive</Pill>}
                       </div>
                       <div className="mono text-[11px] text-muted-text">#{n.memberId}</div>

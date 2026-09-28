@@ -1,5 +1,5 @@
 -- Migration 0002 — membership levels (CR-7, Rule-47).
--- Rank only (0 = none, 1..=4 = Gold/Platinum/Diamond/Ace): names are
+-- Rank only (0 = none, 1..=4 = Gold/Platinum/Diamond/Elite): names are
 -- drafts that live in code, never in the database. Existing snapshots stay
 -- at 0 — that is what those closed months showed.
 ALTER TABLE member_period_totals ADD COLUMN membership_tier INTEGER NOT NULL DEFAULT 0;

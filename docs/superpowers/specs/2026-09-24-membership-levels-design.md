@@ -18,7 +18,7 @@ count and its own royalty rate, all editable from the Settings screen:
 | 1 | Gold | ≥ N₁ direct legs on the top slab (today's royalty condition) |
 | 2 | Platinum | holds Gold **and** ≥ N₂ direct legs at Gold or higher |
 | 3 | Diamond | holds Platinum **and** ≥ N₃ direct legs at Platinum or higher |
-| 4 | Ace | holds Diamond **and** ≥ N₄ direct legs at Diamond or higher |
+| 4 | Elite | holds Diamond **and** ≥ N₄ direct legs at Diamond or higher |
 
 Level names are **drafts**, not settings. They are not editable from the Settings
 screen; renaming is a code change (one constant per language, §4.4). The number of
@@ -112,7 +112,7 @@ WHERE EXISTS (SELECT 1 FROM settings);
 | 1 Gold | `royalty_qualifying_count` (existing) | `royalty_rate_percent` (existing) |
 | 2 Platinum | `royalty_membership_2_qualifying_count` | `royalty_membership_2_rate_percent` |
 | 3 Diamond | `royalty_membership_3_qualifying_count` | `royalty_membership_3_rate_percent` |
-| 4 Ace | `royalty_membership_4_qualifying_count` | `royalty_membership_4_rate_percent` |
+| 4 Elite | `royalty_membership_4_qualifying_count` | `royalty_membership_4_rate_percent` |
 
 - Level 1 keeps the existing keys — no data migration, no rename.
 - Numbered keys follow the sibling `level_2_width` convention; no draft name appears
@@ -185,7 +185,7 @@ reads a name.
 
 ### 4.4 Level names
 
-- Rust: `pub const MEMBERSHIP_LEVEL_NAMES: [&str; 4] = ["Gold", "Platinum", "Diamond", "Ace"];`
+- Rust: `pub const MEMBERSHIP_LEVEL_NAMES: [&str; 4] = ["Gold", "Platinum", "Diamond", "Elite"];`
   in `m3_calc/engine.rs` — used by the PDF and the monthly extract.
 - TypeScript: the same list in one constant in `src/lib/` — used by screens.
 - Rank 0 renders as "—".
@@ -240,7 +240,7 @@ Rule-47 new, Scenario 7), `PRODUCT.md` (capabilities line).
 - No level below N₁ top-slab legs; Gold exactly at N₁.
 - Each rung exactly at Nₖ and at Nₖ − 1.
 - "Or higher" counting: 2 Platinum + 1 Gold legs → Platinum (N₂ = 3).
-- Sequential ladder: 3 Diamond legs with N₁…N₄ = 3 → Ace.
+- Sequential ladder: 3 Diamond legs with N₁…N₄ = 3 → Elite.
 - Highest rate replaces: Platinum member paid at rate₂ only.
 - Regression: with all four rates equal to the old single rate, every existing
   royalty test and all six golden scenarios produce identical figures.
@@ -248,7 +248,7 @@ Rule-47 new, Scenario 7), `PRODUCT.md` (capabilities line).
   outside tests.
 
 ### 6.2 Golden Scenario 7 (fixtures + `golden_scenarios.rs`)
-A five-generation tree built so its root reaches Ace, with hand-worked level and
+A five-generation tree built so its root reaches Elite, with hand-worked level and
 royalty at every node, reconciled through the real engine. It is a constructed
 scenario, not a client-supplied one, and is marked as awaiting client confirmation in
 the business-rules doc; it does not join the six client scenarios' fixture array.

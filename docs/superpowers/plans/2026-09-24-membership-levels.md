@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Turn Rule-10's single royalty condition into a four-rung monthly membership ladder (Gold → Platinum → Diamond → Ace), each rung with its own editable qualifying count and royalty rate.
+**Goal:** Turn Rule-10's single royalty condition into a four-rung monthly membership ladder (Gold → Platinum → Diamond → Elite), each rung with its own editable qualifying count and royalty rate.
 
 **Architecture:** The pure engine (`m3_calc/engine.rs`) derives a member's level (rank 0–4) from its direct legs' slabs and levels, bottom-up, exactly like slab. The rank is stored per period in `member_period_totals`/`monthly_snapshots` and zeroed at close. Settings hold four (count, rate) pairs. Level 1 reuses today's two royalty keys. The settings-change recompute and its preview switch to deepest-first order, because a child's level now feeds its parent's.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - No count, rate or threshold hardcoded outside tests and seed defaults. Every one comes from `settings`.
-- Level names are drafts: `["Gold", "Platinum", "Diamond", "Ace"]`, rank 1..=4. They are defined once in Rust (`m3_calc::engine::MEMBERSHIP_LEVEL_NAMES`) and once in TypeScript (`src/lib/membership-levels.ts`). They are never stored and never a setting. Rank 0 renders as `—` (U+2014).
+- Level names are drafts: `["Gold", "Platinum", "Diamond", "Elite"]`, rank 1..=4. They are defined once in Rust (`m3_calc::engine::MEMBERSHIP_LEVEL_NAMES`) and once in TypeScript (`src/lib/membership-levels.ts`). They are never stored and never a setting. Rank 0 renders as `—` (U+2014).
 - The database stores the rank (`membership_tier INTEGER NOT NULL DEFAULT 0`), never a name.
 - Levels are monthly. Nothing reads or copies a level across periods. Close snapshots the level and then zeroes it.
 - Settings keys:
@@ -160,7 +160,7 @@ Create `src-tauri/src/db/migrations/0002_membership_level.sql`:
 
 ```sql
 -- Migration 0002 — membership levels (CR-7, Rule-47).
--- Rank only (0 = none, 1..=4 = Gold/Platinum/Diamond/Ace): names are
+-- Rank only (0 = none, 1..=4 = Gold/Platinum/Diamond/Elite): names are
 -- drafts that live in code, never in the database. Existing snapshots stay
 -- at 0 — that is what those closed months showed.
 ALTER TABLE member_period_totals ADD COLUMN membership_tier INTEGER NOT NULL DEFAULT 0;
@@ -301,7 +301,7 @@ In `engine.rs` `mod tests`:
     fn membership_level_name_maps_rank_to_the_draft_names() {
         assert_eq!(membership_level_name(0), "\u{2014}");
         assert_eq!(membership_level_name(1), "Gold");
-        assert_eq!(membership_level_name(4), "Ace");
+        assert_eq!(membership_level_name(4), "Elite");
         assert_eq!(membership_level_name(5), "\u{2014}");
         assert_eq!(membership_level_name(-1), "\u{2014}");
     }
@@ -346,16 +346,16 @@ In `engine.rs` `mod tests`:
     }
 
     #[test]
-    fn three_diamond_legs_reach_ace_through_every_rung() {
+    fn three_diamond_legs_reach_elite_through_every_rung() {
         let children = [leg(270_000, 14, 3), leg(270_000, 14, 3), leg(270_000, 14, 3)];
         let figures = compute_node(0, &children, SLABS, &LADDER);
         assert_eq!(figures.membership_tier, 4);
-        assert_eq!(figures.royalty, 32_400, "Ace's 4% of 810,000");
+        assert_eq!(figures.royalty, 32_400, "Elite's 4% of 810,000");
     }
 
     #[test]
     fn the_ladder_stops_at_the_first_unmet_rung() {
-        // Platinum needs 5 here, so Diamond/Ace (count 1) are never reached
+        // Platinum needs 5 here, so Diamond/Elite (count 1) are never reached
         // even though three Diamond legs would satisfy them on their own.
         let tiers = [
             RoyaltyTier { qualifying_count: 3, rate_percent: 1.0 },
@@ -399,7 +399,7 @@ In `engine.rs`:
 /// Display only — the database stores the rank, never a name, and names are
 /// not a setting. Renaming a level is a change here and in
 /// `src/lib/membership-levels.ts`, nowhere else.
-pub const MEMBERSHIP_LEVEL_NAMES: [&str; 4] = ["Gold", "Platinum", "Diamond", "Ace"];
+pub const MEMBERSHIP_LEVEL_NAMES: [&str; 4] = ["Gold", "Platinum", "Diamond", "Elite"];
 
 /// Rank 0 ("no level") and anything out of range render as an em dash.
 pub fn membership_level_name(rank: i64) -> &'static str {
@@ -1628,7 +1628,7 @@ git commit -m "feat: add Membership as an optional monthly extract column"
 
 ---
 
-### Task 8: Golden Scenario 7 — the ladder to Ace
+### Task 8: Golden Scenario 7 — the ladder to Elite
 
 **Files:**
 - Modify: `src-tauri/tests/golden_scenarios.rs` (append)
@@ -1644,7 +1644,7 @@ Hand-worked figures (real units, default slab table, counts 3/3/3/3, rates 1/2/3
 | Gold | 3 top leaves | 30,000 | 14% | Gold | 1% × 30,000 = 300 |
 | Platinum | 3 Gold | 90,000 | 14% | Platinum | 2% × 90,000 = 1,800 |
 | Diamond | 3 Platinum | 270,000 | 14% | Diamond | 3% × 270,000 = 8,100 |
-| Ace | 3 Diamond | 810,000 | 14% | Ace | 4% × 810,000 = 32,400 |
+| Elite | 3 Diamond | 810,000 | 14% | Elite | 4% × 810,000 = 32,400 |
 
 Every differential is 0: each parent shares its legs' 14% slab (Rule-11).
 
@@ -1653,7 +1653,7 @@ Every differential is 0: each parent shares its legs' 14% slab (Rule-11).
 Append to `src-tauri/tests/golden_scenarios.rs`:
 
 ```rust
-// --- Scenario 7 (CR-7/Rule-47): the membership ladder, top leaf to Ace. ---
+// --- Scenario 7 (CR-7/Rule-47): the membership ladder, top leaf to Elite. ---
 // Constructed, not client-supplied — awaiting client confirmation of the
 // figures (03-business-rules.md Rule-47). Kept out of `golden_scenarios()`,
 // which holds the client's own six.
@@ -1678,8 +1678,8 @@ const S7_DIAMOND: MemberFixture = MemberFixture {
     own_bv: 0,
     children: &[S7_PLATINUM, S7_PLATINUM, S7_PLATINUM],
 };
-const S7_ACE: MemberFixture = MemberFixture {
-    name: "ace",
+const S7_ELITE: MemberFixture = MemberFixture {
+    name: "elite",
     own_bv: 0,
     children: &[S7_DIAMOND, S7_DIAMOND, S7_DIAMOND],
 };
@@ -1710,13 +1710,13 @@ fn evaluate_with(
 }
 
 #[test]
-fn scenario_7_membership_ladder_reaches_ace_at_every_rungs_own_rate() {
+fn scenario_7_membership_ladder_reaches_elite_at_every_rungs_own_rate() {
     let expected = [
         (&S7_TOP, 10_000, 0, 0),
         (&S7_GOLD, 30_000, 1, 300),
         (&S7_PLATINUM, 90_000, 2, 1_800),
         (&S7_DIAMOND, 270_000, 3, 8_100),
-        (&S7_ACE, 810_000, 4, 32_400),
+        (&S7_ELITE, 810_000, 4, 32_400),
     ];
     for (tree, tbv, level, royalty) in expected {
         let f = evaluate_with(tree, &S7_TIERS);
@@ -1761,7 +1761,7 @@ git commit -m "test: add golden scenario 7 for the membership ladder"
 **Interfaces:**
 - Consumes: Task 3/5 JSON shapes.
 - Produces:
-  - `MEMBERSHIP_LEVEL_NAMES: readonly ["Gold","Platinum","Diamond","Ace"]`
+  - `MEMBERSHIP_LEVEL_NAMES: readonly ["Gold","Platinum","Diamond","Elite"]`
   - `membershipLevelName(rank: number): string`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1774,10 +1774,10 @@ import { MEMBERSHIP_LEVEL_NAMES, membershipLevelName } from "./membership-levels
 
 describe("membershipLevelName", () => {
   it("maps rank 1..4 to the draft names and anything else to an em dash", () => {
-    expect(MEMBERSHIP_LEVEL_NAMES).toEqual(["Gold", "Platinum", "Diamond", "Ace"]);
+    expect(MEMBERSHIP_LEVEL_NAMES).toEqual(["Gold", "Platinum", "Diamond", "Elite"]);
     expect(membershipLevelName(0)).toBe("—");
     expect(membershipLevelName(1)).toBe("Gold");
-    expect(membershipLevelName(4)).toBe("Ace");
+    expect(membershipLevelName(4)).toBe("Elite");
     expect(membershipLevelName(5)).toBe("—");
   });
 });
@@ -1870,7 +1870,7 @@ Expected: FAIL (module not found; type errors on `membershipTierBefore`; "Starts
 // Rule-47 (CR-7): draft membership-level names, rank 1..4. Display only —
 // the backend stores and sends the rank, and names are not a setting.
 // Must match MEMBERSHIP_LEVEL_NAMES in src-tauri/src/m3_calc/engine.rs.
-export const MEMBERSHIP_LEVEL_NAMES = ["Gold", "Platinum", "Diamond", "Ace"] as const;
+export const MEMBERSHIP_LEVEL_NAMES = ["Gold", "Platinum", "Diamond", "Elite"] as const;
 
 export function membershipLevelName(rank: number): string {
   return MEMBERSHIP_LEVEL_NAMES[rank - 1] ?? "—";
@@ -2187,16 +2187,16 @@ Change its heading to `### Rule-10 — Royalty qualification **[AMENDED 24 Sep 2
 
 ```markdown
 ### Rule-47 — Membership levels **[NEW — client requirement, CR-7]**
-**Rule:** Each period, every member holds a membership level, rank 0–4 (none / Gold / Platinum / Diamond / Ace — draft names, not settings). Gold: ≥ N₁ direct legs on the top slab. Each later level k: holds level k−1 **and** ≥ Nₖ direct legs at level k−1 or higher. `Royalty(x)` = 0 at rank 0, otherwise `rate(level(x)) × Σ TBV(c)` over x's top-slab direct legs — the highest level's rate replaces the lower ones, never stacks.
+**Rule:** Each period, every member holds a membership level, rank 0–4 (none / Gold / Platinum / Diamond / Elite — draft names, not settings). Gold: ≥ N₁ direct legs on the top slab. Each later level k: holds level k−1 **and** ≥ Nₖ direct legs at level k−1 or higher. `Royalty(x)` = 0 at rank 0, otherwise `rate(level(x)) × Σ TBV(c)` over x's top-slab direct legs — the highest level's rate replaces the lower ones, never stacks.
 **Source:** Client change request **CR-7**, 24 September 2026 — decisions: monthly (reset at close, never carried forward); highest rate replaces; one count and one rate per level (N₁…N₄, rate₁…rate₄, all in Settings); sequential ladder; a higher-level leg counts toward a lower rung.
 **Applies to:** M3, M5 (snapshot + reset at close), M7 (settings), M4/M6 (display).
 **Implementation impact:** `member_period_totals`/`monthly_snapshots` gain `membership_tier` (rank). Level 1 keeps `royalty_qualifying_count`/`royalty_rate_percent`; levels 2–4 add `royalty_membership_{2,3,4}_qualifying_count`/`_rate_percent`. A level depends on children's levels, so a settings-change recompute runs deepest member first.
-**Test requirement:** Scenario 7 (constructed — **awaiting client confirmation of the figures**): with counts 3/3/3/3 and rates 1/2/3/4%, top leaves of 10,000 → Gold 300, Platinum 1,800, Diamond 8,100, Ace 32,400 royalty; every differential 0. Plus the client's own example: 2 Platinum legs + 1 Gold leg → Platinum.
+**Test requirement:** Scenario 7 (constructed — **awaiting client confirmation of the figures**): with counts 3/3/3/3 and rates 1/2/3/4%, top leaves of 10,000 → Gold 300, Platinum 1,800, Diamond 8,100, Elite 32,400 royalty; every differential 0. Plus the client's own example: 2 Platinum legs + 1 Gold leg → Platinum.
 ```
 
 - [ ] **Step 3: Update `PRODUCT.md`**
 
-- In the Operating Context calculation bullet, append: "Royalty is paid by monthly membership level (Gold, Platinum, Diamond, Ace — added 24 Sep 2026, CR-7): each level needs a configured number of direct legs at the level below, and pays its own configured rate."
+- In the Operating Context calculation bullet, append: "Royalty is paid by monthly membership level (Gold, Platinum, Diamond, Elite — added 24 Sep 2026, CR-7): each level needs a configured number of direct legs at the level below, and pays its own configured rate."
 - In "In scope", change "royalty rate/qualifying count" to "royalty qualifying count and rate for each membership level".
 
 - [ ] **Step 4: Check vocabulary**
@@ -2228,7 +2228,7 @@ Expected: every command exits 0. `npm run build` runs `vocab-grep` and `tsc` as 
 - [ ] **Step 2: Manual smoke test (optional, requires the app)**
 
 `npm run tauri dev`, then:
-1. Settings → Royalty shows four rows (Gold/Platinum/Diamond/Ace).
+1. Settings → Royalty shows four rows (Gold/Platinum/Diamond/Elite).
 2. Edit Platinum's rate; the dialog appears; save.
 3. Open a member with legs; the Membership card and the royalty row show the level.
 

@@ -150,6 +150,7 @@ describe("MemberDetail — rewards breakdown", () => {
 
     await screen.findByRole("button", { name: "Edit member" });
     expect(screen.getByText("Platinum")).toBeInTheDocument();
+    expect(screen.getByRole("presentation").getAttribute("src")).toMatch(/platinum/);
     expect(screen.getByText(/Platinum at 2% — 3 of 1 legs qualifying/)).toBeInTheDocument();
   });
 
@@ -162,7 +163,7 @@ describe("MemberDetail — rewards breakdown", () => {
     renderDetail(CHILD_MEMBER.id);
 
     await screen.findByRole("button", { name: "Edit member" });
-    expect(screen.queryByText(/^(Gold|Platinum|Diamond|Ace)$/)).toBeNull();
+    expect(screen.queryByText(/^(Gold|Platinum|Diamond|Elite)$/)).toBeNull();
   });
 
   it("shows the no-direct-legs row when there are none", async () => {

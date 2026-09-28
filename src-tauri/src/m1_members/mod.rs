@@ -597,6 +597,9 @@ pub struct SearchResult {
     // yet", so real figures started appearing with no change needed here.
     pub total_business_volume: f64,
     pub slab_pct: f64,
+    /// Rule-47 membership level rank (0 = none), from the same latest
+    /// period row as `slab_pct` — shown as a badge in search results.
+    pub membership_tier: i64,
     pub is_active: bool,
     // The row is already read in full to build the shared `Member` struct
     // internally — carrying these three costs nothing extra and is what
@@ -633,7 +636,8 @@ pub fn search_members(
     let mut stmt = conn.prepare(
         "SELECT m.*, \
                 COALESCE(t.total_business_volume, 0) AS tbv, \
-                COALESCE(t.slab_pct, 0) AS slab_pct \
+                COALESCE(t.slab_pct, 0) AS slab_pct, \
+                COALESCE(t.membership_tier, 0) AS membership_tier \
          FROM members m \
          LEFT JOIN member_period_totals t \
                 ON t.member_id = m.id \
@@ -675,6 +679,7 @@ pub fn search_members(
             // existed to populate it.
             total_business_volume: tbv as f64 / 100.0,
             slab_pct: slab_pct as f64,
+            membership_tier: row.get("membership_tier")?,
             is_active: member.is_active,
             email: member.email,
             address: member.address,
@@ -1393,6 +1398,36 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].total_business_volume, 1234.56);
         assert_eq!(results[0].slab_pct, 8.0);
+    }
+
+    #[test]
+    fn search_result_carries_the_membership_level_and_zero_without_figures() {
+        let conn = open_seeded_in_memory().unwrap();
+        let root = create_root_member(&conn, root_input()).unwrap();
+        assert_eq!(
+            search_members(&conn, "Top Member", false).unwrap()[0].membership_tier,
+            0
+        );
+
+        conn.execute(
+            "INSERT INTO periods (period_month, status) VALUES ('2026-08', 'open')",
+            [],
+        )
+        .unwrap();
+        let period_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO member_period_totals
+                (member_id, period_id, business_volume, total_business_volume, slab_pct,
+                 differential, royalty, own_reward, rewards, membership_tier)
+             VALUES (?1, ?2, 0, 0, 14, 0, 0, 0, 0, 3)",
+            rusqlite::params![root.id, period_id],
+        )
+        .unwrap();
+
+        assert_eq!(
+            search_members(&conn, "Top Member", false).unwrap()[0].membership_tier,
+            3
+        );
     }
 
     #[test]

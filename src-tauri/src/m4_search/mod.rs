@@ -353,6 +353,9 @@ pub struct ChartNode {
     /// without first fetching that node's own children — the lazy,
     /// one-generation-per-fetch loading `full_tree: false` implies.
     pub leg_count: i64,
+    /// Rule-47 membership level rank for the viewed period (0 = none) —
+    /// Home's slab drill-down shows it as a badge.
+    pub membership_tier: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -418,7 +421,8 @@ fn chart_nodes(
          )
          SELECT m.id, m.name, m.is_active, m.introducer_member_id,
                 COALESCE(t.business_volume, 0), COALESCE(t.slab_pct, 0), COALESCE(t.rewards, 0),
-                (SELECT COUNT(*) FROM members c WHERE c.introducer_member_id = m.id)
+                (SELECT COUNT(*) FROM members c WHERE c.introducer_member_id = m.id),
+                COALESCE(t.membership_tier, 0)
          FROM subtree
          JOIN members m ON m.id = subtree.id
          LEFT JOIN member_period_totals t
@@ -436,6 +440,7 @@ fn chart_nodes(
                 slab_pct: r.get(5)?,
                 rewards: r.get(6)?,
                 leg_count: r.get(7)?,
+                membership_tier: r.get(8)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -852,6 +857,31 @@ mod tests {
 
         let default_chart = get_direct_children_chart(&conn, Some(root), false, None).unwrap();
         assert_eq!(default_chart.nodes[0].own_business_volume, 10_000);
+    }
+
+    #[test]
+    fn get_direct_children_chart_carries_each_nodes_membership_level() {
+        let conn = seeded();
+        conn.execute(
+            "UPDATE settings SET value = '1' WHERE key IN (
+                'royalty_qualifying_count', 'royalty_membership_2_qualifying_count')",
+            [],
+        )
+        .unwrap();
+        let period = insert_period(&conn, "2026-08");
+        let root = insert_member(&conn, "Root", None);
+        let mid = insert_member(&conn, "Mid", Some(root));
+        let leaf = insert_member(&conn, "Leaf", Some(mid));
+        insert_entry(&conn, leaf, "2026-08", 1_000_000); // top slab
+        recalculate_chain(&conn, leaf, period).unwrap();
+
+        let chart = get_direct_children_chart(&conn, None, true, Some("2026-08")).unwrap();
+        let tiers: Vec<(i64, i64)> = chart
+            .nodes
+            .iter()
+            .map(|n| (n.member_id, n.membership_tier))
+            .collect();
+        assert_eq!(tiers, vec![(root, 2), (mid, 1), (leaf, 0)]);
     }
 
     #[test]

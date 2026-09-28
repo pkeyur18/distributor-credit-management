@@ -10,6 +10,7 @@ function node(memberId: number, introducerMemberId: number | null): ChartNode {
     isActive: true,
     introducerMemberId,
     slabPct: 0,
+    membershipTier: 0,
     rewards: 0,
     legCount: 0,
   };

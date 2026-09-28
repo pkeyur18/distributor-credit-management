@@ -15,6 +15,7 @@ function node(overrides: Partial<ChartNode>): ChartNode {
     slabPct: 0,
     rewards: 0,
     legCount: 0,
+    membershipTier: 0,
     ...overrides,
   };
 }
@@ -28,6 +29,7 @@ const NODES: ChartNode[] = [
     ownBusinessVolume: 2000,
     rewards: 2100,
     isActive: false,
+    membershipTier: 4,
   }),
   node({ memberId: 100003, name: "Kiran Mehta", slabPct: 6, ownBusinessVolume: 1000, rewards: 60 }),
 ];
@@ -60,13 +62,14 @@ describe("SlabMembersModal", () => {
   it("lists only the chosen slab's members, by name, when opened from Members by slab", () => {
     renderModal();
     expect(screen.getByRole("heading", { name: "Members on the 14% slab" })).toBeInTheDocument();
-    expect(memberNames()).toEqual(["Asha PatelInactive#100002", "Zara Shah#100001"]);
+    expect(memberNames()).toEqual(["Asha PatelEliteInactive#100002", "Zara Shah#100001"]);
     expect(screen.queryByText("Share of slab")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("presentation")).toHaveLength(1); // Asha's Elite badge only
   });
 
   it("sorts by Rewards, highest first, with a share column when opened from Rewards by slab", () => {
     renderModal({ metric: "rewards" });
-    expect(memberNames()).toEqual(["Asha PatelInactive#100002", "Zara Shah#100001"]);
+    expect(memberNames()).toEqual(["Asha PatelEliteInactive#100002", "Zara Shah#100001"]);
     expect(screen.getByText("Share of slab")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument(); // 2100 of 2800
   });
@@ -74,7 +77,7 @@ describe("SlabMembersModal", () => {
   it("re-sorts by Business Volume", async () => {
     renderModal();
     await userEvent.click(screen.getByRole("radio", { name: "Business Volume" }));
-    expect(memberNames()).toEqual(["Zara Shah#100001", "Asha PatelInactive#100002"]);
+    expect(memberNames()).toEqual(["Zara Shah#100001", "Asha PatelEliteInactive#100002"]);
   });
 
   it("filters inside the slab by name or member number", async () => {

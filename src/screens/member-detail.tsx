@@ -27,6 +27,7 @@ import type { MemberDetail as MemberDetailData } from "@/lib/ipc/m4-search";
 import { toErrorPresentation } from "@/lib/ipc/errors";
 import { centsToDisplay } from "@/lib/utils";
 import { membershipLevelName } from "@/lib/membership-levels";
+import { MembershipBadge } from "@/components/membership-badge";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { useBackTarget, useRouteLabel } from "@/lib/navigation-history";
 
@@ -196,7 +197,13 @@ export function MemberDetail() {
           value={`${detail.slabPct}%`}
           aside={
             detail.membershipTier > 0 && (
-              <Pill variant="slab">{membershipLevelName(detail.membershipTier)}</Pill>
+              <span className="flex items-center gap-2">
+                <MembershipBadge rank={detail.membershipTier} size={40} />
+                <span className="flex flex-col leading-tight">
+                  <span className="text-caption">Membership</span>
+                  <span className="text-title-sm">{membershipLevelName(detail.membershipTier)}</span>
+                </span>
+              </span>
             )
           }
         />
@@ -435,7 +442,7 @@ function StatCard({
   return (
     <div className="rounded-lg border border-border bg-surface p-3.5">
       <div className="text-label text-muted-text">{label}</div>
-      <div className="mt-1 flex items-center gap-2">
+      <div className="mt-1 flex flex-wrap items-center gap-2">
         <span className="num text-numeric-lg">{value}</span>
         {aside}
       </div>
