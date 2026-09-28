@@ -60,10 +60,23 @@ function Modal({ open, onOpenChange, dismissable = true, wide, children }: Modal
   );
 }
 
-function ModalHeader({ title }: { title: string }) {
+function ModalHeader({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  /** Extra header controls, placed just before the close button. */
+  children?: ReactNode;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-4.5 py-3.5">
-      <DialogPrimitive.Title className="text-title">{title}</DialogPrimitive.Title>
+      <div className="min-w-0 flex-1">
+        <DialogPrimitive.Title className="text-title">{title}</DialogPrimitive.Title>
+        {subtitle && <div className="text-caption">{subtitle}</div>}
+      </div>
+      {children}
       <DialogPrimitive.Close
         aria-label="Close"
         className="text-muted-text hover:text-ink flex size-6 items-center justify-center rounded-sm hover:bg-bg"

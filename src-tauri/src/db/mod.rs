@@ -83,7 +83,7 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM settings", [], |r| r.get(0))
             .unwrap();
         assert_eq!(slab_count, 7);
-        assert_eq!(settings_count, 16);
+        assert_eq!(settings_count, 22);
     }
 
     #[test]

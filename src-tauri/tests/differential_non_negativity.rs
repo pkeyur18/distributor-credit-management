@@ -11,7 +11,7 @@
 //! existence; that placeholder is gone now that T-M3.1-8 has a real
 //! function to point at.
 
-use bvconsole_lib::m3_calc::engine::{compute_node, slab_lookup, ChildFigures};
+use bvconsole_lib::m3_calc::engine::{compute_node, slab_lookup, ChildFigures, RoyaltyTier};
 use proptest::prelude::*;
 
 /// A monotonic slab table: thresholds strictly increasing, percentages
@@ -48,13 +48,15 @@ proptest! {
             .map(|&tbv| ChildFigures {
                 total_business_volume: tbv,
                 slab_pct: slab_lookup(tbv, &table),
+                membership_tier: 0,
             })
             .collect();
 
         // Every child's own contribution rolls up into the parent's, so
         // parent TBV is always at least as large as any single child's —
         // this is what makes Rule-9's guarantee hold under monotonicity.
-        let figures = compute_node(own_bv, &children, &table, 3, 1.0);
+        let tiers = [RoyaltyTier { qualifying_count: 3, rate_percent: 1.0 }; 4];
+        let figures = compute_node(own_bv, &children, &table, &tiers);
         prop_assert!(figures.differential >= 0, "differential total went negative: {}", figures.differential);
 
         for child in &children {

@@ -148,12 +148,13 @@ pub fn write_period_close_snapshots(
         "SELECT m.id, m.is_active,
                 COALESCE(t.business_volume, 0), COALESCE(t.total_business_volume, 0),
                 COALESCE(t.slab_pct, 0), COALESCE(t.differential, 0),
-                COALESCE(t.royalty, 0), COALESCE(t.own_reward, 0), COALESCE(t.rewards, 0)
+                COALESCE(t.royalty, 0), COALESCE(t.own_reward, 0), COALESCE(t.rewards, 0),
+                COALESCE(t.membership_tier, 0)
          FROM members m
          LEFT JOIN member_period_totals t ON t.member_id = m.id AND t.period_id = ?1",
     )?;
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(i64, bool, i64, i64, i64, i64, i64, i64, i64)> = stmt
+    let rows: Vec<(i64, bool, i64, i64, i64, i64, i64, i64, i64, i64)> = stmt
         .query_map([period_id], |r| {
             Ok((
                 r.get(0)?,
@@ -165,19 +166,31 @@ pub fn write_period_close_snapshots(
                 r.get(6)?,
                 r.get(7)?,
                 r.get(8)?,
+                r.get(9)?,
             ))
         })?
         .collect::<Result<_, _>>()?;
     drop(stmt);
 
-    for (member_id, is_active, bv, tbv, slab_pct, differential, royalty, own_reward, rewards) in
-        rows
+    for (
+        member_id,
+        is_active,
+        bv,
+        tbv,
+        slab_pct,
+        differential,
+        royalty,
+        own_reward,
+        rewards,
+        membership_tier,
+    ) in rows
     {
         conn.execute(
             "INSERT INTO monthly_snapshots
                 (member_id, period_id, version, business_volume, total_business_volume,
-                 slab_pct, differential, royalty, own_reward, rewards, is_active_status, created_at)
-             VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                 slab_pct, differential, royalty, own_reward, rewards, is_active_status, created_at,
+                 membership_tier)
+             VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             rusqlite::params![
                 member_id,
                 period_id,
@@ -190,6 +203,7 @@ pub fn write_period_close_snapshots(
                 rewards,
                 is_active,
                 created_at,
+                membership_tier,
             ],
         )?;
     }
@@ -197,14 +211,15 @@ pub fn write_period_close_snapshots(
 }
 
 /// Rule-38: zeroes everything a snapshot has already captured — Business
-/// Volume, TBV, Rewards, royalty. `pub`, not `pub(crate)`: `generate_dataset`
+/// Volume, TBV, Rewards, royalty, membership level (Rule-47 — levels never
+/// carry into the next month). `pub`, not `pub(crate)`: `generate_dataset`
 /// reuses this too, so a closed synthetic month ends in exactly the same
 /// zeroed-live-figures state a real close leaves.
 pub fn zero_period_totals(conn: &Connection, period_id: i64) -> Result<(), AppError> {
     conn.execute(
         "UPDATE member_period_totals SET
             business_volume = 0, total_business_volume = 0, slab_pct = 0,
-            differential = 0, royalty = 0, own_reward = 0, rewards = 0
+            differential = 0, royalty = 0, own_reward = 0, rewards = 0, membership_tier = 0
          WHERE period_id = ?1",
         [period_id],
     )?;
@@ -636,6 +651,43 @@ mod tests {
             today.checked_sub_months(chrono::Months::new((-months) as u32))
         };
         shifted.unwrap().format("%Y-%m").to_string()
+    }
+
+    #[test]
+    fn close_snapshots_the_membership_level_then_resets_it_for_next_month() {
+        // Decision 1: monthly, reset at close, never carried forward.
+        let conn = seeded();
+        let member = insert_member(&conn, None);
+        let period = insert_period(&conn, "2026-08", "awaiting_close");
+        insert_totals(&conn, member, period, 100_000, 14);
+        conn.execute(
+            "UPDATE member_period_totals SET membership_tier = 2 WHERE member_id = ?1",
+            [member],
+        )
+        .unwrap();
+
+        write_period_close_snapshots(&conn, period, "2026-08-31").unwrap();
+        zero_period_totals(&conn, period).unwrap();
+
+        let snapshot_tier: i64 = conn
+            .query_row(
+                "SELECT membership_tier FROM monthly_snapshots WHERE member_id = ?1 AND period_id = ?2",
+                rusqlite::params![member, period],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let live_tier: i64 = conn
+            .query_row(
+                "SELECT membership_tier FROM member_period_totals WHERE member_id = ?1 AND period_id = ?2",
+                rusqlite::params![member, period],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            snapshot_tier, 2,
+            "the closed month keeps the level it showed"
+        );
+        assert_eq!(live_tier, 0, "nothing is left live to carry forward");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { navigateTo, login, FIRST_RUN_PIN } from "../helpers/seed.js";
+import { navigateTo, login, jsClick, FIRST_RUN_PIN } from "../helpers/seed.js";
 
 // US-M7.1/M7.2/M7.4 (S10). Runs against the same real app-data directory
 // as every other spec (no setup call here — see helpers/seed.js's own doc
@@ -10,6 +10,17 @@ before(async () => {
 });
 
 describe("Settings", () => {
+  // Each save leaves a toast up for ~3.4s (bottom right, role="dialog" like
+  // a modal). Starting the next test under it lets the toast intercept that
+  // test's clicks, match its `div[role="dialog"]` lookups, or satisfy its
+  // "saved" check with the previous test's toast — so start every test clean.
+  beforeEach(async () => {
+    await browser.waitUntil(
+      async () => (await $$('[role="dialog"], [role="alertdialog"]')).length === 0,
+      { timeout: 8000, timeoutMsg: "a toast or dialog from the previous test is still open" },
+    );
+  });
+
   it("saves a royalty setting change", async () => {
     await navigateTo("Settings");
     await $("#royalty-min").waitForExist({ timeout: 3000 });
@@ -31,14 +42,32 @@ describe("Settings", () => {
     await $("h2*=Royalty settings saved").waitForExist({ timeout: 3000 });
   });
 
+  it("saves a later membership level's rate", async () => {
+    await navigateTo("Settings");
+    await $("#royalty-rate-2").waitForExist({ timeout: 3000 });
+    await $("#royalty-rate-2").setValue("2");
+    await $("button=Save royalty settings").click();
+    // Not scoped to `div[role="dialog"]`: the previous test's "Royalty
+    // settings saved" toast is still on screen, and Base UI toasts are
+    // role="dialog" too — the first match would be the toast, not the
+    // recalc warning. The confirm button itself is unique on the page.
+    const confirmButton = $("button*=Save and re-work");
+    await confirmButton.waitForEnabled({ timeout: 3000 });
+    await confirmButton.click();
+    await $("h2*=Royalty settings saved").waitForExist({ timeout: 3000 });
+  });
+
   it("T-M7.1-4: disables removing the last remaining slab row, and refuses it if reached anyway", async () => {
     await navigateTo("Settings");
+    // jsClick throughout (helpers/seed.js): these run right after the
+    // previous tests close the recalc-warning modal, whose backdrop can stay
+    // hit-testable and make a native click fail as "click intercepted".
     // Add/remove is staged locally now (prototype-match single "Save slab
     // table" flow) — no round trip needed to see the last-row control disable.
     const rows = await $$('[id^="slab-remove-"]');
     for (let i = 0; i < rows.length - 1; i++) {
       const removeButtons = await $$('button[aria-label="Remove this slab row"]');
-      await removeButtons[0].click();
+      await jsClick(removeButtons[0]);
       await browser.waitUntil(
         async () => (await $$('[id^="slab-remove-"]')).length === rows.length - 1 - i,
         { timeout: 3000 },
@@ -52,16 +81,16 @@ describe("Settings", () => {
 
   it("T-M7.1-6: a non-monotonic slab table saves without being blocked", async () => {
     await navigateTo("Settings");
-    await $("button=Add row").click();
+    await jsClick($("button=Add row"));
     await $("#slab-threshold-new-0").setValue("50000.00");
     await $("#slab-percentage-new-0").setValue("1");
-    await $("#slab-save-table").click();
+    await jsClick($("#slab-save-table"));
 
     const dialog = $('div[role="dialog"]');
     await dialog.waitForExist({ timeout: 3000 });
     const confirmButton = dialog.$("button*=Save and re-work");
     await confirmButton.waitForEnabled({ timeout: 3000 });
-    await confirmButton.click();
+    await jsClick(confirmButton);
 
     // No monotonicity check (ADR-009) — the recalc-warning dialog appears for
     // every slab save; confirming it completing with the success toast

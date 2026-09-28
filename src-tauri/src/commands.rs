@@ -473,8 +473,9 @@ pub fn get_settings(
 }
 
 /// API-22. §5.7: structure guidance/reporting/reference-value sections save
-/// silently; only a royalty qualifying-count or rate change recalculates
-/// the open period — see `m7_settings::update_settings`'s own doc comment.
+/// silently; only a royalty qualifying-count or rate change (at any
+/// membership level) recalculates the open period — see
+/// `m7_settings::update_settings`'s own doc comment.
 /// The pre-save warning this API doc otherwise requires is US-M7.3, S11.
 #[tauri::command]
 pub fn update_settings(

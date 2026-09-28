@@ -13,7 +13,12 @@ export interface RewardBreakdown {
     differentialPct: number;
     amount: number;
   }>;
-  royalty: { qualifyingChildren: number; ratePercent: number; amount: number } | null;
+  royalty: {
+    qualifyingChildren: number;
+    membershipTier: number;
+    ratePercent: number;
+    amount: number;
+  } | null;
   rewardsTotal: number;
 }
 
@@ -33,6 +38,7 @@ export interface MemberDetail {
   member: Member;
   totalBusinessVolume: number;
   slabPct: number;
+  membershipTier: number;
   legCount: number;
   rewards: RewardBreakdown;
   directChildren: MemberDetailChild[];

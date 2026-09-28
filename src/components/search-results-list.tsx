@@ -1,5 +1,6 @@
 import type { SearchResult } from "@/lib/ipc/entities";
 import { Pill } from "@/components/ui/pill";
+import { MemberLevelTag } from "@/components/membership-badge";
 
 // T-M1.4-5. One dropdown-style component behind every search box's results
 // — name, member number, phone (Rule-44/DESIGN.md "Do show the phone
@@ -42,6 +43,7 @@ function SearchResultsList({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-title-sm">
               <span className="truncate">{r.name}</span>
+              <MemberLevelTag rank={r.membershipTier} />
               {!r.isActive && <Pill variant="inactive">Inactive</Pill>}
             </div>
             <div className="mono text-[11px] text-muted-text">

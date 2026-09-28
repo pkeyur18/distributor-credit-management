@@ -12,6 +12,7 @@ const RESULT: SearchResult = {
   phone: "9876543210",
   totalBusinessVolume: 0,
   slabPct: 0,
+  membershipTier: 0,
   isActive: true,
   email: null,
   address: "1 Main Street",

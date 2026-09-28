@@ -143,6 +143,8 @@ export interface ChartNode {
   /** Direct-child count — lets the Structure screen show the leaf/expand
    *  affordance before that node's own children have been fetched. */
   legCount: number;
+  /** Rule-47 membership level rank for the viewed period (0 = none). */
+  membershipTier: number;
 }
 
 export interface SearchResult {
@@ -151,6 +153,8 @@ export interface SearchResult {
   phone: string;
   totalBusinessVolume: number;
   slabPct: number;
+  /** Rule-47 membership level rank, same period as `slabPct` (0 = none). */
+  membershipTier: number;
   isActive: boolean;
   // Not displayed by SearchResultsList (T-M1.4-5's field list is unchanged)
   // — carried so an Edit modal can open straight from a search result
@@ -170,6 +174,12 @@ export interface Settings {
   level4Width: number;
   royaltyQualifyingCount: number;
   royaltyRatePercent: number;
+  royaltyTier2QualifyingCount: number;
+  royaltyTier2RatePercent: number;
+  royaltyTier3QualifyingCount: number;
+  royaltyTier3RatePercent: number;
+  royaltyTier4QualifyingCount: number;
+  royaltyTier4RatePercent: number;
   yearlyCycle: { start: string; end: string };
   lowContributionThreshold: number;
   defaultExportColumns: string[];

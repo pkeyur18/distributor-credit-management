@@ -11,6 +11,7 @@ function result(overrides: Partial<SearchResult> = {}): SearchResult {
     phone: "9876543210",
     totalBusinessVolume: 0,
     slabPct: 0,
+    membershipTier: 0,
     isActive: true,
     email: null,
     address: "1 Main Street",
@@ -38,6 +39,19 @@ describe("SearchResultsList", () => {
     );
     expect(screen.getByText("Asha Patel")).toBeInTheDocument();
     expect(screen.getByText("#482913 · 9876543210")).toBeInTheDocument();
+    expect(screen.queryByRole("presentation")).toBeNull(); // no level, no badge
+  });
+
+  it("shows the membership level badge and name beside the member's name", () => {
+    render(
+      <SearchResultsList
+        results={[result({ membershipTier: 3 })]}
+        query="asha"
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByText("Diamond")).toBeInTheDocument();
+    expect(screen.getByRole("presentation").getAttribute("src")).toMatch(/diamond/);
   });
 
   it("marks an inactive result with the Inactive pill, colour plus label", () => {

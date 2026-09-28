@@ -24,6 +24,7 @@ export const OPTIONAL_EXPORT_COLUMNS: { key: string; label: string }[] = [
   { key: "slab_pct", label: "Slab %" },
   { key: "rewards", label: "Rewards" },
   { key: "royalty_earned", label: "Royalty earned" },
+  { key: "membership_level", label: "Membership" },
   { key: "joining_date", label: "Joining date" },
   { key: "active_status", label: "Active/inactive status" },
 ];

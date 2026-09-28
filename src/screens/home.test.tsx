@@ -19,6 +19,7 @@ function node(overrides: Partial<ChartNode> = {}): ChartNode {
     isActive: true,
     introducerMemberId: null,
     slabPct: 0,
+    membershipTier: 0,
     rewards: 0,
     legCount: 0,
     ...overrides,
@@ -40,6 +41,7 @@ const SEARCH_RESULT: SearchResult = {
   phone: "9876543210",
   totalBusinessVolume: 5000,
   slabPct: 6,
+  membershipTier: 0,
   isActive: true,
   email: null,
   address: "1 Main Street",
@@ -117,6 +119,32 @@ describe("Home — today's standing", () => {
     expect(screen.getByText("2 members total, across 3 slabs")).toBeInTheDocument();
     expect(screen.getByText("Rewards by slab")).toBeInTheDocument();
     expect(screen.getByText("30.00 total this period, across 3 slabs")).toBeInTheDocument();
+  });
+});
+
+describe("Home — slab drill-down", () => {
+  it("opens the slab's members from Members by slab and goes to Member Detail on a row click", async () => {
+    vi.spyOn(m2Entries, "getPeriodLockStatus").mockResolvedValue({
+      recordablePeriodMonths: ["2026-06"],
+      blockingMonth: null,
+    });
+    vi.spyOn(m4Search, "getDirectChildrenChart").mockResolvedValue(
+      chartResult([
+        node({ memberId: 100001, name: "Zara Shah", slabPct: 14, rewards: 700 }),
+        node({ memberId: 100002, name: "Kiran Mehta", slabPct: 6, rewards: 60 }),
+      ]),
+    );
+    const user = userEvent.setup();
+    renderHome();
+
+    await screen.findByText("Members by slab");
+    await user.click(screen.getAllByRole("button", { name: /14% slab/ })[0]);
+
+    expect(await screen.findByRole("heading", { name: "Members on the 14% slab" })).toBeInTheDocument();
+    expect(screen.queryByText("Kiran Mehta")).not.toBeInTheDocument();
+    await user.click(screen.getByText("Zara Shah"));
+
+    expect(await screen.findByText("Member Detail screen")).toBeInTheDocument();
   });
 });
 

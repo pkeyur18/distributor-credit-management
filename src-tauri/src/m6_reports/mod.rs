@@ -7,6 +7,7 @@ use rust_xlsxwriter::{Color, Format, IntoExcelData, Workbook, Worksheet, XlsxErr
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
+use crate::m3_calc::engine::membership_level_name;
 
 fn xlsx_err(e: XlsxError) -> AppError {
     AppError::Export(e.to_string())
@@ -119,6 +120,7 @@ struct MemberExportRow {
     slab_pct: i64,
     rewards: i64,
     royalty: i64,
+    membership_tier: i64,
 }
 
 const EXPORT_ROW_BASE_COLUMNS: &str = "
@@ -126,6 +128,7 @@ const EXPORT_ROW_BASE_COLUMNS: &str = "
     intro.name, m.level,
     (SELECT COUNT(*) FROM members c WHERE c.introducer_member_id = m.id)";
 
+#[allow(clippy::too_many_arguments)]
 fn row_to_export_row(
     r: &rusqlite::Row,
     is_active: bool,
@@ -134,6 +137,7 @@ fn row_to_export_row(
     slab_pct: i64,
     rewards: i64,
     royalty: i64,
+    membership_tier: i64,
 ) -> rusqlite::Result<MemberExportRow> {
     Ok(MemberExportRow {
         id: r.get(0)?,
@@ -152,6 +156,7 @@ fn row_to_export_row(
         slab_pct,
         rewards,
         royalty,
+        membership_tier,
     })
 }
 
@@ -166,7 +171,8 @@ fn load_live_export_rows(
         "SELECT {EXPORT_ROW_BASE_COLUMNS},
                 m.is_active, m.joining_date,
                 COALESCE(t.business_volume, 0), COALESCE(t.total_business_volume, 0),
-                COALESCE(t.slab_pct, 0), COALESCE(t.rewards, 0), COALESCE(t.royalty, 0)
+                COALESCE(t.slab_pct, 0), COALESCE(t.rewards, 0), COALESCE(t.royalty, 0),
+                COALESCE(t.membership_tier, 0)
          FROM members m
          LEFT JOIN members intro ON intro.id = m.introducer_member_id
          LEFT JOIN member_period_totals t ON t.member_id = m.id AND t.period_id = ?1
@@ -183,6 +189,7 @@ fn load_live_export_rows(
                 r.get(13)?,
                 r.get(14)?,
                 r.get(15)?,
+                r.get(16)?,
             )
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -204,7 +211,7 @@ fn load_snapshot_export_rows(
         "SELECT {EXPORT_ROW_BASE_COLUMNS},
                 s.is_active_status, m.joining_date,
                 s.business_volume, s.total_business_volume,
-                s.slab_pct, s.rewards, s.royalty
+                s.slab_pct, s.rewards, s.royalty, s.membership_tier
          FROM monthly_snapshots s
          JOIN members m ON m.id = s.member_id
          LEFT JOIN members intro ON intro.id = m.introducer_member_id
@@ -226,6 +233,7 @@ fn load_snapshot_export_rows(
                 r.get(13)?,
                 r.get(14)?,
                 r.get(15)?,
+                r.get(16)?,
             )
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -338,6 +346,13 @@ fn write_export_xlsx(
                 OptionalColumn::RoyaltyEarned => {
                     write_cell(worksheet, r, c, row.royalty as f64 / 100.0, format)?
                 }
+                OptionalColumn::MembershipLevel => write_cell(
+                    worksheet,
+                    r,
+                    c,
+                    membership_level_name(row.membership_tier),
+                    format,
+                )?,
                 OptionalColumn::JoiningDate => {
                     write_cell(worksheet, r, c, row.joining_date.as_str(), format)?
                 }
@@ -763,6 +778,7 @@ pub enum OptionalColumn {
     SlabPct,
     Rewards,
     RoyaltyEarned,
+    MembershipLevel,
     JoiningDate,
     ActiveStatus,
 }
@@ -783,6 +799,7 @@ impl OptionalColumn {
             "slab_pct" => Self::SlabPct,
             "rewards" => Self::Rewards,
             "royalty_earned" => Self::RoyaltyEarned,
+            "membership_level" => Self::MembershipLevel,
             "joining_date" => Self::JoiningDate,
             "active_status" => Self::ActiveStatus,
             other => {
@@ -805,6 +822,7 @@ impl OptionalColumn {
             Self::SlabPct => "Slab %",
             Self::Rewards => "Rewards",
             Self::RoyaltyEarned => "Royalty Earned",
+            Self::MembershipLevel => "Membership",
             Self::JoiningDate => "Joining Date",
             Self::ActiveStatus => "Status",
         }
@@ -842,6 +860,7 @@ mod tests {
             "slab_pct",
             "rewards",
             "royalty_earned",
+            "membership_level",
             "joining_date",
             "active_status",
         ];
@@ -875,6 +894,7 @@ mod tests {
             slab_pct,
             rewards,
             royalty: 0,
+            membership_tier: 0,
         }
     }
 
@@ -1072,6 +1092,43 @@ mod tests {
             rusqlite::params![member_id, period_id, version, bv, tbv, is_active],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn membership_level_column_has_its_own_header() {
+        assert_eq!(
+            OptionalColumn::parse("membership_level").unwrap().header(),
+            "Membership"
+        );
+    }
+
+    #[test]
+    fn export_rows_carry_the_membership_level_from_live_totals_and_snapshots() {
+        let conn = seeded();
+        let open = insert_period(&conn, "2026-08", "open");
+        let closed = insert_period(&conn, "2026-07", "closed");
+        let member = insert_member(&conn, "Levelled", true, None);
+        insert_totals(&conn, member, open, 100_000, 100_000);
+        conn.execute(
+            "UPDATE member_period_totals SET membership_tier = 3 WHERE member_id = ?1",
+            [member],
+        )
+        .unwrap();
+        insert_snapshot(&conn, member, closed, 1, 100_000, 100_000, true);
+        conn.execute(
+            "UPDATE monthly_snapshots SET membership_tier = 1 WHERE member_id = ?1",
+            [member],
+        )
+        .unwrap();
+
+        assert_eq!(
+            load_live_export_rows(&conn, open).unwrap()[0].membership_tier,
+            3
+        );
+        assert_eq!(
+            load_snapshot_export_rows(&conn, closed).unwrap()[0].membership_tier,
+            1
+        );
     }
 
     #[test]
